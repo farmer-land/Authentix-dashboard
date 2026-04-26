@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Editor } from "@maily-to/core";
-import "@maily-to/core/dist/index.css";
 import type { Editor as TiptapEditor, JSONContent } from "@tiptap/core";
 import { render } from "@maily-to/render";
 import { Button } from "@/components/ui/button";
