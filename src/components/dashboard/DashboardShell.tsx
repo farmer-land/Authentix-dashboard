@@ -40,6 +40,7 @@ import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { OrgProvider } from "@/lib/org";
 import { NotificationPanel } from "@/components/dashboard/NotificationPanel";
 import { JobNotificationProvider } from "@/lib/notifications/job-notifications";
+import { BillingStatusBanner } from "@/components/dashboard/BillingStatusBanner";
 
 // ============================================================================
 // Types
@@ -410,6 +411,7 @@ export function DashboardShell({
 
         {/* Main content — sits to the right of the sidebar, no top header */}
         <div className="pl-14">
+          <BillingStatusBanner />
           <main className="p-6">
             <div className="max-w-[1400px] mx-auto">{children}</div>
           </main>

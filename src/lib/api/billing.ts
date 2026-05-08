@@ -48,11 +48,24 @@ export const billingApi = {
         certificate_count: number;
         platform_fee: number;
         usage_cost: number;
+        email_count: number;
+        email_cost: number;
+        broadcast_own_smtp_count: number;
+        broadcast_own_smtp_cost: number;
+        broadcast_platform_fee: number;
         subtotal: number;
         gst_amount: number;
         estimated_total: number;
         currency: string;
         gst_rate: number;
+      };
+      org_billing: {
+        billing_status: 'trialing' | 'active' | 'overdue' | 'locked' | string;
+        trial_ends_at: string | null;
+        trial_free_certificates_limit: number;
+        trial_free_certificates_used: number;
+        dashboard_locked_at: string | null;
+        billing_grace_ends_at: string | null;
       };
     }>("/billing/overview");
     return response.data!;

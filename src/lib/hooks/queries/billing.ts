@@ -25,8 +25,10 @@ export function useBillingOverview() {
 
   return {
     overview: query.data,
+    data: query.data,
     usage: query.data?.current_usage ?? null,
     billingProfile: query.data?.billing_profile ?? null,
+    orgBilling: query.data?.org_billing ?? null,
     loading: query.isLoading,
     error: query.error instanceof Error ? query.error.message : null,
     refresh: () => query.refetch(),
