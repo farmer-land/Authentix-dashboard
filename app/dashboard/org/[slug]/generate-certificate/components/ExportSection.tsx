@@ -399,11 +399,12 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
       setSendResult({ sent: result.sent, failed: result.failed });
       setStep('done');
       toast.success(`${result.sent} email${result.sent !== 1 ? 's' : ''} sent!`);
-      // Build status map for the table
+      // Build status map keyed by recipient email (cert.recipient_id is not
+      // populated in GeneratedCertificateInfo, so use email as the stable key)
       if (onEmailSent && result.messages) {
         const statuses: Record<string, string> = {};
         for (const m of result.messages) {
-          statuses[m.recipient_id] = m.status;
+          if (m.to_email) statuses[m.to_email] = m.status;
         }
         onEmailSent(statuses);
       }
@@ -746,7 +747,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               ) : integrations.length === 1 ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-muted/30 text-sm">
                   <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="truncate">{effectiveSender || selectedIntegration!.from_email}</span>
+                  <span className="truncate">{effectiveSender || selectedIntegration?.from_email || integrations[0]?.from_email}</span>
                 </div>
               ) : (
                 <Select value={selectedIntegrationId} onValueChange={setSelectedIntegrationId}>
@@ -1961,7 +1962,7 @@ export function ExportSection({
                     key={cert.id}
                     cert={cert}
                     isImageTemplate={true}
-                    emailStatus={cert.recipient_id ? emailStatuses?.[cert.recipient_id] : undefined}
+                    emailStatus={cert.recipient_email ? emailStatuses?.[cert.recipient_email] : undefined}
                   />
                 ))}
               </div>
