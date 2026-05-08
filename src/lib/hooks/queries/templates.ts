@@ -9,14 +9,15 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useOrgSlug } from '@/lib/org';
 
 export const templateKeys = {
-  all: ['templates'] as const,
-  list: (params?: Record<string, unknown>) => [...templateKeys.all, 'list', params ?? {}] as const,
-  detail: (id: string) => [...templateKeys.all, 'detail', id] as const,
-  recentUsage: () => [...templateKeys.all, 'recent-usage'] as const,
-  previewUrl: (id: string) => [...templateKeys.all, 'preview-url', id] as const,
-  categories: () => [...templateKeys.all, 'categories'] as const,
+  all: (slug: string) => ['org', slug, 'templates'] as const,
+  list: (slug: string, params?: Record<string, unknown>) => [...templateKeys.all(slug), 'list', params ?? {}] as const,
+  detail: (slug: string, id: string) => [...templateKeys.all(slug), 'detail', id] as const,
+  recentUsage: (slug: string) => [...templateKeys.all(slug), 'recent-usage'] as const,
+  previewUrl: (slug: string, id: string) => [...templateKeys.all(slug), 'preview-url', id] as const,
+  categories: (slug: string) => [...templateKeys.all(slug), 'categories'] as const,
 };
 
 export function useTemplates(params?: {
@@ -25,8 +26,9 @@ export function useTemplates(params?: {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
 }) {
+  const slug = useOrgSlug();
   const query = useQuery({
-    queryKey: templateKeys.list(params),
+    queryKey: templateKeys.list(slug, params),
     queryFn: () => api.templates.list(params),
     staleTime: 30 * 1000,
   });
@@ -41,8 +43,9 @@ export function useTemplates(params?: {
 }
 
 export function useTemplate(id: string | null | undefined) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: templateKeys.detail(id ?? ''),
+    queryKey: templateKeys.detail(slug, id ?? ''),
     queryFn: () => api.templates.get(id!),
     enabled: !!id,
     staleTime: 60 * 1000,
@@ -50,16 +53,18 @@ export function useTemplate(id: string | null | undefined) {
 }
 
 export function useTemplateRecentUsage(limit?: number) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: templateKeys.recentUsage(),
+    queryKey: templateKeys.recentUsage(slug),
     queryFn: () => api.templates.getRecentUsage(limit),
     staleTime: 60 * 1000,
   });
 }
 
 export function useTemplatePreviewUrl(id: string | null | undefined) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: templateKeys.previewUrl(id ?? ''),
+    queryKey: templateKeys.previewUrl(slug, id ?? ''),
     queryFn: () => api.templates.getPreviewUrl(id!),
     enabled: !!id,
     staleTime: 5 * 60 * 1000,
@@ -68,8 +73,9 @@ export function useTemplatePreviewUrl(id: string | null | undefined) {
 }
 
 export function useTemplateCategories() {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: templateKeys.categories(),
+    queryKey: templateKeys.categories(slug),
     queryFn: () => api.templates.getCategories(),
     staleTime: 5 * 60 * 1000,
   });
@@ -79,35 +85,38 @@ export function useTemplateCategories() {
 
 export function useDeleteTemplate() {
   const queryClient = useQueryClient();
+  const slug = useOrgSlug();
   return useMutation({
     mutationFn: (id: string) => api.templates.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: templateKeys.all });
+      queryClient.invalidateQueries({ queryKey: templateKeys.all(slug) });
     },
   });
 }
 
 export function useUpdateTemplate() {
   const queryClient = useQueryClient();
+  const slug = useOrgSlug();
   return useMutation({
     mutationFn: ({ id, updates }: {
       id: string;
       updates: { name?: string; description?: string; width?: number; height?: number };
     }) => api.templates.update(id, updates),
     onSuccess: (_data, { id }) => {
-      queryClient.invalidateQueries({ queryKey: templateKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: templateKeys.all });
+      queryClient.invalidateQueries({ queryKey: templateKeys.detail(slug, id) });
+      queryClient.invalidateQueries({ queryKey: templateKeys.all(slug) });
     },
   });
 }
 
 export function useGenerateTemplatePreview() {
   const queryClient = useQueryClient();
+  const slug = useOrgSlug();
   return useMutation({
     mutationFn: ({ templateId, versionId }: { templateId: string; versionId: string }) =>
       api.templates.generatePreview(templateId, versionId),
     onSuccess: (_data, { templateId }) => {
-      queryClient.invalidateQueries({ queryKey: templateKeys.previewUrl(templateId) });
+      queryClient.invalidateQueries({ queryKey: templateKeys.previewUrl(slug, templateId) });
     },
   });
 }

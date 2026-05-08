@@ -31,9 +31,9 @@ import { cn } from "@/lib/utils";
 
 // ── localStorage helpers ───────────────────────────────────────────────────────
 
-function getSavedIds(): Set<string> {
+function getSavedIds(slug: string): Set<string> {
   try {
-    const raw = typeof window !== "undefined" ? localStorage.getItem("et_saved_ids") : null;
+    const raw = typeof window !== "undefined" ? localStorage.getItem(`et_saved_ids:${slug}`) : null;
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch { return new Set(); }
 }
@@ -430,7 +430,7 @@ function TemplateCard({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function EmailTemplatesPage() {
-  const { orgPath } = useOrg();
+  const { orgPath, slug } = useOrg();
   const router = useRouter();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -441,8 +441,8 @@ export default function EmailTemplatesPage() {
   type PendingCreate = { kind: "blank" } | { kind: "sample"; template: PredefinedTemplate };
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
 
-  // Saved IDs from localStorage (loaded once)
-  const [savedIds] = useState<Set<string>>(() => getSavedIds());
+  // Saved IDs from localStorage (scoped by org slug, loaded once)
+  const [savedIds] = useState<Set<string>>(() => getSavedIds(slug));
 
   const { templates: rawTemplates, loading, error: fetchError } = useDeliveryTemplates();
   const createTemplate = useCreateDeliveryTemplate();

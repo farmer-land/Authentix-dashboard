@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -267,6 +268,7 @@ export function DashboardShell({
 
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Derived values
   const profileName =
@@ -317,13 +319,15 @@ export function DashboardShell({
     } catch {
       // Continue with logout even if API fails
     }
+    // Wipe all cached query data so the next user never sees stale cross-org data
+    queryClient.clear();
     router.push("/login");
     router.refresh();
-  }, [router]);
+  }, [router, queryClient]);
 
   return (
-    <JobNotificationProvider>
     <OrgProvider slug={slug}>
+    <JobNotificationProvider>
       <div className="min-h-screen bg-background">
         <OnboardingModal />
 
@@ -411,7 +415,7 @@ export function DashboardShell({
           </main>
         </div>
       </div>
-    </OrgProvider>
     </JobNotificationProvider>
+    </OrgProvider>
   );
 }

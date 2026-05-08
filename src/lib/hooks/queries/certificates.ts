@@ -6,12 +6,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useOrgSlug } from '@/lib/org';
 
 export const certificateKeys = {
-  all: ['certificates'] as const,
-  list: (params?: Record<string, unknown>) => [...certificateKeys.all, 'list', params ?? {}] as const,
-  detail: (id: string) => [...certificateKeys.all, 'detail', id] as const,
-  downloadUrl: (id: string) => [...certificateKeys.all, 'download-url', id] as const,
+  all: (slug: string) => ['org', slug, 'certificates'] as const,
+  list: (slug: string, params?: Record<string, unknown>) => [...certificateKeys.all(slug), 'list', params ?? {}] as const,
+  detail: (slug: string, id: string) => [...certificateKeys.all(slug), 'detail', id] as const,
+  downloadUrl: (slug: string, id: string) => [...certificateKeys.all(slug), 'download-url', id] as const,
 };
 
 export function useCertificates(params?: {
@@ -26,8 +27,9 @@ export function useCertificates(params?: {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
 }) {
+  const slug = useOrgSlug();
   const query = useQuery({
-    queryKey: certificateKeys.list(params as Record<string, unknown>),
+    queryKey: certificateKeys.list(slug, params as Record<string, unknown>),
     queryFn: () => api.certificates.list(params),
     staleTime: 30 * 1000,
   });
@@ -42,8 +44,9 @@ export function useCertificates(params?: {
 }
 
 export function useCertificate(id: string | null | undefined) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: certificateKeys.detail(id ?? ''),
+    queryKey: certificateKeys.detail(slug, id ?? ''),
     queryFn: () => api.certificates.get(id!),
     enabled: !!id,
     staleTime: 60 * 1000,
@@ -51,8 +54,9 @@ export function useCertificate(id: string | null | undefined) {
 }
 
 export function useCertificateDownloadUrl(id: string | null | undefined) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: certificateKeys.downloadUrl(id ?? ''),
+    queryKey: certificateKeys.downloadUrl(slug, id ?? ''),
     queryFn: () => api.certificates.getDownloadUrl(id!),
     enabled: !!id,
     staleTime: 5 * 60 * 1000,

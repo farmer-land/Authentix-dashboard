@@ -175,7 +175,10 @@ export function EmailEditor({
   // ── Variable insertion ──────────────────────────────────────────────────────
 
   const handleInsertVar = useCallback((varName: string) => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      toast.info("Click a text block in the canvas first, then click a variable to insert it", { duration: 2500 });
+      return;
+    }
     setBlocks(prev => {
       const block = prev.find(b => b.id === selectedId);
       if (!block) return prev;
@@ -408,11 +411,10 @@ export function EmailEditor({
             </div>
           )}
 
-          {/* Canvas scroll area */}
+          {/* Canvas scroll area — panel floats over canvas so email stays centred */}
           <div
             id="broadcast-canvas"
-            className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
-            style={{ paddingLeft: leftPanelVisible ? "280px" : "0" }}
+            className="absolute inset-0 overflow-y-auto pt-3 pb-24"
           >
             <EmailBlockBuilder
               blocks={blocks}
@@ -431,11 +433,11 @@ export function EmailEditor({
 
         {/* ── RIGHT: Preview panel (optional) ── */}
 
-        {/* Floating preview pill — only when panel hidden AND left panel also hidden */}
-        {!leftPanelVisible && panelWidth === 0 && (
+        {/* Floating preview pill — only when panel hidden */}
+        {panelWidth === 0 && (
           <button
             className="absolute z-40 right-4 top-3 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-xl shadow-md px-3 py-2 hover:bg-zinc-800 transition-colors select-none text-zinc-400 hover:text-zinc-200"
-            onClick={() => setPanelWidth(360)}
+            onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
             title="Show preview"
           >
             <Eye className="w-3.5 h-3.5" />
@@ -478,7 +480,7 @@ export function EmailEditor({
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-0.5 border border-zinc-700 rounded-md p-0.5 bg-zinc-800/50">
                     <button
-                      onClick={() => setPreviewMode("desktop")}
+                      onClick={() => { setPreviewMode("desktop"); setPanelWidth(w => Math.max(w, 660)); }}
                       className={cn(
                         "p-1 rounded transition-colors",
                         previewMode === "desktop" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500",
@@ -488,7 +490,7 @@ export function EmailEditor({
                       <Monitor className="w-3 h-3" />
                     </button>
                     <button
-                      onClick={() => setPreviewMode("mobile")}
+                      onClick={() => { setPreviewMode("mobile"); setPanelWidth(w => Math.min(w, 440)); }}
                       className={cn(
                         "p-1 rounded transition-colors",
                         previewMode === "mobile" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500",
@@ -555,9 +557,7 @@ export function EmailEditor({
 
             {!dockMinimized && (
               <>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">
-                  {selectedId ? "Insert" : "Fields"}
-                </p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">Fields</p>
 
                 {availableVars.length > 0 ? (
                   <div
@@ -570,19 +570,15 @@ export function EmailEditor({
                         type="button"
                         onClick={() => handleInsertVar(v)}
                         title={
-                          selectedId
-                            ? selectedVar
-                              ? `Replace {{${selectedVar}}} with {{${v}}}`
-                              : `Insert {{${v}}} into selected block`
-                            : "Select a block first to insert this variable"
+                          selectedVar
+                            ? `Replace {{${selectedVar}}} with {{${v}}}`
+                            : `Insert {{${v}}} into selected block`
                         }
                         className={cn(
                           "flex items-center px-2.5 py-1.5 rounded-lg border transition-all shrink-0 font-mono text-[11px] font-medium",
                           selectedVar
                             ? "border-[#3ECF8E]/60 bg-[#3ECF8E]/15 text-[#3ECF8E] hover:bg-[#3ECF8E]/25"
-                            : selectedId
-                              ? "border-zinc-700/50 bg-zinc-800/40 hover:bg-[#3ECF8E]/10 hover:border-[#3ECF8E]/40 text-zinc-400 hover:text-zinc-200"
-                              : "border-zinc-800/50 bg-zinc-900/40 text-zinc-600 cursor-default",
+                            : "border-zinc-700/50 bg-zinc-800/40 hover:bg-[#3ECF8E]/10 hover:border-[#3ECF8E]/40 text-zinc-400 hover:text-zinc-200",
                         )}
                       >
                         {`{{${v}}}`}
@@ -591,7 +587,7 @@ export function EmailEditor({
                   </div>
                 ) : (
                   <span className="text-[10px] text-zinc-600 italic">
-                    Upload a CSV in the previous step to get insertable variables
+                    Upload a CSV in the Recipients step to add personalised variables
                   </span>
                 )}
 
