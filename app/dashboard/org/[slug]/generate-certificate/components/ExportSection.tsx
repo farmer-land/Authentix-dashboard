@@ -323,7 +323,7 @@ interface SendEmailModalProps {
   onEmailSent?: (statuses: Record<string, string>) => void;
 }
 
-type SendModalStep = 'checking' | 'no_integration' | 'no_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
+type SendModalStep = 'checking' | 'no_integration' | 'no_template' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
 
 function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
@@ -368,15 +368,15 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
       setSelectedTemplateId(defaultTpl.id);
 
       if (activeIntegrations.length === 0) {
-        // No custom integration — auto-use platform default, skip the choice screen
+        // No custom integration — auto-use platform default, go to template selection first
         setUsePlatformDefault(true);
-        setStep('confirm');
+        setStep('select_template');
         return;
       }
 
       const defaultInt = activeIntegrations.find(i => i.is_default) ?? activeIntegrations[0]!;
       setSelectedIntegrationId(defaultInt.id);
-      setStep('confirm');
+      setStep('select_template');
     } catch (err: any) {
       setErrorMsg(err.message ?? 'Failed to load configuration');
       setStep('error');
@@ -572,7 +572,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
         <>
         <DialogTitle className="flex items-center gap-2">
           <Mail className="w-5 h-5 text-primary" />
-          Send via Email
+          {step === 'select_template' ? 'Choose Email Template' : 'Send via Email'}
         </DialogTitle>
 
         {/* Checking */}
@@ -597,7 +597,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                   if (templates.length === 0) { setStep('no_template'); return; }
                   const defaultTpl = templates.find(t => t.is_default) ?? templates[0]!;
                   setSelectedTemplateId(defaultTpl.id);
-                  setStep('confirm');
+                  setStep('select_template');
                 }}
                 className="flex items-start gap-3 p-4 rounded-lg border-2 border-border hover:border-[#3ECF8E] hover:bg-[#3ECF8E]/5 text-left transition-all group"
               >
@@ -644,7 +644,87 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
           </div>
         )}
 
-        {/* Confirm */}
+        {/* Template selection — Modal 1 */}
+        {step === 'select_template' && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Choose the email template your recipients will receive.</p>
+            <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
+              {templates.map(t => {
+                const isSelected = t.id === selectedTemplateId;
+                return (
+                  <div
+                    key={t.id}
+                    role="radio"
+                    aria-checked={isSelected}
+                    tabIndex={0}
+                    onClick={() => setSelectedTemplateId(t.id)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedTemplateId(t.id); }}
+                    className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-border/60 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${
+                      isSelected ? 'border-primary' : 'border-muted-foreground/40'
+                    }`}>
+                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                    </div>
+                    <div className="w-16 h-12 rounded overflow-hidden border bg-white shrink-0 relative">
+                      <iframe
+                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#fff;overflow:hidden;}*{box-sizing:border-box;}</style></head><body>${applyTemplatePreview(t.body, buildPreviewVars(null, null))}</body></html>`}
+                        className="absolute top-0 left-0 border-0"
+                        style={{ width: '560px', height: '450px', transform: 'scale(0.285)', transformOrigin: '0 0', pointerEvents: 'none' }}
+                        title=""
+                        sandbox="allow-same-origin"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium truncate">{t.name}</span>
+                        {t.is_default && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">default</span>}
+                      </div>
+                      {t.email_subject && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{t.email_subject}</p>
+                      )}
+                      {t.variables.length > 0 && (
+                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                          {t.variables.slice(0, 3).map(v => (
+                            <span key={v} className="text-[10px] bg-muted/70 border px-1.5 py-0.5 rounded font-mono text-muted-foreground">{`{{${v}}}`}</span>
+                          ))}
+                          {t.variables.length > 3 && (
+                            <span className="text-[10px] text-muted-foreground">+{t.variables.length - 3} more</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setPreviewTemplate(t); }}
+                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+                      title="Preview this template"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={onClose} className="shrink-0">Cancel</Button>
+              <Button
+                onClick={() => setStep('confirm')}
+                className="flex-1 gap-2"
+                disabled={!selectedTemplateId}
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Confirm — Modal 2 */}
         {step === 'confirm' && (usePlatformDefault || selectedIntegration) && selectedTemplate && (
           <div className="space-y-4">
             {/* Recipient count pill */}
@@ -687,74 +767,19 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               )}
             </div>
 
-            {/* Template selector — card UI with preview */}
+            {/* Selected template (read-only chip) */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email Template</Label>
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
-                {templates.map(t => {
-                  const isSelected = t.id === selectedTemplateId;
-                  return (
-                    <div
-                      key={t.id}
-                      role="radio"
-                      aria-checked={isSelected}
-                      tabIndex={0}
-                      onClick={() => setSelectedTemplateId(t.id)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedTemplateId(t.id); }}
-                      className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-border/60 hover:bg-muted/30'
-                      }`}
-                    >
-                      {/* Radio dot */}
-                      <div className={`w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${
-                        isSelected ? 'border-primary' : 'border-muted-foreground/40'
-                      }`}>
-                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
-                      </div>
-                      {/* Mini thumbnail */}
-                      <div className="w-14 h-10 rounded overflow-hidden border bg-white shrink-0 relative">
-                        <iframe
-                          srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#fff;overflow:hidden;}*{box-sizing:border-box;}</style></head><body>${applyTemplatePreview(t.body, buildPreviewVars(null, null))}</body></html>`}
-                          className="absolute top-0 left-0 border-0"
-                          style={{ width: '560px', height: '450px', transform: 'scale(0.25)', transformOrigin: '0 0', pointerEvents: 'none' }}
-                          title=""
-                          sandbox="allow-same-origin"
-                        />
-                      </div>
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium truncate">{t.name}</span>
-                          {t.is_default && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">default</span>}
-                        </div>
-                        {t.email_subject && (
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">{t.email_subject}</p>
-                        )}
-                        {t.variables.length > 0 && (
-                          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                            {t.variables.slice(0, 3).map(v => (
-                              <span key={v} className="text-[10px] bg-muted/70 border px-1.5 py-0.5 rounded font-mono text-muted-foreground">{`{{${v}}}`}</span>
-                            ))}
-                            {t.variables.length > 3 && (
-                              <span className="text-[10px] text-muted-foreground">+{t.variables.length - 3} more</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {/* Preview eye */}
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); setPreviewTemplate(t); }}
-                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-                        title="Preview this template"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center gap-2 p-2.5 rounded-md border bg-primary/5 border-primary/20">
+                <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="text-sm font-medium flex-1 truncate">{selectedTemplate.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setStep('select_template')}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0 transition-colors"
+                >
+                  Change
+                </button>
               </div>
             </div>
 
@@ -802,7 +827,10 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
             </p>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button variant="outline" onClick={() => setStep('select_template')} className="gap-1.5 shrink-0">
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </Button>
               <Button onClick={() => setStep('test_email')} className="flex-1 gap-2">
                 Continue
                 <ChevronRight className="w-4 h-4" />
@@ -1189,6 +1217,8 @@ export function ExportSection({
               });
             }
           }
+          const firstJobId = result?.first_job_id as string | null | undefined;
+          if (firstJobId) setCertGenJobId(firstJobId);
           setTotalGenerated(total);
           setDownloadUrl(url ?? null);
           setGeneratedCertificates(allCerts);
@@ -1249,6 +1279,8 @@ export function ExportSection({
   // Send via Email modal
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailStatuses, setEmailStatuses] = useState<Record<string, string> | undefined>(undefined);
+  // certificate_generation_jobs.id (different from background_jobs.id = generationJobId)
+  const [certGenJobId, setCertGenJobId] = useState<string | null>(null);
 
   // Email setup pre-check (soft warning before generating)
   const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean } | null>(null);
@@ -1884,25 +1916,41 @@ export function ExportSection({
       {/* Results — success header + certificate preview grid */}
       {generationStatus === 'completed' && (
         <div className="space-y-4">
-          {/* Success header */}
-          <div className="rounded-lg border border-[#3ECF8E]/30 bg-[#3ECF8E]/5 px-4 py-3 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-[#3ECF8E] shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">
-                {totalGenerated} certificate{totalGenerated !== 1 ? 's' : ''} generated successfully
-              </p>
-              {generationSummary.length > 1 && (
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {generationSummary.map((s, i) => (
-                    <Badge key={i} variant="outline" className="text-xs gap-1">
-                      <FileText className="w-3 h-3" />
-                      {s.label}: {s.count}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+          {/* Success / zero-result header */}
+          {totalGenerated === 0 ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-800">Generation completed with 0 certificates</p>
+                <p className="text-xs text-amber-700 mt-0.5">No certificates were created. Check that your data file has valid rows and try again.</p>
+              </div>
+              <button
+                className="text-amber-700/60 hover:text-amber-700 transition-colors text-xs underline shrink-0"
+                onClick={() => { setGenerationStatus('idle'); setTotalGenerated(0); setDownloadUrl(null); setGenerationJobId(null); setCertGenJobId(null); }}
+              >
+                Dismiss
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-lg border border-[#3ECF8E]/30 bg-[#3ECF8E]/5 px-4 py-3 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-[#3ECF8E] shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">
+                  {totalGenerated} certificate{totalGenerated !== 1 ? 's' : ''} generated successfully
+                </p>
+                {generationSummary.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {generationSummary.map((s, i) => (
+                      <Badge key={i} variant="outline" className="text-xs gap-1">
+                        <FileText className="w-3 h-3" />
+                        {s.label}: {s.count}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Certificate preview cards */}
           {generatedCertificates.length > 0 ? (
@@ -2244,6 +2292,7 @@ export function ExportSection({
               setSimulatedCount(0);
               setProgressLabel('');
               setGenerationJobId(null);
+              setCertGenJobId(null);
               setEmailStatuses(undefined);
             }}
           >
@@ -2251,9 +2300,9 @@ export function ExportSection({
           </Button>
           <Button
             className="flex-1 gap-2"
-            disabled={!generationJobId}
+            disabled={!generationJobId || totalGenerated === 0}
             onClick={() => setSendModalOpen(true)}
-            title={generationJobId ? 'Send certificates by email' : 'No job ID available'}
+            title={totalGenerated === 0 ? 'No certificates to send' : !generationJobId ? 'No job ID available' : 'Send certificates by email'}
           >
             <Send className="w-4 h-4" />
             Send via Email
@@ -2264,7 +2313,7 @@ export function ExportSection({
       {/* ── Send via Email modal ── */}
       {sendModalOpen && generationJobId && (
         <SendEmailModal
-          jobId={generationJobId}
+          jobId={certGenJobId ?? generationJobId}
           recipientCount={totalGenerated}
           certPreviewUrl={generatedCertificates[0]?.preview_url ?? null}
           firstRecipientRow={importedData?.rows[0] ?? null}
