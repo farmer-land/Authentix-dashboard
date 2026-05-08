@@ -445,7 +445,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className={previewTemplate ? "max-w-4xl p-0 gap-0 overflow-hidden" : "max-w-2xl"}>
+      <DialogContent className={previewTemplate ? "max-w-4xl p-0 gap-0 overflow-hidden" : step === 'select_template' ? "max-w-3xl" : "max-w-2xl"}>
 
         {/* ── Template preview panel ── */}
         {previewTemplate ? (
@@ -670,11 +670,11 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                     }`}>
                       {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
                     </div>
-                    <div className="w-16 h-12 rounded overflow-hidden border bg-white shrink-0 relative">
+                    <div className="w-48 h-32 rounded overflow-hidden border bg-white shrink-0 relative">
                       <iframe
                         srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#fff;overflow:hidden;}*{box-sizing:border-box;}</style></head><body>${applyTemplatePreview(t.body, buildPreviewVars(null, null))}</body></html>`}
                         className="absolute top-0 left-0 border-0"
-                        style={{ width: '560px', height: '450px', transform: 'scale(0.285)', transformOrigin: '0 0', pointerEvents: 'none' }}
+                        style={{ width: '560px', height: '375px', transform: 'scale(0.343)', transformOrigin: '0 0', pointerEvents: 'none' }}
                         title=""
                         sandbox="allow-same-origin"
                       />
