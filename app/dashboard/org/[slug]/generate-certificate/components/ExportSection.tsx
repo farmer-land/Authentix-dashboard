@@ -399,11 +399,12 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
       setSendResult({ sent: result.sent, failed: result.failed });
       setStep('done');
       toast.success(`${result.sent} email${result.sent !== 1 ? 's' : ''} sent!`);
-      // Build status map for the table
+      // Build status map keyed by recipient email (cert.recipient_id is not
+      // populated in GeneratedCertificateInfo, so use email as the stable key)
       if (onEmailSent && result.messages) {
         const statuses: Record<string, string> = {};
         for (const m of result.messages) {
-          statuses[m.recipient_id] = m.status;
+          if (m.to_email) statuses[m.to_email] = m.status;
         }
         onEmailSent(statuses);
       }
@@ -445,7 +446,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className={previewTemplate ? "max-w-4xl p-0 gap-0 overflow-hidden" : "max-w-2xl"}>
+      <DialogContent className={previewTemplate ? "max-w-4xl p-0 gap-0 overflow-hidden" : step === 'select_template' ? "max-w-3xl" : "max-w-2xl"}>
 
         {/* ── Template preview panel ── */}
         {previewTemplate ? (
@@ -670,11 +671,11 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                     }`}>
                       {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
                     </div>
-                    <div className="w-16 h-12 rounded overflow-hidden border bg-white shrink-0 relative">
+                    <div className="w-48 h-32 rounded overflow-hidden border bg-white shrink-0 relative">
                       <iframe
                         srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#fff;overflow:hidden;}*{box-sizing:border-box;}</style></head><body>${applyTemplatePreview(t.body, buildPreviewVars(null, null))}</body></html>`}
                         className="absolute top-0 left-0 border-0"
-                        style={{ width: '560px', height: '450px', transform: 'scale(0.285)', transformOrigin: '0 0', pointerEvents: 'none' }}
+                        style={{ width: '560px', height: '375px', transform: 'scale(0.343)', transformOrigin: '0 0', pointerEvents: 'none' }}
                         title=""
                         sandbox="allow-same-origin"
                       />
@@ -746,7 +747,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               ) : integrations.length === 1 ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-muted/30 text-sm">
                   <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="truncate">{effectiveSender || selectedIntegration!.from_email}</span>
+                  <span className="truncate">{effectiveSender || selectedIntegration?.from_email || integrations[0]?.from_email}</span>
                 </div>
               ) : (
                 <Select value={selectedIntegrationId} onValueChange={setSelectedIntegrationId}>
@@ -1961,7 +1962,7 @@ export function ExportSection({
                     key={cert.id}
                     cert={cert}
                     isImageTemplate={true}
-                    emailStatus={cert.recipient_id ? emailStatuses?.[cert.recipient_id] : undefined}
+                    emailStatus={cert.recipient_email ? emailStatuses?.[cert.recipient_email] : undefined}
                   />
                 ))}
               </div>

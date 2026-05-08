@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { track } from '@vercel/analytics';
 import { useParams } from 'next/navigation';
 import {
   XCircle, AlertTriangle, Calendar, User, Building2, Award,
   ExternalLink, Download, Share2, Clock, ShieldCheck, ShieldX,
-  ShieldAlert, Hash, CheckCircle2, Loader2, RefreshCw,
+  ShieldAlert, Hash, CheckCircle2, Loader2, RefreshCw, Link, Linkedin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -148,6 +148,8 @@ export default function VerifyPage() {
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -174,18 +176,31 @@ export default function VerifyPage() {
   }, [token]);
 
 
-  const handleShare = useCallback(async () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      setSharing(true);
-      try { await navigator.share({ title: 'Certificate Verification', url }); } catch { /* cancelled */ }
-      setSharing(false);
-    } else {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const handleCopyLink = useCallback(async () => {
+    await navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setShowShareMenu(false);
+    setTimeout(() => setCopied(false), 2000);
   }, []);
+
+  const handleLinkedInShare = useCallback(() => {
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`;
+    window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500');
+    setShowShareMenu(false);
+    track('certificate_share', { platform: 'linkedin' });
+  }, []);
+
+  // Close share menu when clicking outside
+  useEffect(() => {
+    if (!showShareMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
+        setShowShareMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showShareMenu]);
 
   if (loading) return <LoadingPage />;
   if (error) return <ErrorPage message={error} />;
@@ -310,15 +325,53 @@ export default function VerifyPage() {
                       onClick={() => track('certificate_download', { format: 'png' })}
                     >
                       <Download className="w-4 h-4 flex-shrink-0" />
-                      <span>Download Image</span>
+                      <span>Download Certificate</span>
                     </a>
-                    <button
-                      onClick={handleShare}
-                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] hover:bg-gray-50 dark:hover:bg-white/[0.04] text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors"
-                    >
-                      <Share2 className="w-4 h-4 flex-shrink-0" />
-                      {copied ? 'Copied!' : sharing ? '…' : 'Share'}
-                    </button>
+                    {/* Share dropdown */}
+                    <div className="relative" ref={shareMenuRef}>
+                      <button
+                        onClick={() => setShowShareMenu(v => !v)}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-black/8 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/4 text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors"
+                      >
+                        <Share2 className="w-4 h-4 shrink-0" />
+                        {copied ? 'Copied!' : 'Share'}
+                      </button>
+                      {showShareMenu && (
+                        <div className="absolute right-0 bottom-full mb-2 w-52 rounded-xl border border-black/8 dark:border-white/8 bg-white dark:bg-[#1a1a1e] shadow-lg shadow-black/10 overflow-hidden z-10">
+                          <button
+                            onClick={handleLinkedInShare}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/4 transition-colors"
+                          >
+                            <Linkedin className="w-4 h-4 text-[#0A66C2] shrink-0" />
+                            Share on LinkedIn
+                          </button>
+                          <div className="h-px bg-black/6 dark:bg-white/6" />
+                          <button
+                            onClick={handleCopyLink}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/4 transition-colors"
+                          >
+                            <Link className="w-4 h-4 text-gray-500 shrink-0" />
+                            Copy verification link
+                          </button>
+                          {result.preview_url && (
+                            <>
+                              <div className="h-px bg-black/6 dark:bg-white/6" />
+                              <a
+                                href={result.preview_url}
+                                download="certificate"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => { setShowShareMenu(false); track('certificate_download', { format: 'png', from: 'share_menu' }); }}
+                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/4 transition-colors"
+                              >
+                                <Download className="w-4 h-4 text-gray-500 shrink-0" />
+                                Download certificate image
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

@@ -124,7 +124,7 @@ function parseManualEmails(raw: string): ParsedRecipient[] {
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
 function Steps({ current }: { current: number }) {
-  const steps = ["Campaign info", "Recipients", "Design email", "Review & Send"];
+  const steps = ["Campaign info", "Design email", "Recipients", "Review & Send"];
   return (
     <div className="flex items-center gap-0 mb-6">
       {steps.map((label, i) => (
@@ -239,7 +239,7 @@ function CampaignWizard({
       content_json: result.content_json,
     }));
     setShowEditor(false);
-    setStep(3);
+    setStep(2); // advance to Recipients step after design is done
   }, []);
 
   // ── Send ───────────────────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ function CampaignWizard({
         name: w.name,
         subject: w.subject || "(draft)",
         from_name: w.from_name,
-        from_email: w.from_email || "hello@digicertificates.in",
+        from_email: w.from_email || "certificate@digicertificates.in",
         html_body: w.html_body || "",
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
       });
@@ -337,7 +337,7 @@ function CampaignWizard({
         <div className="space-y-1.5">
           <Label>From email <span className="text-red-500">*</span></Label>
           <Input
-            placeholder="hello@digicertificates.in"
+            placeholder="certificate@digicertificates.in"
             value={w.from_email}
             onChange={e => set("from_email", e.target.value)}
           />
@@ -660,8 +660,9 @@ function CampaignWizard({
     </div>
   );
 
-  const steps = [renderStep0, renderStep1, renderStep2, renderStep3];
-  const stepValid = [step0Valid, step1Valid, step2Valid, true];
+  // Order: Campaign info → Design email → Recipients → Review & Send
+  const steps = [renderStep0, renderStep2, renderStep1, renderStep3];
+  const stepValid = [step0Valid, step2Valid, step1Valid, true];
 
   return (
     <>

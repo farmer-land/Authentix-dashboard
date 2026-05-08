@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useGenerateCertificateState } from './state/useGenerateCertificateState';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
+import { useOrgSlug } from '@/lib/org';
 import { CertificateField, CertificateTemplate, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import type { Asset } from './components/AssetLibrary';
 import { api } from '@/lib/api/client';
@@ -40,6 +41,7 @@ export default function GenerateCertificatePage() {
   const templateIdFromUrl = searchParams.get('template');
   const pathname = usePathname();
   const router = useRouter();
+  const orgSlug = useOrgSlug();
 
   // Prevents the URL-param auto-select from re-firing when user deliberately goes back to template chooser
   const skipAutoSelectRef = useRef(false);
@@ -123,7 +125,7 @@ export default function GenerateCertificatePage() {
   // ── Session persistence ────────────────────────────────────────────────────
   // Clear sessionStorage on unmount so navigating away doesn't auto-restore the old design session.
   useEffect(() => {
-    return () => { sessionStorage.removeItem('gencert_session'); };
+    return () => { sessionStorage.removeItem(`gencert_session:${orgSlug}`); };
   }, []);
 
   // Track whether initial mount has passed so we don't wipe the session on first render.
@@ -141,7 +143,7 @@ export default function GenerateCertificatePage() {
           importId: importedData.importId,
           importIds: importedData.importIds,
         } : null;
-        sessionStorage.setItem('gencert_session', JSON.stringify({
+        sessionStorage.setItem(`gencert_session:${orgSlug}`, JSON.stringify({
           templateId: template.id,
           fields,
           currentPage,
@@ -154,12 +156,12 @@ export default function GenerateCertificatePage() {
       } catch { /* quota exceeded */ }
       // Persist template ID to localStorage so it survives browser close / system shutdown.
       try {
-        localStorage.setItem('gencert_last_template_id', template.id);
+        localStorage.setItem(`gencert_last_template_id:${orgSlug}`, template.id);
       } catch { /* storage unavailable */ }
     } else if (currentStep === 'template' && sessionInitRef.current) {
       // Only clear when the user deliberately navigates back to template selection,
       // not on the initial mount where currentStep starts as 'template'.
-      sessionStorage.removeItem('gencert_session');
+      sessionStorage.removeItem(`gencert_session:${orgSlug}`);
     }
   }, [currentStep, template?.id, fields, currentPage, canvasScale, templateVersionId, importedData, fieldMappings]);
 
@@ -306,7 +308,7 @@ export default function GenerateCertificatePage() {
         let sessionFieldMappings: any[] | null = null;
 
         try {
-          const saved = sessionStorage.getItem('gencert_session');
+          const saved = sessionStorage.getItem(`gencert_session:${orgSlug}`);
           if (saved) {
             const parsed = JSON.parse(saved);
             templateIdToRestore = parsed.templateId ?? null;
@@ -319,7 +321,7 @@ export default function GenerateCertificatePage() {
             sessionFieldMappings = parsed.fieldMappings ?? null;
           }
         } catch {
-          sessionStorage.removeItem('gencert_session');
+          sessionStorage.removeItem(`gencert_session:${orgSlug}`);
         }
 
         // Note: we intentionally do NOT fall back to localStorage here.
@@ -330,8 +332,8 @@ export default function GenerateCertificatePage() {
           // Guard: if the template no longer exists (deleted), discard the stale session.
           const templateObj = templatesWithSignedUrls.find((t: any) => t.id === templateIdToRestore);
           if (!templateObj) {
-            sessionStorage.removeItem('gencert_session');
-            try { localStorage.removeItem('gencert_last_template_id'); } catch { /* ignore */ }
+            sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+            try { localStorage.removeItem(`gencert_last_template_id:${orgSlug}`); } catch { /* ignore */ }
           } else try {
             await handleTemplateSelectSafe(templateObj);
             // If we have a full field snapshot (same-tab refresh), apply it on top of DB fields.
@@ -813,17 +815,17 @@ export default function GenerateCertificatePage() {
     // If this was the template saved in the design session, clear it so the
     // generate page doesn't auto-restore a ghost template on next visit.
     try {
-      const saved = sessionStorage.getItem('gencert_session');
+      const saved = sessionStorage.getItem(`gencert_session:${orgSlug}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.templateId === templateId) {
-          sessionStorage.removeItem('gencert_session');
+          sessionStorage.removeItem(`gencert_session:${orgSlug}`);
         }
       }
     } catch { /* ignore */ }
     try {
-      if (localStorage.getItem('gencert_last_template_id') === templateId) {
-        localStorage.removeItem('gencert_last_template_id');
+      if (localStorage.getItem(`gencert_last_template_id:${orgSlug}`) === templateId) {
+        localStorage.removeItem(`gencert_last_template_id:${orgSlug}`);
       }
     } catch { /* ignore */ }
   };

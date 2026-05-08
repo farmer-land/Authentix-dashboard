@@ -88,7 +88,7 @@ export default function EmailTemplateEditorPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { orgPath } = useOrg();
+  const { orgPath, slug: orgSlug } = useOrg();
   const templateId = params.id as string;
   const returnToSend = searchParams.get("returnToSend") === "1";
 
@@ -319,9 +319,13 @@ export default function EmailTemplateEditorPage() {
       addBlock(field.blockType);
       setSelectedVar(null);
     } else if (field.varName) {
+      if (!selectedId) {
+        toast.info("Click a text block in the canvas first, then click a field to insert it", { duration: 2500 });
+        return;
+      }
       handleInsertVarToSelected(field.varName);
     }
-  }, [addBlock, handleInsertVarToSelected]);
+  }, [addBlock, handleInsertVarToSelected, selectedId]);
 
   // ── Test send ────────────────────────────────────────────────
   const handleTestSend = async () => {
@@ -359,11 +363,12 @@ export default function EmailTemplateEditorPage() {
         is_active: isActive,
       });
       try {
-        const raw = localStorage.getItem("et_saved_ids");
+        const etKey = `et_saved_ids:${orgSlug}`;
+        const raw = localStorage.getItem(etKey);
         const ids: string[] = raw ? JSON.parse(raw) : [];
         if (!ids.includes(templateId)) {
           ids.push(templateId);
-          localStorage.setItem("et_saved_ids", JSON.stringify(ids));
+          localStorage.setItem(etKey, JSON.stringify(ids));
         }
       } catch { /* non-fatal */ }
       toast.success("Template saved");
@@ -556,11 +561,10 @@ export default function EmailTemplateEditorPage() {
             </div>
           )}
 
-          {/* Canvas scroll area — offset left to not hide behind floating panel */}
+          {/* Canvas scroll area — panel floats over the canvas so the email stays centred */}
           <div
             id="block-canvas"
-            className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
-            style={{ paddingLeft: leftPanelVisible ? "280px" : "0" }}
+            className="absolute inset-0 overflow-y-auto pt-3 pb-24"
           >
             <EmailBlockBuilder
               blocks={blocks}
@@ -581,10 +585,10 @@ export default function EmailTemplateEditorPage() {
 
         {/* ── RIGHT: Preview (collapsible, resizable) ───────────────── */}
         {/* Collapsed preview — floating pill button */}
-        {!leftPanelVisible && panelWidth === 0 && (
+        {panelWidth === 0 && (
           <button
             className="absolute z-40 right-4 top-3 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-xl shadow-md px-3 py-2 hover:bg-zinc-800 transition-colors select-none text-zinc-400 hover:text-zinc-200"
-            onClick={() => setPanelWidth(360)}
+            onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
             title="Show preview"
           >
             <Eye className="w-3.5 h-3.5" />
@@ -626,7 +630,7 @@ export default function EmailTemplateEditorPage() {
             <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-0.5 border border-zinc-700 rounded-md p-0.5 bg-zinc-800/50">
                 <button
-                  onClick={() => setPreviewMode("desktop")}
+                  onClick={() => { setPreviewMode("desktop"); setPanelWidth(Math.max(panelWidth, 660)); }}
                   className={cn(
                     "p-1 rounded transition-colors",
                     previewMode === "desktop" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500"
@@ -636,7 +640,7 @@ export default function EmailTemplateEditorPage() {
                   <Monitor className="w-3 h-3" />
                 </button>
                 <button
-                  onClick={() => setPreviewMode("mobile")}
+                  onClick={() => { setPreviewMode("mobile"); setPanelWidth(Math.min(panelWidth, 440)); }}
                   className={cn(
                     "p-1 rounded transition-colors",
                     previewMode === "mobile" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500"
@@ -702,15 +706,13 @@ export default function EmailTemplateEditorPage() {
 
           <div className="flex items-center gap-2 px-3 py-2">
 
-            {/* Fields — always visible, not gated on block selection */}
+            {/* Fields — always visible and always clickable */}
             {!dockMinimized && (
               <>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">
-                  {selectedId ? "Insert" : "Fields"}
-                </p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">Fields</p>
                 <div
                   className="flex items-center gap-1.5 overflow-x-auto"
-                  style={{ maxWidth: 380, scrollbarWidth: "none" }}
+                  style={{ maxWidth: 420, scrollbarWidth: "none" }}
                 >
                   {CERT_DOCK_FIELDS.map(f => (
                     <button
@@ -720,19 +722,15 @@ export default function EmailTemplateEditorPage() {
                       title={
                         f.isBlock
                           ? `Add ${f.label} block`
-                          : selectedId
-                            ? selectedVar
-                              ? `Replace {{${selectedVar}}} with {{${f.varName}}}`
-                              : `Insert {{${f.varName}}} — type @ in a block for autocomplete`
-                            : `Select a block first, then click to insert {{${f.varName}}}`
+                          : selectedVar
+                            ? `Replace {{${selectedVar}}} with {{${f.varName}}}`
+                            : `Insert {{${f.varName}}} into selected block`
                       }
                       className={cn(
                         "flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all shrink-0",
                         !f.isBlock && selectedVar
                           ? "border-[#3ECF8E]/60 bg-[#3ECF8E]/15 text-[#3ECF8E] hover:bg-[#3ECF8E]/25"
-                          : selectedId
-                            ? "border-zinc-700/50 bg-zinc-800/40 hover:bg-[#3ECF8E]/10 hover:border-[#3ECF8E]/40 text-zinc-400 hover:text-zinc-200"
-                            : "border-zinc-800/50 bg-zinc-900/40 text-zinc-600 cursor-default"
+                          : "border-zinc-700/50 bg-zinc-800/40 hover:bg-[#3ECF8E]/10 hover:border-[#3ECF8E]/40 text-zinc-400 hover:text-zinc-200"
                       )}
                     >
                       <f.Icon className="w-3.5 h-3.5 shrink-0" />
@@ -759,7 +757,7 @@ export default function EmailTemplateEditorPage() {
             {/* Preview toggle — shows when preview panel is hidden */}
             {panelWidth === 0 && (
               <button
-                onClick={() => setPanelWidth(360)}
+                onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
                 className="p-1 rounded-lg text-zinc-500 hover:text-[#3ECF8E] hover:bg-zinc-800 transition-colors shrink-0"
                 title="Show preview"
               >

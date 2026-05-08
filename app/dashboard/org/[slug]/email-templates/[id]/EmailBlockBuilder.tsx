@@ -1237,7 +1237,17 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
           onClick={onSelect}
           className="transition-all duration-150"
         >
-          <BlockLiveView block={block} isSelected={isSelected} onChange={onChange} availableVars={availableVars} onVarClick={onVarClick} />
+          <BlockLiveView
+            block={block}
+            isSelected={isSelected}
+            onChange={onChange}
+            availableVars={availableVars}
+            onVarClick={(varName) => {
+              // Ensure the block is selected so the dock can insert/replace into it
+              if (!isSelected) onSelect();
+              onVarClick?.(varName);
+            }}
+          />
         </div>
 
         {/* Style toolbar + extra controls when selected */}

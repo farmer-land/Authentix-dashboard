@@ -285,8 +285,8 @@ export function CertificateTable({
                 </td>
                 {emailStatuses && (
                   <td className="px-4 py-3">
-                    {cert.recipient_id && emailStatuses[cert.recipient_id]
-                      ? <EmailStatusBadge status={emailStatuses[cert.recipient_id]!} />
+                    {cert.recipient_email && emailStatuses[cert.recipient_email]
+                      ? <EmailStatusBadge status={emailStatuses[cert.recipient_email]!} />
                       : <span className="text-xs text-muted-foreground">—</span>}
                   </td>
                 )}

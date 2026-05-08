@@ -24,6 +24,7 @@ import {
   useRef,
 } from 'react';
 import { api, ApiError } from '@/lib/api/client';
+import { useOrgSlug } from '@/lib/org';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,14 +57,17 @@ interface JobNotificationContextValue {
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'authentix_bg_jobs';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const STUCK_JOB_MS = 2 * 60 * 60 * 1000; // 2 hours — auto-expire queued jobs that never started
 const POLL_INTERVAL_MS = 5000;
 
-function loadJobs(): BackgroundJob[] {
+function storageKey(slug: string) {
+  return `authentix_bg_jobs:${slug}`;
+}
+
+function loadJobs(slug: string): BackgroundJob[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(slug));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as BackgroundJob[];
     const ageCutoff = Date.now() - MAX_AGE_MS;
@@ -85,9 +89,9 @@ function loadJobs(): BackgroundJob[] {
   }
 }
 
-function saveJobs(jobs: BackgroundJob[]) {
+function saveJobs(slug: string, jobs: BackgroundJob[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs));
+    localStorage.setItem(storageKey(slug), JSON.stringify(jobs));
   } catch { /* localStorage unavailable */ }
 }
 
@@ -96,6 +100,7 @@ function saveJobs(jobs: BackgroundJob[]) {
 const JobNotificationContext = createContext<JobNotificationContextValue | null>(null);
 
 export function JobNotificationProvider({ children }: { children: React.ReactNode }) {
+  const slug = useOrgSlug();
   const [jobs, setJobs] = useState<BackgroundJob[]>([]);
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | 'unsupported'
@@ -108,20 +113,20 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
   // Track open SSE connections per job id
   const sseRefs = useRef<Map<string, EventSource>>(new Map());
 
-  // ── Hydrate from localStorage on mount ──────────────────────────────────────
+  // ── Hydrate from localStorage on mount (scoped to this org slug) ────────────
   useEffect(() => {
-    setJobs(loadJobs());
+    setJobs(loadJobs(slug));
     if (typeof Notification !== 'undefined') {
       setNotificationPermission(Notification.permission);
     } else {
       setNotificationPermission('unsupported');
     }
-  }, []);
+  }, [slug]);
 
   // ── Persist whenever jobs change ────────────────────────────────────────────
   useEffect(() => {
-    saveJobs(jobs);
-  }, [jobs]);
+    saveJobs(slug, jobs);
+  }, [slug, jobs]);
 
   // ── Polling loop — runs once, reads jobsRef each tick ───────────────────────
   useEffect(() => {

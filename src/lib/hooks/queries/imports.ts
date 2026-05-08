@@ -6,12 +6,13 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useOrgSlug } from '@/lib/org';
 
 export const importKeys = {
-  all: ['imports'] as const,
-  list: (params?: Record<string, unknown>) => [...importKeys.all, 'list', params ?? {}] as const,
-  detail: (id: string) => [...importKeys.all, 'detail', id] as const,
-  data: (id: string, params?: Record<string, unknown>) => [...importKeys.all, 'data', id, params ?? {}] as const,
+  all: (slug: string) => ['org', slug, 'imports'] as const,
+  list: (slug: string, params?: Record<string, unknown>) => [...importKeys.all(slug), 'list', params ?? {}] as const,
+  detail: (slug: string, id: string) => [...importKeys.all(slug), 'detail', id] as const,
+  data: (slug: string, id: string, params?: Record<string, unknown>) => [...importKeys.all(slug), 'data', id, params ?? {}] as const,
 };
 
 export function useImports(params?: {
@@ -20,8 +21,9 @@ export function useImports(params?: {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
 }) {
+  const slug = useOrgSlug();
   const query = useQuery({
-    queryKey: importKeys.list(params as Record<string, unknown>),
+    queryKey: importKeys.list(slug, params as Record<string, unknown>),
     queryFn: () => api.imports.list(params),
     staleTime: 0,
     refetchOnMount: true,
@@ -37,8 +39,9 @@ export function useImports(params?: {
 }
 
 export function useImportJob(id: string | null | undefined) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: importKeys.detail(id ?? ''),
+    queryKey: importKeys.detail(slug, id ?? ''),
     queryFn: () => api.imports.get(id!),
     enabled: !!id,
     staleTime: 30 * 1000,
@@ -46,8 +49,9 @@ export function useImportJob(id: string | null | undefined) {
 }
 
 export function useImportData(id: string | null | undefined, params?: { page?: number; limit?: number }) {
+  const slug = useOrgSlug();
   return useQuery({
-    queryKey: importKeys.data(id ?? '', params as Record<string, unknown>),
+    queryKey: importKeys.data(slug, id ?? '', params as Record<string, unknown>),
     queryFn: () => api.imports.getData(id!, params),
     enabled: !!id,
     staleTime: 60 * 1000,
@@ -56,6 +60,7 @@ export function useImportData(id: string | null | undefined, params?: { page?: n
 
 export function useCreateImport() {
   const queryClient = useQueryClient();
+  const slug = useOrgSlug();
   return useMutation({
     mutationFn: ({ file, metadata }: {
       file: File;
@@ -68,7 +73,7 @@ export function useCreateImport() {
       };
     }) => api.imports.create(file, metadata),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: importKeys.all });
+      queryClient.invalidateQueries({ queryKey: importKeys.all(slug) });
     },
   });
 }
