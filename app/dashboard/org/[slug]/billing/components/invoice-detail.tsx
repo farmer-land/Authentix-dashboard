@@ -1,239 +1,215 @@
-/**
- * INVOICE DETAIL COMPONENT
- *
- * Displays detailed invoice view with line items and payment options.
- */
-
 'use client';
 
-import { useInvoiceDetail } from '@/lib/billing-ui/hooks/use-invoice-detail';
-import { formatCurrency, formatGSTRate } from '@/lib/billing-ui/utils/currency-formatter';
-import {
-  getPaymentStatusInfo,
-  formatBillingPeriod,
-  formatDateTime,
-  getInvoiceNumber,
-  isInvoicePayable,
-} from '@/lib/billing-ui/utils/invoice-helpers';
+import type { ReactNode } from 'react';
+import { useInvoice } from '@/lib/hooks/queries/billing';
+import { useQueryClient } from '@tanstack/react-query';
+import { billingKeys } from '@/lib/hooks/queries/billing';
+import { paiseToRupees } from '@/lib/billing-ui/types';
+import type { InvoiceEntity, InvoiceStatus } from '@/lib/billing-ui/types';
+import { api } from '@/lib/api/client';
 
 interface InvoiceDetailProps {
   invoiceId: string;
-  companyName: string;
-  companyEmail: string;
 }
 
-export function InvoiceDetail({
-  invoiceId,
-  companyName,
-  companyEmail,
-}: InvoiceDetailProps) {
-  const { invoice, loading, error } = useInvoiceDetail(invoiceId);
+function formatINR(rupees: number, currency = 'INR') {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 2 }).format(rupees);
+}
 
-  if (loading) {
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+const STATUS_META: Record<InvoiceStatus, { label: string; classes: string; icon?: ReactNode }> = {
+  draft:     { label: 'Draft',     classes: 'bg-gray-100 text-gray-700' },
+  pending:   { label: 'Pending',   classes: 'bg-yellow-100 text-yellow-800' },
+  paid:      { label: 'Paid',      classes: 'bg-green-100 text-green-800' },
+  overdue:   { label: 'Overdue',   classes: 'bg-red-100 text-red-800' },
+  cancelled: { label: 'Cancelled', classes: 'bg-gray-100 text-gray-500' },
+  refunded:  { label: 'Refunded',  classes: 'bg-blue-100 text-blue-800' },
+  failed:    { label: 'Failed',    classes: 'bg-red-100 text-red-700' },
+};
+
+export function InvoiceDetail({ invoiceId }: InvoiceDetailProps) {
+  const { data: invoice, isLoading, error } = useInvoice(invoiceId);
+
+  if (isLoading) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-          <div className="space-y-3">
-            <div className="h-4 bg-gray-200 rounded w-full"></div>
-            <div className="h-4 bg-gray-200 rounded w-full"></div>
-            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-          </div>
+      <div className="rounded-lg border p-8 animate-pulse space-y-4">
+        <div className="h-7 bg-muted rounded w-1/3" />
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => <div key={i} className="h-4 bg-muted rounded" />)}
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !invoice) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-        <h3 className="text-red-800 font-semibold">Error Loading Invoice</h3>
-        <p className="text-red-600 text-sm mt-2">{error}</p>
-      </div>
-    );
-  }
-
-  if (!invoice) {
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-        <h3 className="text-yellow-800 font-semibold">Invoice Not Found</h3>
-        <p className="text-yellow-700 text-sm mt-2">
-          The requested invoice could not be found.
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error instanceof Error ? error.message : 'Invoice not found.'}
         </p>
       </div>
     );
   }
 
-  const statusInfo = getPaymentStatusInfo(invoice.status);
-  const canPay = isInvoicePayable(invoice.status, invoice.razorpay_payment_link);
+  const inv = invoice as InvoiceEntity;
+  const meta = STATUS_META[inv.status] ?? STATUS_META.pending;
+  const subtotal = paiseToRupees(inv.subtotal_paise);
+  const tax     = paiseToRupees(inv.tax_paise);
+  const total   = paiseToRupees(inv.total_paise);
+  const amountDue = paiseToRupees(inv.amount_due_paise);
+  const billTo = inv.bill_to as Record<string, unknown> | null;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div className="rounded-lg border overflow-hidden bg-card">
       {/* Header */}
-      <div className="bg-gray-50 px-8 py-6 border-b border-gray-200">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {getInvoiceNumber(invoice.id)}
-            </h1>
-            <p className="text-gray-600 mt-1">
-              {formatBillingPeriod(invoice.period_start, invoice.period_end)}
-            </p>
-          </div>
-          <div className="text-right">
-            <StatusBadge status={invoice.status} />
-            {invoice.paid_at && (
-              <p className="text-sm text-gray-600 mt-2">
-                Paid on {formatDateTime(invoice.paid_at)}
-              </p>
-            )}
-          </div>
+      <div className="bg-muted/40 px-8 py-6 border-b flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{inv.invoice_number}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Issued {formatDate(inv.issue_date)} · Due {formatDate(inv.due_date)}
+          </p>
         </div>
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${meta.classes}`}>
+          {meta.label}
+        </span>
       </div>
 
-      {/* Invoice Body */}
-      <div className="p-8">
+      <div className="p-8 space-y-8">
         {/* Bill To */}
-        <div className="mb-8">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Bill To
-          </h3>
-          <div className="text-gray-900">
-            <div className="font-semibold">{companyName}</div>
-            <div className="text-sm text-gray-600">{companyEmail}</div>
-          </div>
-        </div>
-
-        {/* Line Items */}
-        <div className="mb-8">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-            Invoice Details
-          </h3>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quantity
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit Price
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {invoice.line_items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {item.description}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right text-gray-900">
-                      {item.quantity}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right text-gray-900">
-                      {formatCurrency(item.unit_price, invoice.currency)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right font-medium text-gray-900">
-                      {formatCurrency(item.amount, invoice.currency)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Totals */}
-        <div className="flex justify-end mb-8">
-          <div className="w-full max-w-sm space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Subtotal</span>
-              <span className="font-medium text-gray-900">
-                {formatCurrency(invoice.subtotal, invoice.currency)}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">
-                GST ({formatGSTRate(invoice.gst_rate_snapshot)})
-              </span>
-              <span className="font-medium text-gray-900">
-                {formatCurrency(invoice.tax_amount, invoice.currency)}
-              </span>
-            </div>
-            <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-3">
-              <span className="text-gray-900">Total</span>
-              <span className="text-blue-600">
-                {formatCurrency(invoice.total_amount, invoice.currency)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Payment Actions */}
-        {canPay && invoice.razorpay_payment_link && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-lg font-semibold text-blue-900">
-                  Payment Required
-                </h4>
-                <p className="text-sm text-blue-700 mt-1">
-                  Click below to pay this invoice via Razorpay
-                </p>
-              </div>
-              <a
-                href={invoice.razorpay_payment_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Pay {formatCurrency(invoice.total_amount, invoice.currency)}
-              </a>
-            </div>
+        {billTo && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Bill To</p>
+            <p className="font-semibold">{String(billTo.name ?? '')}</p>
+            {!!billTo.email && <p className="text-sm text-muted-foreground">{String(billTo.email)}</p>}
+            {!!billTo.address && <p className="text-sm text-muted-foreground">{String(billTo.address)}</p>}
+            {!!billTo.cin && <p className="text-sm text-muted-foreground">CIN: {String(billTo.cin)}</p>}
           </div>
         )}
 
-        {/* Razorpay Branding */}
-        <div className="mt-6 text-center text-xs text-gray-500">
+        {/* Totals */}
+        <div className="ml-auto w-full max-w-xs space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="font-medium">{formatINR(subtotal, inv.currency)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">GST</span>
+            <span className="font-medium">{formatINR(tax, inv.currency)}</span>
+          </div>
+          <div className="flex justify-between border-t pt-2 text-base font-bold">
+            <span>Total</span>
+            <span className="text-primary">{formatINR(total, inv.currency)}</span>
+          </div>
+          {inv.status === 'paid' && (
+            <div className="flex justify-between text-green-700">
+              <span>Amount Paid</span>
+              <span className="font-medium">{formatINR(paiseToRupees(inv.amount_paid_paise), inv.currency)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Pay Now — Payment Link flow (from invoice email or dashboard) */}
+        {inv.payable && inv.payment_cta_url && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-yellow-900">Payment Required</p>
+              <p className="text-sm text-yellow-700 mt-0.5">{inv.payable_reason ?? 'This invoice is awaiting payment.'}</p>
+            </div>
+            <a
+              href={inv.payment_cta_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-yellow-600 text-white text-sm font-semibold hover:bg-yellow-700 transition-colors"
+            >
+              Pay {formatINR(amountDue, inv.currency)}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+        )}
+
+        {/* Payable but no payment link yet (order flow) */}
+        {inv.payable && !inv.payment_cta_url && (
+          <OrderPayButton invoice={inv} />
+        )}
+
+        <p className="text-center text-xs text-muted-foreground">
           Powered by{' '}
-          <a
-            href="https://razorpay.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
+          <a href="https://razorpay.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
             Razorpay
           </a>
-        </div>
+          {' '}· Secured with 256-bit encryption
+        </p>
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const statusInfo = getPaymentStatusInfo(status as any);
+function OrderPayButton({ invoice }: { invoice: InvoiceEntity }) {
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50 p-5 flex items-center justify-between gap-4">
+      <div>
+        <p className="font-semibold text-blue-900">Pay via Dashboard</p>
+        <p className="text-sm text-blue-700 mt-0.5">Complete payment securely via card or UPI.</p>
+      </div>
+      <RazorpayOrderButton invoice={invoice} />
+    </div>
+  );
+}
 
-  const colorClasses = {
-    gray: 'bg-gray-100 text-gray-800',
-    green: 'bg-green-100 text-green-800',
-    yellow: 'bg-yellow-100 text-yellow-800',
-    red: 'bg-red-100 text-red-800',
-    blue: 'bg-blue-100 text-blue-800',
-  };
+function RazorpayOrderButton({ invoice }: { invoice: InvoiceEntity }) {
+  const queryClient = useQueryClient();
+
+  async function handlePay() {
+    try {
+      const order = await api.billing.createOrder(invoice.id);
+
+      const Razorpay = (window as any).Razorpay;
+      if (!Razorpay) {
+        alert('Razorpay SDK not loaded. Please refresh and try again.');
+        return;
+      }
+
+      const rzp = new Razorpay({
+        key: order.razorpay_key_id,
+        amount: order.amount_paise,
+        currency: order.currency,
+        name: 'DigiCertificates',
+        description: `Invoice ${order.invoice_number}`,
+        order_id: order.razorpay_order_id,
+        theme: { color: '#0f172a' },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          await api.billing.verifyPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            invoice_id: invoice.id,
+          });
+          // Invalidate both the specific invoice and the overview (outstanding total)
+          queryClient.invalidateQueries({ queryKey: billingKeys.invoice(invoice.id) });
+          queryClient.invalidateQueries({ queryKey: billingKeys.overview() });
+        },
+      });
+      rzp.open();
+    } catch {
+      alert('Failed to initiate payment. Please try again.');
+    }
+  }
 
   return (
-    <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-        colorClasses[statusInfo.color]
-      }`}
+    <button
+      onClick={handlePay}
+      className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
     >
-      {statusInfo.label}
-    </span>
+      Pay Now
+    </button>
   );
 }

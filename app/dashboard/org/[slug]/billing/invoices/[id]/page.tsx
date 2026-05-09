@@ -73,11 +73,7 @@ export default function InvoiceDetailPage() {
       </div>
 
       {/* Invoice Detail */}
-      <InvoiceDetail
-        invoiceId={invoiceId}
-        companyName={organization.name}
-        companyEmail={organization.email || ''}
-      />
+      <InvoiceDetail invoiceId={invoiceId} />
 
       {/* Print Button */}
       <div className="mt-6 flex justify-end">
