@@ -679,7 +679,7 @@ function CampaignWizard({
         onBack={() => setShowEditor(false)}
       />
     )}
-    <div className="space-y-4">
+    {!showEditor && <div className="space-y-4">
       <Steps current={step} />
 
       <div className="min-h-64">
@@ -717,7 +717,7 @@ function CampaignWizard({
           </Button>
         )}
       </div>
-    </div>
+    </div>}
     </>
   );
 }

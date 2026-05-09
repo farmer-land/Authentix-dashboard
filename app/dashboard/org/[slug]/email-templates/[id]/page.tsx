@@ -493,7 +493,7 @@ export default function EmailTemplateEditorPage() {
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Template name"
-                  className="flex-1 min-w-0 text-xs font-semibold bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50 cursor-text select-text"
+                  className="flex-1 min-w-0 text-xs font-semibold bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50 cursor-text select-text truncate max-w-30"
                 />
                 {autoSaveStatus === "saving" && (
                   <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 shrink-0" />
@@ -611,7 +611,7 @@ export default function EmailTemplateEditorPage() {
                           }}
                           className="w-full flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/60 group transition-colors text-left"
                         >
-                          <span className={cn("font-mono text-[10px] font-medium px-1.5 py-0.5 rounded border border-current/20 shrink-0 truncate max-w-[130px]", color)}>
+                          <span className={cn("font-mono text-[10px] font-medium px-1.5 py-0.5 rounded border border-current/20 shrink-0 truncate max-w-32.5", color)}>
                             {`{{${v}}}`}
                           </span>
                           <span className="text-[10px] text-muted-foreground flex-1 truncate">{d}</span>
@@ -625,10 +625,11 @@ export default function EmailTemplateEditorPage() {
             </div>
           )}
 
-          {/* Canvas scroll area */}
+          {/* Canvas scroll area — padding-left when left panel is visible so mx-auto centers in the visible area */}
           <div
             id="block-canvas"
-            className="absolute inset-0 overflow-y-auto pt-3 pb-24"
+            className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
+            style={{ paddingLeft: leftPanelVisible ? 272 : 0 }}
           >
             <EmailBlockBuilder
               blocks={blocks}
@@ -703,9 +704,9 @@ export default function EmailTemplateEditorPage() {
               dragStartWidth.current = panelWidth;
             }}
           >
-            <div className="flex flex-col gap-[3px] opacity-0 group-hover/resize:opacity-100 transition-opacity">
+            <div className="flex flex-col gap-0.75 opacity-0 group-hover/resize:opacity-100 transition-opacity">
               {[0, 1, 2, 3, 4].map(i => (
-                <span key={i} className="w-[3px] h-[3px] rounded-full bg-[#3ECF8E]" />
+                <span key={i} className="w-0.75 h-0.75 rounded-full bg-[#3ECF8E]" />
               ))}
             </div>
           </div>

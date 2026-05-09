@@ -160,7 +160,7 @@ export function EmailEditor({
   const [leftPanelTab, setLeftPanelTab] = useState<"blocks" | "settings">("blocks");
   const [panelWidth, setPanelWidth] = useState(0);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
-  const [rightPanelVisible, setRightPanelVisible] = useState(false);
+  const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
@@ -330,10 +330,10 @@ export function EmailEditor({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-70 flex flex-col bg-background overflow-hidden">
+    <div className="flex flex-col h-screen -m-6 overflow-hidden">
 
       {/* ── Header ── */}
-      <header className="h-11 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
+      <header className="h-11 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0 z-10">
         <button
           onClick={onBack}
           className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs transition-colors"
@@ -506,10 +506,11 @@ export function EmailEditor({
             </div>
           )}
 
-          {/* Canvas scroll area — panel floats over canvas so email stays centred */}
+          {/* Canvas scroll area — padding-left when left panel visible so mx-auto centers in the visible area */}
           <div
             id="broadcast-canvas"
-            className="absolute inset-0 overflow-y-auto pt-3 pb-24"
+            className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
+            style={{ paddingLeft: leftPanelVisible ? 272 : 0 }}
           >
             <EmailBlockBuilder
               blocks={blocks}

@@ -1318,12 +1318,12 @@ function ColorSwatch({ label, value, onChange }: { label: string; value: string;
 
   return (
     <div className="relative" ref={ref}>
-      <label className="flex items-center gap-1.5 cursor-pointer group/swatch">
-        <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">{label}</span>
+      <label className="flex items-center justify-between cursor-pointer group/swatch">
+        <span className="text-[10px] text-muted-foreground font-medium">{label}</span>
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="w-6 h-6 rounded border border-border shadow-sm group-hover/swatch:ring-2 group-hover/swatch:ring-[#3ECF8E]/40 transition-all"
+          className="w-6 h-6 rounded border border-border shadow-sm group-hover/swatch:ring-2 group-hover/swatch:ring-[#3ECF8E]/40 transition-all shrink-0"
           style={{ background: value || "#ffffff" }}
         />
       </label>
@@ -1392,18 +1392,18 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
 
   return (
     <div className="relative" ref={ref}>
-      <label className="flex items-center gap-1.5">
-        <span className="text-[10px] text-muted-foreground font-medium">Font</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-muted-foreground font-medium shrink-0">Font</span>
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none hover:border-[#3ECF8E]/60 transition-colors min-w-22.5 text-left flex items-center justify-between gap-1"
+          className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none hover:border-[#3ECF8E]/60 transition-colors flex-1 min-w-0 text-left flex items-center justify-between gap-1"
           style={{ fontFamily: value || "inherit" }}
         >
           <span className="truncate">{currentLabel}</span>
           <ChevronDown className="w-2.5 h-2.5 shrink-0 text-muted-foreground" />
         </button>
-      </label>
+      </div>
       {open && createPortal(
         <div
           className="fixed z-99999 bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
@@ -1477,84 +1477,86 @@ function StyleToolbar({ block, onChange }: { block: EmailBlock; onChange: (b: Em
     return 15;
   })();
 
+  const hasColors = showBg || showText || showBtn || showDetailBg || showTwoCols;
+  const hasTypography = showFont || showSize || showAlign;
+
   return (
-    <div
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-card border-t border-[#3ECF8E]/20 text-xs"
-      onClick={e => e.stopPropagation()}
-    >
-      {showBg && (
-        <ColorSwatch
-          label={type === "header" ? "Header BG" : "Background"}
-          value={
-            type === "header" ? (block.bgColor || "#3ECF8E") :
-            type === "qr_code" ? (block.bgColor || "#1e1e1e") :
-            (block.bgColor || "#18181b")
-          }
-          onChange={v => u({ bgColor: v })}
-        />
+    <div className="flex flex-col divide-y divide-border/30 text-xs" onClick={e => e.stopPropagation()}>
+      {hasColors && (
+        <div className="px-3 py-2.5 space-y-2.5">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Colors</p>
+          {showBg && (
+            <ColorSwatch
+              label={type === "header" ? "Header BG" : "Background"}
+              value={type === "header" ? (block.bgColor || "#3ECF8E") : type === "qr_code" ? (block.bgColor || "#1e1e1e") : (block.bgColor || "#18181b")}
+              onChange={v => u({ bgColor: v })}
+            />
+          )}
+          {type === "header" && (
+            <ColorSwatch label="Title" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
+          )}
+          {showText && type !== "header" && (
+            <ColorSwatch label="Text" value={block.textColor || defaultTextColor} onChange={v => u({ textColor: v })} />
+          )}
+          {showBtn && (
+            <ColorSwatch label="Button BG" value={block.btnColor || "#3ECF8E"} onChange={v => u({ btnColor: v })} />
+          )}
+          {showDetailBg && (
+            <>
+              <ColorSwatch label="Box BG" value={block.detailBgColor || "#1a1a1a"} onChange={v => u({ detailBgColor: v })} />
+              <ColorSwatch label="Values" value={block.detailTextColor || "#3ECF8E"} onChange={v => u({ detailTextColor: v })} />
+            </>
+          )}
+          {showTwoCols && (
+            <>
+              <ColorSwatch label="Left text" value={block.leftTextColor || "#d1d5db"} onChange={v => u({ leftTextColor: v })} />
+              <ColorSwatch label="Right text" value={block.rightTextColor || "#d1d5db"} onChange={v => u({ rightTextColor: v })} />
+            </>
+          )}
+        </div>
       )}
-      {type === "header" && (
-        <ColorSwatch label="Title color" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
-      )}
-      {showText && type !== "header" && (
-        <ColorSwatch
-          label="Text color"
-          value={block.textColor || defaultTextColor}
-          onChange={v => u({ textColor: v })}
-        />
-      )}
-      {showBtn && (
-        <ColorSwatch label="Button BG" value={block.btnColor || "#3ECF8E"} onChange={v => u({ btnColor: v })} />
-      )}
-      {showDetailBg && (
-        <>
-          <ColorSwatch label="Box BG" value={block.detailBgColor || "#1a1a1a"} onChange={v => u({ detailBgColor: v })} />
-          <ColorSwatch label="Value color" value={block.detailTextColor || "#3ECF8E"} onChange={v => u({ detailTextColor: v })} />
-        </>
-      )}
-      {showFont && (
-        <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
-      )}
-      {showTwoCols && (
-        <>
-          <ColorSwatch label="Left text" value={block.leftTextColor || "#d1d5db"} onChange={v => u({ leftTextColor: v })} />
-          <ColorSwatch label="Right text" value={block.rightTextColor || "#d1d5db"} onChange={v => u({ rightTextColor: v })} />
-        </>
-      )}
-      {showSize && (
-        <label className="flex items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground font-medium">Size</span>
-          <input
-            type="number"
-            min={10}
-            max={48}
-            value={block.fontSize || defaultSize}
-            onChange={e => u({ fontSize: Number(e.target.value) })}
-            className="w-14 text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
-          />
-        </label>
-      )}
-      {showAlign && (
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-muted-foreground font-medium">Align</span>
-          <div className="flex border border-border rounded overflow-hidden">
-            {ALIGN_OPTIONS.map(a => (
-              <button
-                key={a.value}
-                type="button"
-                onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
-                className={cn(
-                  "px-2 py-0.5 text-[11px] transition-colors",
-                  (block.textAlign || "left") === a.value
-                    ? "bg-[#3ECF8E] text-white"
-                    : "hover:bg-muted text-muted-foreground"
-                )}
-                title={`Align ${a.value}`}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
+      {hasTypography && (
+        <div className="px-3 py-2.5 space-y-2.5">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Typography</p>
+          {showFont && (
+            <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
+          )}
+          {showSize && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground font-medium">Size</span>
+              <input
+                type="number"
+                min={10}
+                max={72}
+                value={block.fontSize || defaultSize}
+                onChange={e => u({ fontSize: Number(e.target.value) })}
+                className="w-16 text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right"
+              />
+            </div>
+          )}
+          {showAlign && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground font-medium">Align</span>
+              <div className="flex border border-border rounded overflow-hidden">
+                {ALIGN_OPTIONS.map(a => (
+                  <button
+                    key={a.value}
+                    type="button"
+                    onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
+                    className={cn(
+                      "px-2 py-0.5 text-[11px] transition-colors",
+                      (block.textAlign || "left") === a.value
+                        ? "bg-[#3ECF8E] text-white"
+                        : "hover:bg-muted text-muted-foreground"
+                    )}
+                    title={`Align ${a.value}`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1578,8 +1580,8 @@ function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b
   if (block.type === "details_box") {
     const rows = block.detailRows ?? [];
     return (
-      <div className="px-4 pb-4 pt-3 space-y-3 border-t border-[#3ECF8E]/10 bg-[#3ECF8E]/5 dark:bg-[#3ECF8E]/[0.04]">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#3ECF8E]">Detail Rows</p>
+      <div className="px-3 pb-4 pt-2.5 space-y-3 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
         {rows.map((row, i) => (
           <div key={i} className="flex items-center gap-2">
             <Input value={row.label} onChange={e => { const r = [...rows]; r[i] = { ...r[i]!, label: e.target.value }; u({ detailRows: r }); }} placeholder="Label" className="h-7 text-xs w-24" />
@@ -1599,7 +1601,8 @@ function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b
 
   if (block.type === "cta_button") {
     return (
-      <div className="px-4 pb-4 pt-3 border-t border-[#3ECF8E]/10 bg-zinc-800/30">
+      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
         <Field label="Button URL">
           <Input value={block.btnUrl ?? ""} onChange={e => u({ btnUrl: e.target.value })} placeholder="{{verification_url}}" className="h-7 text-xs font-mono" />
         </Field>
@@ -1609,7 +1612,8 @@ function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b
 
   if (block.type === "spacer") {
     return (
-      <div className="px-4 pb-4 pt-3 border-t border-[#3ECF8E]/10 bg-zinc-800/30">
+      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
         <Field label="Height (px)">
           <Input type="number" min={4} max={120} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className="h-7 w-24 text-xs" />
         </Field>
@@ -1619,7 +1623,8 @@ function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b
 
   if (block.type === "two_column") {
     return (
-      <div className="px-4 pb-4 pt-3 space-y-3 border-t border-[#3ECF8E]/10 bg-zinc-800/30">
+      <div className="px-3 pb-4 pt-2.5 space-y-3 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
         <Field label="Left column (markdown supported)">
           <textarea
             value={block.leftContent ?? ""}
