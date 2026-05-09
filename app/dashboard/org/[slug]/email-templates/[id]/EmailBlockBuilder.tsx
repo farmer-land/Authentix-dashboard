@@ -6,16 +6,20 @@
  * Exports: EmailBlockBuilder, blocksToHtml, defaultBlock, STARTER_BLOCKS, PALETTE, applyPreviewMocks, BlockType, EmailBlock
  */
 
-import React, { useRef, useLayoutEffect, useState } from "react";
+import React, { useRef, useLayoutEffect, useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { HexColorPicker } from "react-colorful";
+import { CERTIFICATE_FONTS } from "@/lib/types/certificate";
 import {
   DndContext,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  DragOverlay,
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -32,7 +36,8 @@ import { Label } from "@/components/ui/label";
 import {
   Type, AlignLeft, Image as ImageIcon, QrCode, MousePointerClick,
   TableProperties, Minus, ArrowUpDown, LayoutTemplate, Plus, Trash2,
-  GripVertical, AlertCircle, RefreshCw, Copy,
+  GripVertical, AlertCircle, RefreshCw, Copy, SlidersHorizontal,
+  ArrowUp, ArrowDown, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
@@ -44,6 +49,7 @@ export type BlockType =
   | "greeting"
   | "text"
   | "markdown"
+  | "two_column"
   | "cert_image"
   | "qr_code"
   | "details_box"
@@ -72,30 +78,37 @@ export interface EmailBlock {
   btnUrl?: string;
   btnColor?: string;
   height?: number;
+  // two_column
+  leftContent?: string;
+  rightContent?: string;
+  leftTextColor?: string;
+  rightTextColor?: string;
 }
 
 // ── Palette catalog (exported for use in left panel) ─────────────────────────
 
+// Generic email blocks — shown in both cert-delivery and broadcast editors
 export const EMAIL_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNode; label: string; desc: string }> = [
-  { type: "header",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Header",      desc: "Title banner" },
-  { type: "greeting",    icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Greeting",    desc: "Hi {{name}}" },
-  { type: "text",        icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Text",        desc: "Paragraph" },
-  { type: "cert_image",  icon: <ImageIcon className="w-3.5 h-3.5" />,         label: "Certificate", desc: "Certificate preview" },
-  { type: "qr_code",     icon: <QrCode className="w-3.5 h-3.5" />,            label: "QR Code",     desc: "Verify link" },
-  { type: "details_box", icon: <TableProperties className="w-3.5 h-3.5" />,   label: "Details",     desc: "Course, date…" },
-  { type: "cta_button",  icon: <MousePointerClick className="w-3.5 h-3.5" />, label: "CTA Button",  desc: "Verify button" },
-  { type: "linkedin",    icon: <Type className="w-3.5 h-3.5" />,              label: "LinkedIn",    desc: "Share prompt" },
-  { type: "divider",     icon: <Minus className="w-3.5 h-3.5" />,             label: "Divider",     desc: "Separator" },
-  { type: "spacer",      icon: <ArrowUpDown className="w-3.5 h-3.5" />,       label: "Spacer",      desc: "Empty space" },
-  { type: "footer",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Footer",      desc: "Footer text" },
+  { type: "header",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Header",       desc: "Title banner" },
+  { type: "greeting",    icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Greeting",     desc: "Hi {{name}}" },
+  { type: "text",        icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Text",         desc: "Paragraph" },
+  { type: "markdown",    icon: <Type className="w-3.5 h-3.5" />,              label: "Markdown",     desc: "Rich text / tables" },
+  { type: "two_column",  icon: <TableProperties className="w-3.5 h-3.5" />,   label: "Two Columns",  desc: "Side-by-side layout" },
+  { type: "cta_button",  icon: <MousePointerClick className="w-3.5 h-3.5" />, label: "CTA Button",   desc: "Action link" },
+  { type: "linkedin",    icon: <Type className="w-3.5 h-3.5" />,              label: "LinkedIn",     desc: "Share prompt" },
+  { type: "divider",     icon: <Minus className="w-3.5 h-3.5" />,             label: "Divider",      desc: "Separator" },
+  { type: "spacer",      icon: <ArrowUpDown className="w-3.5 h-3.5" />,       label: "Spacer",       desc: "Empty space" },
+  { type: "footer",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Footer",       desc: "Footer text" },
 ];
 
+// Certificate-specific blocks — shown only in the cert-delivery email template editor
 export const CERT_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNode; label: string; desc: string }> = [
-  { type: "cert_image",  icon: <ImageIcon className="w-3.5 h-3.5" />,        label: "Cert Image", desc: "Certificate preview" },
-  { type: "qr_code",     icon: <QrCode className="w-3.5 h-3.5" />,           label: "QR Code",    desc: "Verify link" },
-  { type: "details_box", icon: <TableProperties className="w-3.5 h-3.5" />,  label: "Details",    desc: "Course, date…" },
+  { type: "cert_image",  icon: <ImageIcon className="w-3.5 h-3.5" />,        label: "Cert Image",  desc: "Certificate preview" },
+  { type: "qr_code",     icon: <QrCode className="w-3.5 h-3.5" />,           label: "QR Code",     desc: "Verify link" },
+  { type: "details_box", icon: <TableProperties className="w-3.5 h-3.5" />,  label: "Details Box", desc: "Course, date…" },
 ];
 
+// Full palette for cert delivery email editor (email + cert blocks)
 export const PALETTE = [...EMAIL_BLOCKS_PALETTE, ...CERT_BLOCKS_PALETTE];
 
 // ── Default block configs ────────────────────────────────────────────────────
@@ -107,6 +120,7 @@ export function defaultBlock(type: BlockType): EmailBlock {
     case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb" };
     case "text":        return { id, type, content: "We are delighted to inform you that you have successfully completed this program. Your certificate is ready below.", textColor: "#d1d5db" };
     case "markdown":    return { id, type, content: "## Congratulations, **{{recipient_name}}**!\n\nYou have successfully completed **{{course_name}}**.\n\n- 📅 Issued on {{issue_date}}\n- 🔗 [View & verify your certificate]({{verification_url}})\n\n> Your achievement has been recorded and is ready to share.", textColor: "#d1d5db" };
+    case "two_column":  return { id, type, leftContent: "**Course Details**\n\nCourse: {{course_name}}\nDate: {{issue_date}}", rightContent: "**About Your Certificate**\n\nThis certificate verifies your achievement. Share it with your network!", leftTextColor: "#d1d5db", rightTextColor: "#d1d5db" };
     case "cert_image":  return { id, type };
     case "qr_code":     return { id, type, content: "Scan QR to verify certificate authenticity" };
     case "details_box": return { id, type, detailRows: [{ label: "Course", value: "{{course_name}}" }, { label: "Date Issued", value: "{{issue_date}}" }], detailBgColor: "#1a1a1a", detailTextColor: "#3ECF8E" };
@@ -364,6 +378,18 @@ function blockToHtml(block: EmailBlock): string {
     case "markdown":
       return `<div style="padding: 16px 32px;${block.bgColor ? `background:${block.bgColor};` : ""}">${markdownToEmailHtml(block.content ?? "", block.textColor ?? "#d1d5db")}</div>`;
 
+    case "two_column":
+      return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;${block.bgColor ? `background:${block.bgColor};` : ""}">
+  <tr>
+    <td width="50%" style="padding:20px 12px 20px 32px;vertical-align:top;border-right:1px solid #2d2d2d;">
+      <div style="font-size:14px;color:${block.leftTextColor || "#d1d5db"};line-height:1.7;${ff}">${markdownToEmailHtml(block.leftContent ?? "", block.leftTextColor ?? "#d1d5db")}</div>
+    </td>
+    <td width="50%" style="padding:20px 32px 20px 12px;vertical-align:top;">
+      <div style="font-size:14px;color:${block.rightTextColor || "#d1d5db"};line-height:1.7;${ff}">${markdownToEmailHtml(block.rightContent ?? "", block.rightTextColor ?? "#d1d5db")}</div>
+    </td>
+  </tr>
+</table>`;
+
     case "cert_image":
       return `<div style="margin: 32px; text-align: center;">
   <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.10);" />
@@ -458,11 +484,262 @@ export const STARTER_BLOCKS: EmailBlock[] = [
   defaultBlock("footer"),
 ];
 
+// ── EdTech starter templates ─────────────────────────────────────────────────
+
+export interface StarterTemplate {
+  id: string;
+  name: string;
+  description: string;
+  context: "cert" | "broadcast" | "both";
+  blocks: () => EmailBlock[];
+}
+
+export const EDTECH_TEMPLATES: StarterTemplate[] = [
+  {
+    id: "course-completion",
+    name: "Course Completion",
+    description: "Full certificate delivery email with cert preview, details, and verify button",
+    context: "cert",
+    blocks: () => [
+      defaultBlock("header"),
+      defaultBlock("greeting"),
+      { ...defaultBlock("text"), content: "We're thrilled to share that you've successfully completed the course. Your verified digital certificate is ready below.", textColor: "#d1d5db" },
+      defaultBlock("cert_image"),
+      defaultBlock("details_box"),
+      defaultBlock("cta_button"),
+      defaultBlock("linkedin"),
+      defaultBlock("divider"),
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "workshop-graduate",
+    name: "Workshop Graduate",
+    description: "Concise completion email for short workshops or bootcamps",
+    context: "cert",
+    blocks: () => [
+      { ...defaultBlock("header"), title: "Workshop Complete — {{recipient_name}}!", subtitle: "You've earned your certificate for {{course_name}}" },
+      defaultBlock("greeting"),
+      { ...defaultBlock("text"), content: "Congratulations on completing the workshop. Your certificate of completion is attached and ready to share.", textColor: "#d1d5db" },
+      { ...defaultBlock("details_box"), detailRows: [{ label: "Workshop", value: "{{course_name}}" }, { label: "Date", value: "{{issue_date}}" }, { label: "Issued by", value: "{{organization_name}}" }] },
+      defaultBlock("cta_button"),
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "professional-cert",
+    name: "Professional Certificate",
+    description: "Two-column layout with cert preview — ideal for professional certifications",
+    context: "cert",
+    blocks: () => [
+      { ...defaultBlock("header"), title: "Professional Certificate Awarded", subtitle: "{{recipient_name}} · {{course_name}}" },
+      defaultBlock("greeting"),
+      { ...defaultBlock("two_column"), leftContent: "**Certificate Details**\n\nCourse: {{course_name}}\nDate: {{issue_date}}\nIssued by: {{organization_name}}", rightContent: "**Verify Your Certificate**\n\nThis certificate is digitally verified and can be shared with employers, LinkedIn, or any professional network." },
+      defaultBlock("cert_image"),
+      defaultBlock("qr_code"),
+      { ...defaultBlock("cta_button"), btnLabel: "View & Verify Certificate" },
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "achievement-award",
+    name: "Achievement Award",
+    description: "For recognition awards, honours, or special achievements",
+    context: "cert",
+    blocks: () => [
+      { ...defaultBlock("header"), bgColor: "#1e3a5f", title: "🏆 You've Been Recognised!", subtitle: "{{recipient_name}} — {{course_name}}" },
+      defaultBlock("greeting"),
+      { ...defaultBlock("text"), content: "We are proud to present you with this award in recognition of your outstanding achievement. This certificate is a testament to your dedication and hard work.", textColor: "#d1d5db" },
+      defaultBlock("cert_image"),
+      defaultBlock("linkedin"),
+      defaultBlock("cta_button"),
+      defaultBlock("divider"),
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "course-announcement",
+    name: "Course Announcement",
+    description: "Announce a new course or learning programme to your learners",
+    context: "broadcast",
+    blocks: () => [
+      { ...defaultBlock("header"), title: "New Course Available 🎓", subtitle: "{{course_name}} is now open for enrolment" },
+      { ...defaultBlock("greeting"), content: "Hi {{recipient_name}}," },
+      { ...defaultBlock("text"), content: "We're excited to announce that **{{course_name}}** is now live. This course is designed to help you gain industry-recognised skills and advance your career.", textColor: "#d1d5db" },
+      { ...defaultBlock("two_column"), leftContent: "**What you'll learn**\n\n• Core concepts and frameworks\n• Hands-on projects\n• Industry best practices", rightContent: "**Course highlights**\n\n• Self-paced learning\n• Certificate upon completion\n• Expert instructors" },
+      { ...defaultBlock("cta_button"), btnLabel: "Enrol Now", btnUrl: "{{verification_url}}" },
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "completion-reminder",
+    name: "Completion Reminder",
+    description: "Nudge learners who are close to finishing a course",
+    context: "broadcast",
+    blocks: () => [
+      { ...defaultBlock("header"), bgColor: "#7c3aed", title: "You're Almost There, {{recipient_name}}!", subtitle: "Complete {{course_name}} to earn your certificate" },
+      { ...defaultBlock("greeting"), content: "Hi {{recipient_name}}," },
+      { ...defaultBlock("text"), content: "You're so close to finishing {{course_name}}! Don't let your progress go to waste — complete the remaining lessons today and earn your verified certificate.", textColor: "#d1d5db" },
+      { ...defaultBlock("cta_button"), btnLabel: "Continue Learning", btnColor: "#7c3aed" },
+      { ...defaultBlock("text"), content: "If you have any questions or need support, reply to this email — we're here to help.", textColor: "#9ca3af", fontSize: 13 },
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "welcome-email",
+    name: "Welcome to Course",
+    description: "Warm welcome email for learners who just enrolled",
+    context: "broadcast",
+    blocks: () => [
+      { ...defaultBlock("header"), title: "Welcome to {{course_name}}! 👋", subtitle: "We're glad you're here, {{recipient_name}}" },
+      { ...defaultBlock("greeting"), content: "Hi {{recipient_name}}," },
+      { ...defaultBlock("text"), content: "Thank you for enrolling in **{{course_name}}**. You've taken a great step towards advancing your skills. Here's everything you need to get started.", textColor: "#d1d5db" },
+      { ...defaultBlock("two_column"), leftContent: "**Getting Started**\n\n1. Log in to your account\n2. Navigate to your course\n3. Start with Module 1", rightContent: "**Need Help?**\n\nOur support team is here for you. Reply to this email or visit our help centre at any time." },
+      { ...defaultBlock("cta_button"), btnLabel: "Start Learning Now" },
+      defaultBlock("footer"),
+    ],
+  },
+  {
+    id: "monthly-newsletter",
+    name: "Monthly Progress Update",
+    description: "Periodic newsletter-style update for your learner community",
+    context: "broadcast",
+    blocks: () => [
+      { ...defaultBlock("header"), title: "Learning Update 📚", subtitle: "Your monthly progress from {{organization_name}}" },
+      { ...defaultBlock("greeting"), content: "Hi {{recipient_name}}," },
+      { ...defaultBlock("text"), content: "Here's a summary of what's been happening this month across your learning journey.", textColor: "#d1d5db" },
+      defaultBlock("divider"),
+      { ...defaultBlock("text"), content: "**This Month's Highlights**\n\nNew courses have been added to the catalogue, and our top learners have been recognised for their achievements. Keep up the great work!", textColor: "#d1d5db" },
+      defaultBlock("divider"),
+      { ...defaultBlock("cta_button"), btnLabel: "View My Learning Dashboard" },
+      defaultBlock("footer"),
+    ],
+  },
+];
+
+// ── StarterTemplateGallery ────────────────────────────────────────────────────
+
+// ── Palette block hover preview (exported for use in parent left panels) ─────
+
+export function PaletteItemCard({
+  item,
+  onClick,
+  onDragStart,
+}: {
+  item: { type: BlockType; icon: React.ReactNode; label: string; desc: string };
+  onClick: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+}) {
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPos, setPreviewPos] = useState({ x: 0, y: 0 });
+  const ref = useRef<HTMLButtonElement>(null);
+
+  const previewBlock = useMemo(() => defaultBlock(item.type), [item.type]);
+  const previewHtml = useMemo(() => {
+    const raw = blockToHtml(previewBlock);
+    return applyPreviewMocks(raw);
+  }, [previewBlock]);
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        onClick={onClick}
+        draggable
+        onDragStart={onDragStart}
+        onMouseEnter={e => {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setPreviewPos({ x: rect.right + 8, y: rect.top });
+          setShowPreview(true);
+        }}
+        onMouseLeave={() => setShowPreview(false)}
+        title={item.desc}
+        className="flex items-center gap-2 p-2.5 rounded-lg border border-transparent bg-muted/30 hover:bg-muted/60 hover:border-border cursor-grab active:cursor-grabbing transition-all text-left group w-full"
+      >
+        <span className="shrink-0 text-muted-foreground group-hover:text-[#3ECF8E] transition-colors">
+          {item.icon}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium truncate">{item.label}</p>
+          <p className="text-[9px] text-muted-foreground truncate leading-tight">{item.desc}</p>
+        </div>
+      </button>
+
+      {showPreview && createPortal(
+        <div
+          className="fixed z-99999 pointer-events-none"
+          style={{ left: Math.min(previewPos.x, window.innerWidth - 320), top: Math.max(8, previewPos.y) }}
+        >
+          <div className="w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden">
+            <div className="px-3 py-1.5 border-b border-zinc-700 bg-zinc-800/80">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{item.label} preview</p>
+            </div>
+            <div
+              className="overflow-hidden"
+              style={{ transform: "scale(0.65)", transformOrigin: "top left", width: "154%" }}
+              dangerouslySetInnerHTML={{ __html: previewHtml || `<div style="padding:16px;color:#6b7280;font-size:12px;font-family:sans-serif">${item.label}</div>` }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+export function StarterTemplateGallery({
+  context,
+  onSelect,
+  onDismiss,
+}: {
+  context: "cert" | "broadcast";
+  onSelect: (blocks: EmailBlock[]) => void;
+  onDismiss: () => void;
+}) {
+  const templates = EDTECH_TEMPLATES.filter(t => t.context === context || t.context === "both");
+
+  return (
+    <div className="flex flex-col items-center gap-6 py-12 px-6 max-w-2xl mx-auto">
+      <div className="text-center">
+        <div className="w-12 h-12 rounded-full bg-[#3ECF8E]/10 flex items-center justify-center mx-auto mb-3">
+          <LayoutTemplate className="w-5 h-5 text-[#3ECF8E]" />
+        </div>
+        <p className="text-base font-semibold text-foreground mb-1">Choose a starting template</p>
+        <p className="text-xs text-muted-foreground">EdTech-focused templates — customise everything after selecting</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 w-full">
+        {templates.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onSelect(t.blocks().map(b => ({ ...b, id: nanoid(8) })))}
+            className="group text-left p-4 rounded-xl border border-border/60 bg-card hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/5 transition-all"
+          >
+            <p className="text-xs font-semibold text-foreground mb-1 group-hover:text-[#3ECF8E] transition-colors">{t.name}</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">{t.description}</p>
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Start with blank canvas instead
+      </button>
+    </div>
+  );
+}
+
 const BLOCK_LABELS: Record<BlockType, string> = {
   header: "Header",
   greeting: "Greeting",
   text: "Text Block",
   markdown: "Markdown",
+  two_column: "Two Columns",
   cert_image: "Certificate Image",
   qr_code: "QR Code",
   details_box: "Details Box",
@@ -473,69 +750,78 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   footer: "Footer",
 };
 
-// ── Variable autocomplete dropdown (rendered via portal at cursor position) ───
+// ── Shared variable dropdown portal (autocomplete + swap) ────────────────────
 
-function VarDropdown({
+function VarListPortal({
   vars,
   query,
   x,
   y,
+  title,
   onSelect,
+  onClose,
 }: {
   vars: string[];
   query: string;
   x: number;
   y: number;
+  title: string;
   onSelect: (v: string) => void;
+  onClose: () => void;
 }) {
   const filtered = vars.filter(v =>
-    !query || v.toLowerCase().startsWith(query.toLowerCase()) || v.toLowerCase().includes(query.toLowerCase())
+    !query || v.toLowerCase().includes(query.toLowerCase())
   );
-  if (filtered.length === 0) return null;
-
   const vw = typeof window !== "undefined" ? window.innerWidth : 800;
-  const adjustedX = Math.min(x, vw - 210);
+  const adjustedX = Math.min(x, vw - 220);
+
+  React.useEffect(() => {
+    const close = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (!target.closest(".var-portal-root")) onClose();
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [onClose]);
 
   return createPortal(
-    <div className="var-dropdown-portal" style={{
-      position: "fixed",
-      left: adjustedX,
-      top: y + 6,
-      zIndex: 99999,
-      borderRadius: 8,
-      boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
-      minWidth: 200,
-      maxHeight: 220,
-      overflow: "auto",
-      padding: "4px 0",
-      background: "var(--color-card, #fff)",
-      border: "1px solid var(--color-border, #e2e8f0)",
-      color: "var(--color-foreground, #111)",
+    <div className="var-portal-root" style={{
+      position: "fixed", left: adjustedX, top: y + 6, zIndex: 99999,
+      borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.26)",
+      minWidth: 210, maxHeight: 240, overflow: "hidden",
+      display: "flex", flexDirection: "column",
+      background: "var(--color-card, #1c1c1e)",
+      border: "1px solid rgba(255,255,255,0.1)",
     }}>
-      <p style={{ fontSize: 9, color: "var(--color-muted-foreground, #9ca3af)", padding: "4px 10px 3px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px", borderBottom: "1px solid var(--color-border, #f1f5f9)", marginBottom: 2 }}>
-        Variables — type to filter
+      <p style={{ fontSize: 9, color: "#6b7280", padding: "5px 10px 4px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+        {title}
       </p>
-      {filtered.map(v => (
-        <button
-          key={v}
-          onMouseDown={e => { e.preventDefault(); onSelect(v.replace(/^\{\{|\}\}$/g, "").trim()); }}
-          style={{ display: "block", width: "100%", padding: "5px 10px", textAlign: "left", fontSize: 12, fontFamily: "monospace", color: "#3ECF8E", background: "transparent", border: "none", cursor: "pointer" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(62,207,142,0.1)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-        >
-          {`{{${v.replace(/^\{\{|\}\}$/g, "").trim()}}}`}
-        </button>
-      ))}
+      <div style={{ overflowY: "auto", padding: "3px 0" }}>
+        {filtered.length === 0 && (
+          <p style={{ fontSize: 11, color: "#6b7280", padding: "8px 10px" }}>No matches</p>
+        )}
+        {filtered.map(v => (
+          <button
+            key={v}
+            onMouseDown={e => { e.preventDefault(); onSelect(v); }}
+            style={{ display: "block", width: "100%", padding: "5px 10px", textAlign: "left", fontSize: 12, fontFamily: "monospace", color: "#3ECF8E", background: "transparent", border: "none", cursor: "pointer" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(62,207,142,0.12)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+          >
+            {`{{${v}}}`}
+          </button>
+        ))}
+      </div>
     </div>,
     document.body
   );
 }
 
-// ── EditableText — contenteditable inline text element with @ autocomplete ────
+// ── EditableText — contenteditable inline text element with @ / {{ autocomplete ─
 
 function toVarHtml(text: string): string {
   return (text || "").replace(/\{\{([\w.]+)\}\}/g, (match, varName) =>
-    `<span data-var data-var-name="${varName}" style="display:inline-block;border:1px solid rgba(0,0,0,0.25);border-radius:3px;padding:0 4px;color:#1a1a1a;font-family:monospace;font-size:0.82em;background:rgba(255,255,255,0.88);line-height:1.6;cursor:pointer;font-weight:600;" title="Click to select this variable">${match}</span>`
+    `<span data-var data-var-name="${varName}" style="display:inline-block;border:1px solid rgba(62,207,142,0.5);border-radius:4px;padding:1px 5px;color:#3ECF8E;font-family:monospace;font-size:0.82em;background:rgba(62,207,142,0.08);line-height:1.6;cursor:pointer;font-weight:600;white-space:nowrap;" title="Click to swap this variable">${match}</span>`
   );
 }
 
@@ -546,7 +832,6 @@ function EditableText({
   style,
   placeholder,
   availableVars = [],
-  onVarClick,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -554,11 +839,13 @@ function EditableText({
   style?: React.CSSProperties;
   placeholder?: string;
   availableVars?: string[];
-  onVarClick?: (varName: string) => void;
 }) {
   const ref = useRef<HTMLElement>(null);
   const isFocused = useRef(false);
-  const [atDropdown, setAtDropdown] = useState<{ query: string; x: number; y: number } | null>(null);
+  // @ / {{ autocomplete dropdown
+  const [autocomplete, setAutocomplete] = useState<{ trigger: string; query: string; x: number; y: number } | null>(null);
+  // Chip click → inline swap popover
+  const [swapPopover, setSwapPopover] = useState<{ varName: string; x: number; y: number } | null>(null);
 
   // Sync DOM from prop when not being edited
   useLayoutEffect(() => {
@@ -576,29 +863,46 @@ function EditableText({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleInput = () => {
-    if (!availableVars.length) return;
+  const detectTrigger = () => {
+    if (!availableVars.length) return null;
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) { setAtDropdown(null); return; }
+    if (!sel?.rangeCount) return null;
     const range = sel.getRangeAt(0);
     const container = range.startContainer;
-    if (container.nodeType !== Node.TEXT_NODE) { setAtDropdown(null); return; }
+    if (container.nodeType !== Node.TEXT_NODE) return null;
     const textBefore = (container.textContent ?? "").slice(0, range.startOffset);
+
+    // Check {{ trigger first (longer pattern, check before @)
+    const dblBraceIdx = textBefore.lastIndexOf("{{");
+    if (dblBraceIdx !== -1) {
+      const query = textBefore.slice(dblBraceIdx + 2);
+      if (!query.includes(" ") && !query.includes("\n") && !query.includes("}")) {
+        const rect = range.getBoundingClientRect();
+        return { trigger: "{{", query, x: rect.left, y: rect.bottom };
+      }
+    }
+
+    // Check @ trigger
     const atIdx = textBefore.lastIndexOf("@");
     if (atIdx !== -1) {
       const query = textBefore.slice(atIdx + 1);
       if (!query.includes(" ") && !query.includes("\n")) {
         const rect = range.getBoundingClientRect();
-        setAtDropdown({ query, x: rect.left, y: rect.bottom });
-        return;
+        return { trigger: "@", query, x: rect.left, y: rect.bottom };
       }
     }
-    setAtDropdown(null);
+
+    return null;
+  };
+
+  const handleInput = () => {
+    const found = detectTrigger();
+    setAutocomplete(found);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (atDropdown && e.key === "Escape") {
-      setAtDropdown(null);
+    if (autocomplete && e.key === "Escape") {
+      setAutocomplete(null);
       e.preventDefault();
     }
   };
@@ -606,26 +910,37 @@ function EditableText({
   const insertVar = (varName: string) => {
     if (!ref.current) return;
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
+    if (!sel?.rangeCount) return;
     const range = sel.getRangeAt(0);
     const container = range.startContainer;
     if (container.nodeType !== Node.TEXT_NODE) return;
     const text = container.textContent ?? "";
     const cursorOffset = range.startOffset;
     const textBefore = text.slice(0, cursorOffset);
+
+    // Find the trigger start position
+    const dblBraceIdx = textBefore.lastIndexOf("{{");
     const atIdx = textBefore.lastIndexOf("@");
-    if (atIdx === -1) return;
-    // Strip any accidental {{ }} wrapping from the var name before inserting
-    const cleanName = varName.replace(/^\{\{|\}\}$/g, "").trim();
-    const insertion = `{{${cleanName}}}`;
-    container.textContent = text.slice(0, atIdx) + insertion + text.slice(cursorOffset);
-    const newOffset = atIdx + insertion.length;
+    const triggerIdx = dblBraceIdx > atIdx ? dblBraceIdx : atIdx;
+    if (triggerIdx === -1) return;
+
+    const insertion = `{{${varName}}}`;
+    container.textContent = text.slice(0, triggerIdx) + insertion + text.slice(cursorOffset);
+    const newOffset = triggerIdx + insertion.length;
     range.setStart(container, newOffset);
     range.setEnd(container, newOffset);
     sel.removeAllRanges();
     sel.addRange(range);
-    setAtDropdown(null);
+    setAutocomplete(null);
     onChange(ref.current.textContent ?? "");
+  };
+
+  const swapVar = (oldVar: string, newVar: string) => {
+    if (!ref.current) return;
+    const current = ref.current.textContent ?? "";
+    const newText = current.replace(new RegExp(`\\{\\{${oldVar}\\}\\}`, "g"), `{{${newVar}}}`);
+    onChange(newText);
+    setSwapPopover(null);
   };
 
   const Comp = Tag as any;
@@ -638,11 +953,9 @@ function EditableText({
         data-placeholder={placeholder}
         onFocus={() => {
           isFocused.current = true;
-          // Switch from styled HTML to plain text for clean editing
           if (ref.current) {
             const plain = ref.current.textContent ?? "";
             ref.current.textContent = plain;
-            // Place cursor at end
             const range = document.createRange();
             const sel = window.getSelection();
             if (ref.current.lastChild) {
@@ -657,20 +970,20 @@ function EditableText({
         }}
         onBlur={(e: React.FocusEvent<HTMLElement>) => {
           isFocused.current = false;
-          // Small delay so mousedown on dropdown fires before blur hides it
-          setTimeout(() => setAtDropdown(null), 130);
-          const text = e.currentTarget.textContent ?? "";
-          onChange(text);
+          setTimeout(() => setAutocomplete(null), 130);
+          onChange(e.currentTarget.textContent ?? "");
         }}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onMouseDown={(e: React.MouseEvent) => {
-          // Detect click on a variable chip BEFORE focus fires (chips are in blurred DOM)
-          if (!isFocused.current && onVarClick) {
+          // Chip click: show inline swap popover (unfocused DOM has styled spans)
+          if (!isFocused.current && availableVars.length > 0) {
             const target = e.target as Element;
-            const varSpan = target.closest('[data-var-name]') as HTMLElement | null;
+            const varSpan = target.closest("[data-var-name]") as HTMLElement | null;
             if (varSpan?.dataset.varName) {
-              onVarClick(varSpan.dataset.varName);
+              const rect = varSpan.getBoundingClientRect();
+              setSwapPopover({ varName: varSpan.dataset.varName, x: rect.left, y: rect.bottom });
+              e.preventDefault();
             }
           }
           e.stopPropagation();
@@ -678,13 +991,26 @@ function EditableText({
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         style={{ outline: "none", cursor: "text", ...style }}
       />
-      {atDropdown && availableVars.length > 0 && (
-        <VarDropdown
+      {autocomplete && availableVars.length > 0 && (
+        <VarListPortal
           vars={availableVars}
-          query={atDropdown.query}
-          x={atDropdown.x}
-          y={atDropdown.y}
+          query={autocomplete.query}
+          x={autocomplete.x}
+          y={autocomplete.y}
+          title={`Variables — type to filter`}
           onSelect={insertVar}
+          onClose={() => setAutocomplete(null)}
+        />
+      )}
+      {swapPopover && availableVars.length > 0 && (
+        <VarListPortal
+          vars={availableVars.filter(v => v !== swapPopover.varName)}
+          query=""
+          x={swapPopover.x}
+          y={swapPopover.y}
+          title={`Replace {{${swapPopover.varName}}} with…`}
+          onSelect={v => swapVar(swapPopover.varName, v)}
+          onClose={() => setSwapPopover(null)}
         />
       )}
     </>
@@ -765,13 +1091,11 @@ function BlockLiveView({
   isSelected,
   onChange,
   availableVars = [],
-  onVarClick,
 }: {
   block: EmailBlock;
   isSelected: boolean;
   onChange: (b: EmailBlock) => void;
   availableVars?: string[];
-  onVarClick?: (varName: string) => void;
 }) {
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const ff = block.fontFamily || "inherit";
@@ -786,7 +1110,6 @@ function BlockLiveView({
             tag="h1"
             placeholder="Header title…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ color: block.titleColor || "#ffffff", fontSize: 28, fontWeight: 700, margin: "0 0 8px", letterSpacing: "-0.5px", fontFamily: ff, display: "block" }}
           />
           <EditableText
@@ -795,7 +1118,6 @@ function BlockLiveView({
             tag="p"
             placeholder="Subtitle…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ color: "rgba(255,255,255,0.85)", fontSize: 16, margin: 0, fontFamily: ff, display: "block" }}
           />
         </div>
@@ -811,7 +1133,6 @@ function BlockLiveView({
             tag="p"
             placeholder="Hi {{recipient_name}},"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ fontSize: block.fontSize || 16, color: block.textColor || "#e5e7eb", margin: 0, fontFamily: ff, display: "block", textAlign: ta }}
           />
         </div>
@@ -828,7 +1149,6 @@ function BlockLiveView({
             tag="p"
             placeholder="Enter paragraph text…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta }}
           />
         </div>
@@ -857,7 +1177,6 @@ function BlockLiveView({
             tag="p"
             placeholder="QR caption…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ fontSize: 12, color: "#6b7280", margin: "8px 0 0", fontFamily: ff, display: "block" }}
           />
         </div>
@@ -891,7 +1210,6 @@ function BlockLiveView({
             tag="span"
             placeholder="Button label…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ display: "inline-block", background: block.btnColor || "#3ECF8E", color: "#ffffff", fontSize: 15, fontWeight: 600, padding: "13px 32px", borderRadius: 8, letterSpacing: "0.2px", fontFamily: ff }}
           />
         </div>
@@ -906,7 +1224,6 @@ function BlockLiveView({
             tag="p"
             placeholder="LinkedIn share message…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ fontSize: 14, color: block.textColor || "#9ca3af", margin: 0, fontFamily: ff, display: "block" }}
           />
         </div>
@@ -931,7 +1248,6 @@ function BlockLiveView({
             tag="p"
             placeholder="Footer text…"
             availableVars={availableVars}
-            onVarClick={onVarClick}
             style={{ fontSize: 12, color: block.textColor || "#6b7280", margin: 0, fontFamily: ff, display: "block" }}
           />
         </div>
@@ -940,6 +1256,34 @@ function BlockLiveView({
     case "markdown":
       return <MarkdownBlockView block={block} isSelected={isSelected} onChange={onChange} />;
 
+    case "two_column":
+      return (
+        <div style={{ padding: "20px 32px", background: block.bgColor || "transparent" }}>
+          <div style={{ display: "flex", gap: 0 }}>
+            <div style={{ flex: 1, borderRight: "1px solid #2d2d2d", paddingRight: 20 }}>
+              <EditableText
+                value={block.leftContent || ""}
+                onChange={v => u({ leftContent: v })}
+                tag="div"
+                placeholder="Left column — click to edit…"
+                availableVars={availableVars}
+                style={{ fontSize: 14, color: block.leftTextColor || "#d1d5db", fontFamily: ff, display: "block", lineHeight: 1.7 }}
+              />
+            </div>
+            <div style={{ flex: 1, paddingLeft: 20 }}>
+              <EditableText
+                value={block.rightContent || ""}
+                onChange={v => u({ rightContent: v })}
+                tag="div"
+                placeholder="Right column — click to edit…"
+                availableVars={availableVars}
+                style={{ fontSize: 14, color: block.rightTextColor || "#d1d5db", fontFamily: ff, display: "block", lineHeight: 1.7 }}
+              />
+            </div>
+          </div>
+        </div>
+      );
+
     default:
       return null;
   }
@@ -947,13 +1291,7 @@ function BlockLiveView({
 
 // ── StyleToolbar — floating style controls for selected block ─────────────────
 
-const FONT_OPTIONS = [
-  { value: "", label: "System" },
-  { value: "Georgia, 'Times New Roman', serif", label: "Georgia" },
-  { value: "Arial, Helvetica, sans-serif", label: "Arial" },
-  { value: "'Courier New', Courier, monospace", label: "Courier" },
-  { value: "'Trebuchet MS', sans-serif", label: "Trebuchet" },
-];
+const EMAIL_FONT_LIST = CERTIFICATE_FONTS.map(f => ({ value: f.value, label: f.name, category: f.category }));
 
 const ALIGN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "left",   label: "←" },
@@ -961,23 +1299,152 @@ const ALIGN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "right",  label: "→" },
 ];
 
+const QUICK_COLORS = ["#ffffff","#18181b","#3ECF8E","#3b82f6","#f59e0b","#ef4444","#8b5cf6","#6b7280","#e5e7eb","#d1d5db"];
+
 function ColorSwatch({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const safeValue = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff";
+
   return (
-    <label className="flex items-center gap-1.5 cursor-pointer group/swatch">
-      <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">{label}</span>
-      <div className="relative">
-        <div
+    <div className="relative" ref={ref}>
+      <label className="flex items-center gap-1.5 cursor-pointer group/swatch">
+        <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">{label}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
           className="w-6 h-6 rounded border border-border shadow-sm group-hover/swatch:ring-2 group-hover/swatch:ring-[#3ECF8E]/40 transition-all"
           style={{ background: value || "#ffffff" }}
         />
-        <input
-          type="color"
-          value={value || "#ffffff"}
-          onChange={e => onChange(e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-        />
-      </div>
-    </label>
+      </label>
+      {open && createPortal(
+        <div
+          className="fixed z-99999 bg-card border border-border rounded-xl shadow-2xl p-3 space-y-2"
+          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + 6 : 0, left: ref.current ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 228) : 0, width: 228 }}
+          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <HexColorPicker color={safeValue} onChange={onChange} style={{ width: "100%", height: 160 }} />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground shrink-0">Hex</span>
+            <input
+              type="text"
+              value={value}
+              onChange={e => { const v = e.target.value; if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v); }}
+              className="flex-1 text-[11px] border border-border rounded px-1.5 py-0.5 font-mono bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {QUICK_COLORS.map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onChange(c)}
+                className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
+                style={{ background: c }}
+                title={c}
+              />
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function FontPickerControl({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 50);
+    else setSearch("");
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? EMAIL_FONT_LIST.filter(f => f.label.toLowerCase().includes(q)) : EMAIL_FONT_LIST;
+  }, [search]);
+
+  const currentLabel = EMAIL_FONT_LIST.find(f => f.value === value)?.label ?? (value ? value.split(",")[0] : "System");
+
+  return (
+    <div className="relative" ref={ref}>
+      <label className="flex items-center gap-1.5">
+        <span className="text-[10px] text-muted-foreground font-medium">Font</span>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none hover:border-[#3ECF8E]/60 transition-colors min-w-22.5 text-left flex items-center justify-between gap-1"
+          style={{ fontFamily: value || "inherit" }}
+        >
+          <span className="truncate">{currentLabel}</span>
+          <ChevronDown className="w-2.5 h-2.5 shrink-0 text-muted-foreground" />
+        </button>
+      </label>
+      {open && createPortal(
+        <div
+          className="fixed z-99999 bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
+          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0, left: ref.current ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 200) : 0, width: 200, maxHeight: 280 }}
+          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div className="p-2 border-b border-border shrink-0">
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search fonts…"
+              className="w-full text-[11px] border border-border rounded px-2 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+            />
+          </div>
+          <div className="overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); }}
+              className={cn("w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors", !value ? "bg-[#3ECF8E]/10 text-[#3ECF8E]" : "text-foreground")}
+            >
+              System default
+            </button>
+            {filtered.map(f => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => { onChange(f.value); setOpen(false); }}
+                className={cn("w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors truncate", value === f.value ? "bg-[#3ECF8E]/10 text-[#3ECF8E]" : "text-foreground")}
+                style={{ fontFamily: f.value }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 
@@ -985,13 +1452,14 @@ function StyleToolbar({ block, onChange }: { block: EmailBlock; onChange: (b: Em
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
-  const showBg       = ["header", "text", "greeting", "footer", "qr_code", "markdown", "linkedin"].includes(type);
+  const showBg       = ["header", "text", "greeting", "footer", "qr_code", "markdown", "linkedin", "two_column"].includes(type);
   const showText     = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "markdown"].includes(type);
-  const showFont     = ["header", "text", "greeting", "footer", "linkedin", "cta_button"].includes(type);
+  const showFont     = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column"].includes(type);
   const showSize     = ["header", "text", "greeting", "cta_button"].includes(type);
   const showAlign    = ["text", "greeting", "header", "footer", "linkedin", "cta_button"].includes(type);
   const showBtn      = type === "cta_button";
   const showDetailBg = type === "details_box";
+  const showTwoCols  = type === "two_column";
 
   const defaultTextColor = (() => {
     if (type === "greeting") return "#e5e7eb";
@@ -1010,7 +1478,10 @@ function StyleToolbar({ block, onChange }: { block: EmailBlock; onChange: (b: Em
   })();
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-card border-t border-[#3ECF8E]/20 text-xs">
+    <div
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-card border-t border-[#3ECF8E]/20 text-xs"
+      onClick={e => e.stopPropagation()}
+    >
       {showBg && (
         <ColorSwatch
           label={type === "header" ? "Header BG" : "Background"}
@@ -1042,16 +1513,13 @@ function StyleToolbar({ block, onChange }: { block: EmailBlock; onChange: (b: Em
         </>
       )}
       {showFont && (
-        <label className="flex items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground font-medium">Font</span>
-          <select
-            value={block.fontFamily || ""}
-            onChange={e => u({ fontFamily: e.target.value })}
-            className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
-          >
-            {FONT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </label>
+        <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
+      )}
+      {showTwoCols && (
+        <>
+          <ColorSwatch label="Left text" value={block.leftTextColor || "#d1d5db"} onChange={v => u({ leftTextColor: v })} />
+          <ColorSwatch label="Right text" value={block.rightTextColor || "#d1d5db"} onChange={v => u({ rightTextColor: v })} />
+        </>
       )}
       {showSize && (
         <label className="flex items-center gap-1.5">
@@ -1149,7 +1617,120 @@ function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b
     );
   }
 
+  if (block.type === "two_column") {
+    return (
+      <div className="px-4 pb-4 pt-3 space-y-3 border-t border-[#3ECF8E]/10 bg-zinc-800/30">
+        <Field label="Left column (markdown supported)">
+          <textarea
+            value={block.leftContent ?? ""}
+            onChange={e => u({ leftContent: e.target.value })}
+            rows={4}
+            placeholder="Left column content…"
+            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 resize-y font-mono leading-relaxed"
+          />
+        </Field>
+        <Field label="Right column (markdown supported)">
+          <textarea
+            value={block.rightContent ?? ""}
+            onChange={e => u({ rightContent: e.target.value })}
+            rows={4}
+            placeholder="Right column content…"
+            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 resize-y font-mono leading-relaxed"
+          />
+        </Field>
+      </div>
+    );
+  }
+
   return null;
+}
+
+// ── Block properties panel (exported for right sidebar) ──────────────────────
+
+export function BlockPropertiesPanel({
+  block,
+  onChange,
+}: {
+  block: EmailBlock | null;
+  onChange: (b: EmailBlock) => void;
+}) {
+  if (!block) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center">
+        <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
+          <SlidersHorizontal className="w-4 h-4 text-muted-foreground/50" />
+        </div>
+        <p className="text-xs text-muted-foreground/60 leading-relaxed">
+          Select a block to edit its style and properties
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col min-h-0 overflow-y-auto">
+      <div className="px-3 py-2 border-b border-[#3ECF8E]/15 bg-[#3ECF8E]/5 shrink-0">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-[#3ECF8E]/70">
+          {BLOCK_LABELS[block.type]}
+        </p>
+      </div>
+      <StyleToolbar block={block} onChange={onChange} />
+      <BlockExtrasPanel block={block} onChange={onChange} />
+    </div>
+  );
+}
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+
+interface ContextMenuItem {
+  label: string;
+  icon: React.ReactNode;
+  action: () => void;
+  danger?: boolean;
+}
+
+function BlockContextMenu({
+  x, y, items, onClose,
+}: {
+  x: number; y: number;
+  items: ContextMenuItem[];
+  onClose: () => void;
+}) {
+  React.useEffect(() => {
+    const close = () => onClose();
+    document.addEventListener("click", close);
+    document.addEventListener("contextmenu", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("contextmenu", close);
+    };
+  }, [onClose]);
+
+  const vw = typeof window !== "undefined" ? window.innerWidth : 800;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 600;
+  const adjustedX = Math.min(x, vw - 180);
+  const adjustedY = Math.min(y, vh - items.length * 32 - 16);
+
+  return createPortal(
+    <div
+      style={{ position: "fixed", left: adjustedX, top: adjustedY, zIndex: 99999, minWidth: 168, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.3)", background: "#1c1c1e", border: "1px solid rgba(255,255,255,0.1)", padding: "4px 0" }}
+      onContextMenu={e => e.preventDefault()}
+    >
+      {items.map((item, i) => (
+        <button
+          key={i}
+          onMouseDown={e => { e.preventDefault(); item.action(); onClose(); }}
+          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 12px", fontSize: 12, textAlign: "left", background: "transparent", border: "none", cursor: "pointer", color: item.danger ? "#f87171" : "#e5e7eb" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = item.danger ? "rgba(248,113,113,0.1)" : "rgba(255,255,255,0.07)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+        >
+          <span style={{ opacity: 0.7 }}>{item.icon}</span>
+          {item.label}
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
 }
 
 // ── Sortable block card ───────────────────────────────────────────────────────
@@ -1160,34 +1741,50 @@ interface SortableBlockCardProps {
   onSelect: () => void;
   onRemove: () => void;
   onDuplicate: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onChange: (b: EmailBlock) => void;
   availableVars?: string[];
-  onVarClick?: (varName: string) => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate, onChange, availableVars = [], onVarClick }: SortableBlockCardProps) {
+function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate, onMoveUp, onMoveDown, onChange, availableVars = [], isFirst, isLast }: SortableBlockCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const contextItems: ContextMenuItem[] = [
+    ...(!isFirst ? [{ label: "Move up", icon: <ArrowUp className="w-3 h-3" />, action: onMoveUp }] : []),
+    ...(!isLast ? [{ label: "Move down", icon: <ArrowDown className="w-3 h-3" />, action: onMoveDown }] : []),
+    { label: "Duplicate", icon: <Copy className="w-3 h-3" />, action: onDuplicate },
+    { label: "Delete block", icon: <Trash2 className="w-3 h-3" />, action: onRemove, danger: true },
+  ];
 
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
       className={cn("relative group mx-2 mt-7 mb-2", isDragging && "z-50")}
+      onContextMenu={e => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({ x: e.clientX, y: e.clientY });
+      }}
     >
-      {/* Left drag handle — outside card, always visible, vertically centred on card */}
+      {/* Left drag handle — wider for easier grab */}
       <div
         {...attributes}
         {...listeners}
-        className="absolute left-0 top-0 bottom-0 w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-30 opacity-20 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
+        className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing z-30 opacity-30 group-hover:opacity-70 hover:opacity-100! transition-opacity"
         onClick={e => e.stopPropagation()}
         title="Drag to reorder"
       >
         <GripVertical className="w-4 h-4 text-zinc-400" />
       </div>
 
-      {/* Block type label — above the card, offset right of the grip handle */}
+      {/* Block type label */}
       <div className={cn(
-        "absolute -top-5 left-6 z-20 flex items-center gap-1 px-2.5 py-[3px] text-[8px] font-bold uppercase tracking-widest pointer-events-none select-none",
+        "absolute -top-5 left-9 z-20 flex items-center gap-1 px-2.5 py-0.75 text-[8px] font-bold uppercase tracking-widest pointer-events-none select-none",
         "rounded-t-md border-t border-l border-r",
         isSelected
           ? "bg-zinc-900 text-[#3ECF8E] border-[#3ECF8E]/50"
@@ -1196,68 +1793,59 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
         {BLOCK_LABELS[block.type]}
       </div>
 
-      {/* Card with dashed border — offset right to leave room for grip */}
+      {/* Card */}
       <div className={cn(
-        "ml-6 relative rounded-lg border border-dashed transition-all overflow-hidden",
+        "ml-9 relative rounded-lg border border-dashed transition-all overflow-hidden",
         isSelected
           ? "border-[#3ECF8E]/70 shadow-md shadow-[#3ECF8E]/10 ring-1 ring-[#3ECF8E]/20"
-          : "border-zinc-700/50 hover:border-[#3ECF8E]/50",
+          : "border-zinc-700/50 hover:border-[#3ECF8E]/40",
       )}>
         {/* Left selection accent */}
         <div className={cn(
-          "absolute left-0 top-0 bottom-0 w-[3px] z-10 transition-all duration-150",
-          isSelected ? "bg-[#3ECF8E]" : "bg-transparent group-hover:bg-[#3ECF8E]/40"
+          "absolute left-0 top-0 bottom-0 w-0.75 z-10 transition-all duration-150",
+          isSelected ? "bg-[#3ECF8E]" : "bg-transparent group-hover:bg-[#3ECF8E]/30"
         )} />
 
-        {/* Floating controls — duplicate + delete (grip is now on the left side) */}
+        {/* Floating controls */}
         <div className={cn(
           "absolute top-2 right-2 z-20 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-zinc-900/95 border border-zinc-700 shadow-md transition-opacity pointer-events-auto",
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}>
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onDuplicate(); }}
-            className="p-0.5 text-zinc-500 hover:text-[#3ECF8E] transition-colors"
-            title="Duplicate block"
-          >
+          <button type="button" onClick={e => { e.stopPropagation(); onDuplicate(); }} className="p-0.5 text-zinc-500 hover:text-[#3ECF8E] transition-colors" title="Duplicate (⌘D)">
             <Copy className="w-3.5 h-3.5" />
           </button>
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onRemove(); }}
-            className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors"
-            title="Remove block"
-          >
+          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors" title="Delete (⌫)">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Rendered block — click anywhere to select */}
-        <div
-          onClick={onSelect}
-          className="transition-all duration-150"
-        >
+        {/* Selection overlay — intercepts single click to just select, not enter edit mode */}
+        {!isSelected && (
+          <div
+            className="absolute inset-0 z-10 cursor-pointer"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onSelect(); }}
+          />
+        )}
+
+        {/* Rendered block */}
+        <div className="transition-all duration-150">
           <BlockLiveView
             block={block}
             isSelected={isSelected}
             onChange={onChange}
             availableVars={availableVars}
-            onVarClick={(varName) => {
-              // Ensure the block is selected so the dock can insert/replace into it
-              if (!isSelected) onSelect();
-              onVarClick?.(varName);
-            }}
           />
         </div>
-
-        {/* Style toolbar + extra controls when selected */}
-        {isSelected && (
-          <>
-            <StyleToolbar block={block} onChange={onChange} />
-            <BlockExtrasPanel block={block} onChange={onChange} />
-          </>
-        )}
       </div>
+
+      {contextMenu && (
+        <BlockContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextItems}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1270,13 +1858,14 @@ export interface EmailBlockBuilderProps {
   subject?: string;
   senderName?: string;
   availableVars?: string[];
+  /** "cert" = cert delivery editor, "broadcast" = broadcast email editor */
+  context?: "cert" | "broadcast";
   onChange: (blocks: EmailBlock[]) => void;
   onSelect: (id: string | null) => void;
   onStartFresh: () => void;
   onSubjectChange?: (val: string) => void;
   onSenderNameChange?: (val: string) => void;
   onAddBlock?: (type: BlockType) => void;
-  onVarClick?: (varName: string) => void;
 }
 
 export function EmailBlockBuilder({
@@ -1285,16 +1874,17 @@ export function EmailBlockBuilder({
   subject = "",
   senderName = "Your Organization",
   availableVars = [],
+  context = "cert",
   onChange,
   onSelect,
   onStartFresh,
   onSubjectChange,
   onSenderNameChange,
   onAddBlock,
-  onVarClick,
 }: EmailBlockBuilderProps) {
+  const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -1313,6 +1903,14 @@ export function EmailBlockBuilder({
     onSelect(dupe.id);
   };
 
+  const moveBlock = (id: string, direction: "up" | "down") => {
+    const idx = blocks.findIndex(b => b.id === id);
+    if (idx === -1) return;
+    const newIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= blocks.length) return;
+    onChange(arrayMove(blocks, idx, newIdx));
+  };
+
   const insertBlockAfter = (afterId: string) => {
     const b = defaultBlock("text");
     const idx = blocks.findIndex(blk => blk.id === afterId);
@@ -1325,7 +1923,12 @@ export function EmailBlockBuilder({
     onChange(blocks.map(b => b.id === updated.id ? updated : b));
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = blocks.findIndex(b => b.id === active.id);
@@ -1333,13 +1936,15 @@ export function EmailBlockBuilder({
     onChange(arrayMove(blocks, oldIndex, newIndex));
   };
 
+  const activeBlock = activeId ? blocks.find(b => b.id === activeId) : null;
+
   if (blocks.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-24 px-8 text-center">
-        <LayoutTemplate className="w-12 h-12 text-[#3ECF8E]/20" />
-        <p className="font-medium text-sm text-muted-foreground">No blocks yet</p>
-        <p className="text-xs text-muted-foreground/60">Add blocks from the left panel or drag them in</p>
-      </div>
+      <StarterTemplateGallery
+        context={context}
+        onSelect={onChange}
+        onDismiss={onStartFresh}
+      />
     );
   }
 
@@ -1353,10 +1958,9 @@ export function EmailBlockBuilder({
         if (type) onAddBlock?.(type);
       }}
     >
-      {/* ── Email client chrome ─────────────────────────────────────────────── */}
       <div className="max-w-[600px] mx-auto rounded-2xl overflow-hidden" style={{ boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)" }}>
 
-        {/* Dark email client header with editable sender + subject */}
+        {/* Email client header chrome */}
         <div className="bg-zinc-800 border-b border-zinc-700 px-5 py-4">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-full bg-[#3ECF8E] flex items-center justify-center text-white text-sm font-bold shrink-0 select-none">
@@ -1373,7 +1977,6 @@ export function EmailBlockBuilder({
                 />
                 <span className="text-xs text-zinc-500 shrink-0">via Authentix</span>
               </div>
-              {/* Editable subject line */}
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="text-xs text-zinc-500 shrink-0 font-medium">Subject:</span>
                 <input
@@ -1388,18 +1991,23 @@ export function EmailBlockBuilder({
             <div className="text-xs text-zinc-500 select-none shrink-0">just now</div>
           </div>
           <p className="text-[10px] text-zinc-500 mt-2.5 pl-14 leading-relaxed">
-            Click sender name or subject to edit · Blocks below can be dragged to reorder
+            Single-click to select · double-click to edit text · drag grip to reorder · right-click for options
           </p>
         </div>
 
         {/* Email body */}
         <div style={{ background: "#18181b" }}>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
             <SortableContext items={blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
               <div>
                 {blocks.map((block, idx) => (
                   <React.Fragment key={block.id}>
-                    {/* Insert zone between blocks */}
                     {idx > 0 && (
                       <div className="relative h-3 group/insert mx-8">
                         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover/insert:opacity-100 transition-opacity">
@@ -1419,17 +2027,29 @@ export function EmailBlockBuilder({
                     <SortableBlockCard
                       block={block}
                       isSelected={block.id === selectedId}
+                      isFirst={idx === 0}
+                      isLast={idx === blocks.length - 1}
                       onSelect={() => onSelect(block.id === selectedId ? null : block.id)}
                       onRemove={() => removeBlock(block.id)}
                       onDuplicate={() => duplicateBlock(block.id)}
+                      onMoveUp={() => moveBlock(block.id, "up")}
+                      onMoveDown={() => moveBlock(block.id, "down")}
                       onChange={updateBlock}
                       availableVars={availableVars}
-                      onVarClick={onVarClick}
                     />
                   </React.Fragment>
                 ))}
               </div>
             </SortableContext>
+
+            {/* Drag ghost overlay — full-width semi-transparent clone */}
+            <DragOverlay dropAnimation={null}>
+              {activeBlock && (
+                <div style={{ opacity: 0.5, pointerEvents: "none", background: "#18181b", borderRadius: 8, border: "1px dashed #3ECF8E", overflow: "hidden", maxWidth: 560, margin: "0 auto" }}>
+                  <BlockLiveView block={activeBlock} isSelected={false} onChange={() => {}} />
+                </div>
+              )}
+            </DragOverlay>
           </DndContext>
         </div>
       </div>

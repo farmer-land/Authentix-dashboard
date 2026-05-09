@@ -3,8 +3,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { JSONContent } from "@tiptap/core";
 import {
-  ChevronLeft, ChevronRight, Loader2, Eye, EyeOff, Monitor, Smartphone,
-  SlidersHorizontal, X, Layers,
+  ChevronLeft, Loader2, Eye, EyeOff, Monitor, Smartphone,
+  SlidersHorizontal, X, Layers, Undo2, Redo2, Keyboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 import {
   EmailBlockBuilder,
+  BlockPropertiesPanel,
+  PaletteItemCard,
   blocksToHtml,
   extractBlocksFromHtml,
   defaultBlock,
@@ -47,14 +49,35 @@ interface EmailEditorProps {
   initialHtml?: string;
   /** CSV column names surfaced as insertable variables */
   availableVars?: string[];
+  /** Actual CSV rows for preview simulation (column → value) */
+  csvRows?: Record<string, string>[];
   onDone: (result: EmailEditorResult) => void;
   onBack: () => void;
 }
 
+// ── Keyboard shortcuts shown in the popover ──────────────────────────────────
+
+const KEYBOARD_SHORTCUTS = [
+  { keys: ["⌘", "Z"],        desc: "Undo" },
+  { keys: ["⌘", "⇧", "Z"],  desc: "Redo" },
+  { keys: ["Del"],            desc: "Delete block" },
+  { keys: ["⌘", "D"],        desc: "Duplicate block" },
+  { keys: ["Esc"],            desc: "Deselect block" },
+];
+
 // ── Live preview (mirrors template editor) ──────────────────────────────────────
 
-function LivePreview({ html, previewMode }: { html: string; previewMode: "desktop" | "mobile" }) {
-  const rendered = applyPreviewMocks(html);
+function applyRowData(html: string, row: Record<string, string>): string {
+  return html.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (match, key: string) => {
+    const k = key.trim();
+    const val = row[k];
+    if (val === undefined) return match;
+    return `<span style="background:rgba(255,255,255,0.92);color:#1a1a1a;border:1px solid rgba(0,0,0,0.18);border-radius:5px;padding:1px 7px;font-size:inherit;line-height:inherit;font-weight:600;" title="Row data for {{${k}}}">${val}</span>`;
+  });
+}
+
+function LivePreview({ html, previewMode, rowData }: { html: string; previewMode: "desktop" | "mobile"; rowData?: Record<string, string> }) {
+  const rendered = rowData ? applyRowData(html, rowData) : applyPreviewMocks(html);
   const maxW = previewMode === "mobile" ? 375 : 600;
   const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;padding:16px;background:#18181b;font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}.ew{width:100%;max-width:${maxW}px;background:#18181b;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}</style></head><body><div class="ew">${rendered}</div></body></html>`;
   return (
@@ -100,6 +123,7 @@ export function EmailEditor({
   replyTo: initialReplyTo,
   initialHtml,
   availableVars = [],
+  csvRows = [],
   onDone,
   onBack,
 }: EmailEditorProps) {
@@ -112,27 +136,39 @@ export function EmailEditor({
 
   // Block canvas state
   const [blocks, setBlocks] = useState<EmailBlock[]>(() => {
-    const saved = initialHtml ? extractBlocksFromHtml(initialHtml) : null;
-    return saved ?? STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
+    if (initialHtml) {
+      const saved = extractBlocksFromHtml(initialHtml);
+      if (saved) return saved;
+    }
+    // No saved content — show template gallery (empty blocks triggers gallery in EmailBlockBuilder)
+    return [];
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Undo/redo history (stored in refs — mutations don't trigger re-renders)
+  const historyRef = useRef<{ past: EmailBlock[][], future: EmailBlock[][] }>({ past: [], future: [] });
+  const blocksRef = useRef<EmailBlock[]>(blocks);
+  const selectedIdRef = useRef<string | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Keep selectedIdRef in sync so keyboard handler doesn't go stale
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
   // Panel / UI state
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [leftPanelTab, setLeftPanelTab] = useState<"blocks" | "settings">("blocks");
   const [panelWidth, setPanelWidth] = useState(0);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
-  const [selectedVar, setSelectedVar] = useState<string | null>(null);
-  const [dockMinimized, setDockMinimized] = useState(false);
+  const [rightPanelVisible, setRightPanelVisible] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
 
   // Resize-drag refs
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
   const dragStartW = useRef(0);
-
-  // Clear selected var when block selection changes
-  useEffect(() => { setSelectedVar(null); }, [selectedId]);
 
   // Panel resize mouse handlers
   useEffect(() => {
@@ -152,56 +188,120 @@ export function EmailEditor({
 
   const bodyHtml = blocksToHtml(blocks);
 
-  // ── Block handlers ──────────────────────────────────────────────────────────
+  // ── Undo / Redo ─────────────────────────────────────────────────────────────
+
+  const undo = useCallback(() => {
+    const { past, future } = historyRef.current;
+    if (past.length === 0) return;
+    const prev = past[past.length - 1]!;
+    historyRef.current.past = past.slice(0, -1);
+    historyRef.current.future = [blocksRef.current, ...future];
+    blocksRef.current = prev;
+    setBlocks(prev);
+    setCanUndo(past.length > 1);
+    setCanRedo(true);
+  }, []);
+
+  const redo = useCallback(() => {
+    const { past, future } = historyRef.current;
+    if (future.length === 0) return;
+    const next = future[0]!;
+    historyRef.current.past = [...past, blocksRef.current];
+    historyRef.current.future = future.slice(1);
+    blocksRef.current = next;
+    setBlocks(next);
+    setCanUndo(true);
+    setCanRedo(future.length > 1);
+  }, []);
+
+  // ── Block handlers ───────────────────────────────────────────────────────────
 
   const handleBlocksChange = useCallback((newBlocks: EmailBlock[]) => {
+    const past = historyRef.current.past;
+    historyRef.current.past = [...(past.length >= 60 ? past.slice(-59) : past), blocksRef.current];
+    historyRef.current.future = [];
+    blocksRef.current = newBlocks;
     setBlocks(newBlocks);
+    setCanUndo(true);
+    setCanRedo(false);
   }, []);
 
   const addBlock = useCallback((type: BlockType) => {
     const b = defaultBlock(type);
-    setBlocks(prev => [...prev, b]);
+    const newBlocks = [...blocksRef.current, b];
+    historyRef.current.past = [...historyRef.current.past, blocksRef.current];
+    historyRef.current.future = [];
+    blocksRef.current = newBlocks;
+    setBlocks(newBlocks);
     setSelectedId(b.id);
+    setCanUndo(true);
+    setCanRedo(false);
     requestAnimationFrame(() => {
       document.getElementById("broadcast-canvas")?.scrollTo({ top: 99999, behavior: "smooth" });
     });
   }, []);
 
-  const handleStartFresh = () => {
-    setBlocks(STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) })));
+  const handleStartFresh = useCallback(() => {
+    const fresh = STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
+    historyRef.current.past = [...historyRef.current.past, blocksRef.current];
+    historyRef.current.future = [];
+    blocksRef.current = fresh;
+    setBlocks(fresh);
     setSelectedId(null);
-  };
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
 
-  // ── Variable insertion ──────────────────────────────────────────────────────
+  // ── Keyboard-shortcut actions (stable — use refs only) ───────────────────────
 
-  const handleInsertVar = useCallback((varName: string) => {
-    if (!selectedId) {
-      toast.info("Click a text block in the canvas first, then click a variable to insert it", { duration: 2500 });
-      return;
-    }
-    setBlocks(prev => {
-      const block = prev.find(b => b.id === selectedId);
-      if (!block) return prev;
-      const clean = varName.replace(/^\{\{|\}\}$/g, "").trim();
-      const token = `{{${clean}}}`;
-      const replaceOrAppend = (text: string) => {
-        if (selectedVar) {
-          const old = `{{${selectedVar}}}`;
-          if (text.includes(old)) return text.replace(old, token);
-        }
-        return (text ?? "") + " " + token;
-      };
-      let patch: Partial<EmailBlock> | null = null;
-      if (["text", "greeting", "markdown", "footer", "linkedin", "cta_button"].includes(block.type)) {
-        patch = { content: replaceOrAppend(block.content ?? "") };
-      } else if (block.type === "header") {
-        patch = { title: replaceOrAppend(block.title ?? "") };
-      }
-      if (!patch) return prev;
-      return prev.map(b => b.id === selectedId ? { ...b, ...patch! } : b);
-    });
-    setSelectedVar(null);
-  }, [selectedId, selectedVar]);
+  const deleteSelected = useCallback(() => {
+    const curId = selectedIdRef.current;
+    if (!curId) return;
+    const curBlocks = blocksRef.current;
+    const idx = curBlocks.findIndex(b => b.id === curId);
+    const newBlocks = curBlocks.filter(b => b.id !== curId);
+    historyRef.current.past = [...historyRef.current.past, curBlocks];
+    historyRef.current.future = [];
+    blocksRef.current = newBlocks;
+    setBlocks(newBlocks);
+    setSelectedId(newBlocks[Math.min(idx, newBlocks.length - 1)]?.id ?? null);
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
+
+  const duplicateSelected = useCallback(() => {
+    const curId = selectedIdRef.current;
+    if (!curId) return;
+    const curBlocks = blocksRef.current;
+    const block = curBlocks.find(b => b.id === curId);
+    if (!block) return;
+    const dup = { ...block, id: nanoid(8) };
+    const newBlocks = curBlocks.flatMap(b => b.id === curId ? [b, dup] : [b]);
+    historyRef.current.past = [...historyRef.current.past, curBlocks];
+    historyRef.current.future = [];
+    blocksRef.current = newBlocks;
+    setBlocks(newBlocks);
+    setSelectedId(dup.id);
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && !e.shiftKey && e.key === "z") { e.preventDefault(); undo(); return; }
+      if ((meta && e.shiftKey && e.key === "z") || (meta && e.key === "y")) { e.preventDefault(); redo(); return; }
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      const isEditing = tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.getAttribute("contenteditable") === "true";
+      if (isEditing) return;
+      if (!selectedIdRef.current) return;
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelected(); return; }
+      if (meta && e.key === "d") { e.preventDefault(); duplicateSelected(); return; }
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo, deleteSelected, duplicateSelected]);
 
   // ── Done ────────────────────────────────────────────────────────────────────
 
@@ -225,8 +325,12 @@ export function EmailEditor({
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  useEffect(() => {
+    if (window.innerWidth < 768) setLeftPanelVisible(false);
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background overflow-hidden">
+    <div className="fixed inset-0 z-70 flex flex-col bg-background overflow-hidden">
 
       {/* ── Header ── */}
       <header className="h-11 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
@@ -336,26 +440,15 @@ export function EmailEditor({
                     <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Blocks</p>
                     <div className="grid grid-cols-2 gap-1.5">
                       {EMAIL_BLOCKS_PALETTE.map(item => (
-                        <button
+                        <PaletteItemCard
                           key={item.type}
-                          type="button"
+                          item={item}
                           onClick={() => addBlock(item.type)}
-                          draggable
                           onDragStart={e => e.dataTransfer.setData("block-type", item.type)}
-                          title={item.desc}
-                          className="flex items-center gap-2 p-2.5 rounded-lg border border-transparent bg-muted/30 hover:bg-muted/60 hover:border-border cursor-grab active:cursor-grabbing transition-all text-left group"
-                        >
-                          <span className="shrink-0 text-muted-foreground group-hover:text-[#3ECF8E] transition-colors">
-                            {item.icon}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium truncate">{item.label}</p>
-                            <p className="text-[9px] text-muted-foreground truncate leading-tight">{item.desc}</p>
-                          </div>
-                        </button>
+                        />
                       ))}
                     </div>
-                    <p className="text-[9px] text-muted-foreground/50 mt-2.5">Click to add · drag into canvas</p>
+                    <p className="text-[9px] text-muted-foreground/50 mt-2.5">Click to add · hover to preview · drag into canvas</p>
                   </div>
                 )}
 
@@ -402,7 +495,9 @@ export function EmailEditor({
                             </button>
                           ))}
                         </div>
-                        <p className="text-[9px] text-muted-foreground/50">Click to copy · select a block and use the dock below to insert</p>
+                        <p className="text-[9px] text-muted-foreground/50">
+                          Click to copy · or type <code className="bg-muted px-0.5 rounded">{"{{" }</code> in any text block to insert
+                        </p>
                       </div>
                     )}
                   </div>
@@ -421,15 +516,34 @@ export function EmailEditor({
               selectedId={selectedId}
               subject={subject}
               availableVars={availableVars}
+              context="broadcast"
               onChange={handleBlocksChange}
               onSelect={setSelectedId}
               onStartFresh={handleStartFresh}
               onSubjectChange={setSubject}
               onAddBlock={addBlock}
-              onVarClick={v => setSelectedVar(v)}
             />
           </div>
         </div>
+
+        {/* ── PROPERTIES panel (fixed right column) ── */}
+        {rightPanelVisible && (
+          <div className="w-60 shrink-0 border-l border-border/50 flex flex-col bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 shrink-0 bg-muted/40 select-none">
+              <p className="text-xs font-semibold text-foreground">Properties</p>
+              <button
+                onClick={() => setRightPanelVisible(false)}
+                className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <BlockPropertiesPanel
+              block={blocks.find(b => b.id === selectedId) ?? null}
+              onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
+            />
+          </div>
+        )}
 
         {/* ── RIGHT: Preview panel (optional) ── */}
 
@@ -472,48 +586,63 @@ export function EmailEditor({
               </div>
 
               {/* Preview header */}
-              <div className="flex items-center justify-between px-4 pt-4 pb-2.5 shrink-0 border-b border-zinc-800 bg-zinc-900/80">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Preview</p>
-                  <span className="text-[10px] text-zinc-700">{panelWidth}px</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex items-center gap-0.5 border border-zinc-700 rounded-md p-0.5 bg-zinc-800/50">
+              <div className="flex flex-col gap-2 px-4 pt-4 pb-2.5 shrink-0 border-b border-zinc-800 bg-zinc-900/80">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Preview</p>
+                    <span className="text-[10px] text-zinc-700">{panelWidth}px</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-0.5 border border-zinc-700 rounded-md p-0.5 bg-zinc-800/50">
+                      <button
+                        onClick={() => { setPreviewMode("desktop"); setPanelWidth(w => Math.max(w, 660)); }}
+                        className={cn(
+                          "p-1 rounded transition-colors",
+                          previewMode === "desktop" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500",
+                        )}
+                        title="Desktop"
+                      >
+                        <Monitor className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => { setPreviewMode("mobile"); setPanelWidth(w => Math.min(w, 440)); }}
+                        className={cn(
+                          "p-1 rounded transition-colors",
+                          previewMode === "mobile" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500",
+                        )}
+                        title="Mobile"
+                      >
+                        <Smartphone className="w-3 h-3" />
+                      </button>
+                    </div>
                     <button
-                      onClick={() => { setPreviewMode("desktop"); setPanelWidth(w => Math.max(w, 660)); }}
-                      className={cn(
-                        "p-1 rounded transition-colors",
-                        previewMode === "desktop" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500",
-                      )}
-                      title="Desktop"
+                      onClick={() => setPanelWidth(0)}
+                      className="p-1 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                      title="Hide preview"
                     >
-                      <Monitor className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => { setPreviewMode("mobile"); setPanelWidth(w => Math.min(w, 440)); }}
-                      className={cn(
-                        "p-1 rounded transition-colors",
-                        previewMode === "mobile" ? "bg-zinc-700 text-white shadow-sm" : "hover:bg-zinc-700/50 text-zinc-500",
-                      )}
-                      title="Mobile"
-                    >
-                      <Smartphone className="w-3 h-3" />
+                      <EyeOff className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <button
-                    onClick={() => setPanelWidth(0)}
-                    className="p-1 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-                    title="Hide preview"
-                  >
-                    <EyeOff className="w-3.5 h-3.5" />
-                  </button>
                 </div>
+                {csvRows.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-zinc-500 shrink-0">Preview as</span>
+                    <select
+                      value={selectedRowIdx ?? ""}
+                      onChange={e => setSelectedRowIdx(e.target.value === "" ? null : Number(e.target.value))}
+                      className="flex-1 text-[10px] bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+                    >
+                      <option value="">Sample data</option>
+                      {csvRows.map((_, i) => <option key={i} value={i}>Row {i + 1}{csvRows[i]?.recipient_name ? ` — ${csvRows[i].recipient_name}` : ""}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Preview content */}
               <div className="flex-1 overflow-y-auto p-3 pb-24">
                 {bodyHtml.trim() ? (
-                  <LivePreview html={bodyHtml} previewMode={previewMode} />
+                  <LivePreview html={bodyHtml} previewMode={previewMode} rowData={selectedRowIdx !== null ? csvRows[selectedRowIdx] : undefined} />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                     <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
@@ -527,9 +656,10 @@ export function EmailEditor({
               {/* Preview footer */}
               <div className="border-t border-zinc-800 px-3 py-2 shrink-0 bg-zinc-900">
                 <p className="text-[9px] text-zinc-600">
-                  Sample values shown.{" "}
-                  <span className="text-amber-500/80">Amber</span>
-                  {" "}= unknown variables.
+                  {selectedRowIdx !== null
+                    ? `Showing row ${selectedRowIdx + 1} from your CSV.`
+                    : <>Sample values shown. <span className="text-amber-500/80">Amber</span> = unknown variables.</>
+                  }
                 </p>
               </div>
             </>
@@ -539,82 +669,91 @@ export function EmailEditor({
 
       {/* ── BOTTOM DOCK ── */}
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-        <div className="pointer-events-auto inline-flex flex-col items-stretch bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="pointer-events-auto inline-flex items-center gap-1 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 rounded-2xl shadow-2xl px-3 py-2">
 
-          {/* Replace indicator */}
-          {selectedVar && (
-            <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b border-[#3ECF8E]/20 bg-[#3ECF8E]/5">
-              <span className="text-[10px] text-[#3ECF8E]/90">
-                Replacing{" "}
-                <code className="font-mono bg-[#3ECF8E]/15 px-1 rounded">{`{{${selectedVar}}}`}</code>
-                {" "}— click a field to replace, or{" "}
-                <button onClick={() => setSelectedVar(null)} className="underline hover:text-[#3ECF8E] transition-colors">cancel</button>
-              </span>
-            </div>
-          )}
+          {/* Undo */}
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (⌘Z)"
+            className="p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
 
-          <div className="flex items-center gap-2 px-3 py-2">
+          {/* Redo */}
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (⌘⇧Z)"
+            className="p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
 
-            {!dockMinimized && (
-              <>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">Fields</p>
+          <div className="w-px h-4 bg-zinc-700/60 mx-0.5" />
 
-                {availableVars.length > 0 ? (
-                  <div
-                    className="flex items-center gap-1.5 overflow-x-auto"
-                    style={{ maxWidth: 420, scrollbarWidth: "none" }}
-                  >
-                    {availableVars.map(v => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => handleInsertVar(v)}
-                        title={
-                          selectedVar
-                            ? `Replace {{${selectedVar}}} with {{${v}}}`
-                            : `Insert {{${v}}} into selected block`
-                        }
-                        className={cn(
-                          "flex items-center px-2.5 py-1.5 rounded-lg border transition-all shrink-0 font-mono text-[11px] font-medium",
-                          selectedVar
-                            ? "border-[#3ECF8E]/60 bg-[#3ECF8E]/15 text-[#3ECF8E] hover:bg-[#3ECF8E]/25"
-                            : "border-zinc-700/50 bg-zinc-800/40 hover:bg-[#3ECF8E]/10 hover:border-[#3ECF8E]/40 text-zinc-400 hover:text-zinc-200",
-                        )}
-                      >
-                        {`{{${v}}}`}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="text-[10px] text-zinc-600 italic">
-                    Upload a CSV in the Recipients step to add personalised variables
-                  </span>
-                )}
-
-                <div className="w-px h-5 bg-zinc-700/60 shrink-0" />
-              </>
+          {/* Properties toggle */}
+          <button
+            onClick={() => setRightPanelVisible(v => !v)}
+            title={rightPanelVisible ? "Hide properties" : "Show block properties"}
+            className={cn(
+              "p-1.5 rounded-lg transition-colors",
+              rightPanelVisible
+                ? "text-[#3ECF8E] bg-[#3ECF8E]/15"
+                : "text-zinc-400 hover:text-[#3ECF8E] hover:bg-zinc-800",
             )}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
 
-            {/* Minimize toggle */}
+          {/* Preview toggle */}
+          <button
+            onClick={() => setPanelWidth(w => w === 0 ? (previewMode === "mobile" ? 440 : 660) : 0)}
+            title={panelWidth > 0 ? "Hide preview" : "Show preview"}
+            className={cn(
+              "p-1.5 rounded-lg transition-colors",
+              panelWidth > 0
+                ? "text-[#3ECF8E] bg-[#3ECF8E]/15"
+                : "text-zinc-400 hover:text-[#3ECF8E] hover:bg-zinc-800",
+            )}
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-4 bg-zinc-700/60 mx-0.5" />
+
+          {/* Keyboard shortcuts popover */}
+          <div className="relative">
             <button
-              onClick={() => setDockMinimized(d => !d)}
-              className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors shrink-0"
-              title={dockMinimized ? "Show fields" : "Collapse fields"}
+              onClick={() => setShortcutsOpen(v => !v)}
+              title="Keyboard shortcuts"
+              className={cn(
+                "p-1.5 rounded-lg transition-colors",
+                shortcutsOpen
+                  ? "text-zinc-200 bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800",
+              )}
             >
-              {dockMinimized
-                ? <ChevronRight className="w-3.5 h-3.5" />
-                : <ChevronLeft className="w-3.5 h-3.5" />}
+              <Keyboard className="w-3.5 h-3.5" />
             </button>
 
-            {/* Preview toggle */}
-            {panelWidth === 0 && (
-              <button
-                onClick={() => setPanelWidth(360)}
-                className="p-1 rounded-lg text-zinc-500 hover:text-[#3ECF8E] hover:bg-zinc-800 transition-colors shrink-0"
-                title="Show preview"
-              >
-                <Eye className="w-3.5 h-3.5" />
-              </button>
+            {shortcutsOpen && (
+              <div className="absolute bottom-9 right-0 bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-2xl p-3 min-w-44 z-50">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Keyboard Shortcuts</p>
+                <div className="space-y-1.5">
+                  {KEYBOARD_SHORTCUTS.map(s => (
+                    <div key={s.desc} className="flex items-center justify-between gap-4">
+                      <span className="text-[11px] text-zinc-400">{s.desc}</span>
+                      <div className="flex items-center gap-0.5">
+                        {s.keys.map(k => (
+                          <kbd key={k} className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono leading-none">{k}</kbd>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>

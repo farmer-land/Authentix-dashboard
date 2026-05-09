@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,7 @@ import {
   Save, Loader2, AlertCircle, Monitor, Smartphone,
   SendHorizonal, Send, FlaskConical,
   SlidersHorizontal, X, Layers,
-  User, BookOpen, Calendar, Type, QrCode, Image as ImageIcon,
-  ChevronLeft, ChevronRight, Eye, EyeOff,
+  Eye, EyeOff, Undo2, Redo2, Keyboard,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
@@ -19,11 +18,14 @@ import { api } from "@/lib/api/client";
 import { useOrg } from "@/lib/org";
 import {
   EmailBlockBuilder,
+  BlockPropertiesPanel,
+  PaletteItemCard,
   blocksToHtml,
   extractBlocksFromHtml,
   defaultBlock,
   STARTER_BLOCKS,
-  EMAIL_BLOCKS_PALETTE,
+  PALETTE,
+  CERT_BLOCKS_PALETTE,
   applyPreviewMocks,
   type EmailBlock,
   type BlockType,
@@ -32,16 +34,16 @@ import { nanoid } from "nanoid";
 import { cn } from "@/lib/utils";
 import { useEmailEditorState } from "./state/useEmailEditorState";
 
-// ── Cert field dock items ─────────────────────────────────────────────────────
+// ── Keyboard shortcut legend ──────────────────────────────────────────────────
 
-const CERT_DOCK_FIELDS = [
-  { key: "name",        varName: "recipient_name", label: "Recipient Name", Icon: User,      isBlock: false, blockType: null },
-  { key: "course",      varName: "course_name",    label: "Course Name",    Icon: BookOpen,  isBlock: false, blockType: null },
-  { key: "start_date",  varName: "start_date",     label: "Start Date",     Icon: Calendar,  isBlock: false, blockType: null },
-  { key: "end_date",    varName: "end_date",       label: "End Date",       Icon: Calendar,  isBlock: false, blockType: null },
-  { key: "custom_text", varName: "custom_text",    label: "Custom Text",    Icon: Type,      isBlock: false, blockType: null },
-  { key: "qr_code",     varName: null,             label: "QR Code",        Icon: QrCode,    isBlock: true,  blockType: "qr_code" as BlockType },
-  { key: "image",       varName: null,             label: "Cert Image",     Icon: ImageIcon, isBlock: true,  blockType: "cert_image" as BlockType },
+const KEYBOARD_SHORTCUTS = [
+  { key: "⌘Z", label: "Undo" },
+  { key: "⌘⇧Z", label: "Redo" },
+  { key: "⌫", label: "Delete selected block" },
+  { key: "⌘D", label: "Duplicate block" },
+  { key: "↑ / ↓", label: "Move block up / down" },
+  { key: "Esc", label: "Deselect" },
+  { key: "@  or  {{", label: "Insert variable" },
 ] as const;
 
 // ── Live preview ──────────────────────────────────────────────────────────────
@@ -97,16 +99,31 @@ export default function EmailTemplateEditorPage() {
     name, subject, body, isDefault, isActive, variables, senderName,
     blocks, selectedId,
     previewMode, panelWidth, leftPanelVisible, leftPanelTab,
-    dockMinimized, selectedVar, testEmail, testSending, autoSaveStatus,
+    testEmail, testSending, autoSaveStatus,
     setName, setSubject, setBody, setIsDefault, setIsActive, setVariables, setSenderName,
     setBlocks, setSelectedId,
     setSaving, setError, setAutoSaveStatus,
     setPreviewMode, setPanelWidth, setLeftPanelVisible, setLeftPanelTab,
-    setDockMinimized, setSelectedVar, setTestEmail, setTestSending,
+    setTestEmail, setTestSending,
     onLoadSuccess,
   } = useEmailEditorState();
 
-  // Refs (DOM/timing — not part of state machine)
+  // Right panel for block properties
+  const [rightPanelVisible, setRightPanelVisible] = useState(true);
+
+  // Undo/redo history (stored in refs to avoid re-renders on push)
+  const historyRef = useRef<{ past: EmailBlock[][]; future: EmailBlock[][] }>({ past: [], future: [] });
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const updateHistoryFlags = () => {
+    setCanUndo(historyRef.current.past.length > 0);
+    setCanRedo(historyRef.current.future.length > 0);
+  };
+
+  // Refs (DOM/timing)
   const builderInitRef = useRef(false);
   const isDraggingPanel = useRef(false);
   const dragStartX = useRef(0);
@@ -114,11 +131,13 @@ export default function EmailTemplateEditorPage() {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
 
-  // Clear selectedVar and reset dock when selected block changes
+  // Hide left panel on small screens; hide right panel too
   useEffect(() => {
-    setSelectedVar(null);
-    if (!selectedId) setDockMinimized(false);
-  }, [selectedId]);
+    if (window.innerWidth < 768) {
+      setLeftPanelVisible(false);
+      setRightPanelVisible(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadTemplate();
@@ -188,11 +207,8 @@ export default function EmailTemplateEditorPage() {
         if (savedBlocks) {
           setBlocks(savedBlocks);
         } else {
-          // No saved blocks: initialise with starters (new template or legacy HTML-only)
-          const starters = STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
-          setBlocks(starters);
-          // Don't overwrite savedHtml — if the template has legacy HTML, keep it in body
-          // until the user saves (which will then embed the JSON comment)
+          // No saved blocks: show the template gallery (empty = gallery renders in EmailBlockBuilder)
+          setBlocks([]);
         }
       }
 
@@ -233,16 +249,55 @@ export default function EmailTemplateEditorPage() {
   // ── Block handlers ──────────────────────────────────────────
 
   const handleBlocksChange = useCallback((newBlocks: EmailBlock[]) => {
+    // Push to undo history
+    const h = historyRef.current;
+    h.past.push([...blocksRef.current]);
+    if (h.past.length > 60) h.past.shift();
+    h.future = [];
+    updateHistoryFlags();
+
     setBlocks(newBlocks);
     const html = blocksToHtml(newBlocks);
     setBody(html);
     syncVariables(html, subject);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, syncVariables]);
+
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    if (h.past.length === 0) return;
+    const prev = h.past.pop()!;
+    h.future.unshift([...blocksRef.current]);
+    updateHistoryFlags();
+    const html = blocksToHtml(prev);
+    setBlocks(prev);
+    setBody(html);
+    syncVariables(html, subject);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, syncVariables]);
+
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    if (h.future.length === 0) return;
+    const next = h.future.shift()!;
+    h.past.push([...blocksRef.current]);
+    updateHistoryFlags();
+    const html = blocksToHtml(next);
+    setBlocks(next);
+    setBody(html);
+    syncVariables(html, subject);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subject, syncVariables]);
 
   const addBlock = useCallback((type: BlockType) => {
     const b = defaultBlock(type);
     setBlocks(prev => {
       const newBlocks = [...prev, b];
+      const h = historyRef.current;
+      h.past.push([...blocksRef.current]);
+      if (h.past.length > 60) h.past.shift();
+      h.future = [];
+      updateHistoryFlags();
       const html = blocksToHtml(newBlocks);
       setBody(html);
       syncVariables(html, subject);
@@ -258,6 +313,10 @@ export default function EmailTemplateEditorPage() {
   const handleStartFresh = () => {
     const starters = STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
     const html = blocksToHtml(starters);
+    const h = historyRef.current;
+    h.past.push([...blocksRef.current]);
+    h.future = [];
+    updateHistoryFlags();
     setBlocks(starters);
     setBody(html);
     syncVariables(html, subject);
@@ -271,61 +330,62 @@ export default function EmailTemplateEditorPage() {
     syncVariables(body, val);
   };
 
-  // ── Var chip clicked in a block ─────────────────────────────
-  const handleVarClick = useCallback((varName: string) => {
-    setSelectedVar(varName);
-  }, []);
+  // ── Keyboard shortcuts ──────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
-  // ── Insert / replace variable into selected block ───────────
-  const handleInsertVarToSelected = useCallback((varName: string) => {
-    if (!selectedId) return;
-    setBlocks(prev => {
-      const block = prev.find(b => b.id === selectedId);
-      if (!block) return prev;
+      const mod = e.metaKey || e.ctrlKey;
 
-      const clean = varName.replace(/^\{\{|\}\}$/g, "").trim();
-      const token = `{{${clean}}}`;
-
-      // Replace existing selected var, or append to end
-      const replaceOrAppend = (text: string): string => {
-        if (selectedVar) {
-          const oldToken = `{{${selectedVar}}}`;
-          if (text.includes(oldToken)) return text.replace(oldToken, token);
+      if (mod && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if (mod && (e.key === "Z" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); redo(); return; }
+      if (mod && e.key === "d" && selectedId) {
+        e.preventDefault();
+        // Trigger duplicate via blocks change
+        const block = blocksRef.current.find(b => b.id === selectedId);
+        if (block) {
+          const dupe = { ...block, id: nanoid(8) };
+          const idx = blocksRef.current.findIndex(b => b.id === selectedId);
+          const next = [...blocksRef.current.slice(0, idx + 1), dupe, ...blocksRef.current.slice(idx + 1)];
+          handleBlocksChange(next);
+          setSelectedId(dupe.id);
         }
-        return (text ?? "") + " " + token;
-      };
-
-      let patch: Partial<EmailBlock> | null = null;
-      if (["text", "greeting", "markdown", "footer", "linkedin", "cta_button"].includes(block.type)) {
-        patch = { content: replaceOrAppend(block.content ?? "") };
-      } else if (block.type === "header") {
-        patch = { title: replaceOrAppend(block.title ?? "") };
-      }
-      if (!patch) return prev;
-
-      const newBlocks = prev.map(b => b.id === selectedId ? { ...b, ...patch! } : b);
-      const html = blocksToHtml(newBlocks);
-      setBody(html);
-      syncVariables(html, subject);
-      return newBlocks;
-    });
-    setSelectedVar(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, selectedVar, subject, syncVariables]);
-
-  // ── Dock field click ─────────────────────────────────────────
-  const handleDockFieldClick = useCallback((field: typeof CERT_DOCK_FIELDS[number]) => {
-    if (field.isBlock && field.blockType) {
-      addBlock(field.blockType);
-      setSelectedVar(null);
-    } else if (field.varName) {
-      if (!selectedId) {
-        toast.info("Click a text block in the canvas first, then click a field to insert it", { duration: 2500 });
         return;
       }
-      handleInsertVarToSelected(field.varName);
-    }
-  }, [addBlock, handleInsertVarToSelected, selectedId]);
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        e.preventDefault();
+        const next = blocksRef.current.filter(b => b.id !== selectedId);
+        handleBlocksChange(next);
+        setSelectedId(null);
+        return;
+      }
+      if (e.key === "Escape" && selectedId) { setSelectedId(null); return; }
+      if (e.key === "ArrowUp" && selectedId) {
+        e.preventDefault();
+        const idx = blocksRef.current.findIndex(b => b.id === selectedId);
+        if (idx > 0) {
+          const next = [...blocksRef.current];
+          [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
+          handleBlocksChange(next);
+        }
+        return;
+      }
+      if (e.key === "ArrowDown" && selectedId) {
+        e.preventDefault();
+        const idx = blocksRef.current.findIndex(b => b.id === selectedId);
+        if (idx < blocksRef.current.length - 1) {
+          const next = [...blocksRef.current];
+          [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
+          handleBlocksChange(next);
+        }
+        return;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, undo, redo, handleBlocksChange]);
 
   // ── Test send ────────────────────────────────────────────────
   const handleTestSend = async () => {
@@ -486,30 +546,34 @@ export default function EmailTemplateEditorPage() {
               <div className="flex-1 overflow-y-auto min-h-0">
 
                 {leftPanelTab === "blocks" && (
-                  <div className="p-3 pb-4">
-                    <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Blocks</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {EMAIL_BLOCKS_PALETTE.map(item => (
-                        <button
-                          key={item.type}
-                          type="button"
-                          onClick={() => addBlock(item.type)}
-                          draggable
-                          onDragStart={e => e.dataTransfer.setData("block-type", item.type)}
-                          title={item.desc}
-                          className="flex items-center gap-2 p-2.5 rounded-lg border border-transparent bg-muted/30 hover:bg-muted/60 hover:border-border cursor-grab active:cursor-grabbing transition-all text-left group"
-                        >
-                          <span className="shrink-0 text-muted-foreground group-hover:text-[#3ECF8E] transition-colors">
-                            {item.icon}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium truncate">{item.label}</p>
-                            <p className="text-[9px] text-muted-foreground truncate leading-tight">{item.desc}</p>
-                          </div>
-                        </button>
-                      ))}
+                  <div className="p-3 pb-4 space-y-3">
+                    <div>
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Email Blocks</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {PALETTE.filter(item => !CERT_BLOCKS_PALETTE.some(c => c.type === item.type)).map(item => (
+                          <PaletteItemCard
+                            key={item.type}
+                            item={item}
+                            onClick={() => addBlock(item.type)}
+                            onDragStart={e => e.dataTransfer.setData("block-type", item.type)}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <p className="text-[9px] text-muted-foreground/50 mt-2.5">Click to add · drag into canvas</p>
+                    <div>
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Certificate Blocks</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {CERT_BLOCKS_PALETTE.map(item => (
+                          <PaletteItemCard
+                            key={item.type}
+                            item={item}
+                            onClick={() => addBlock(item.type)}
+                            onDragStart={e => e.dataTransfer.setData("block-type", item.type)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground/50">Click to add · hover to preview · drag into canvas</p>
                   </div>
                 )}
 
@@ -561,7 +625,7 @@ export default function EmailTemplateEditorPage() {
             </div>
           )}
 
-          {/* Canvas scroll area — panel floats over the canvas so the email stays centred */}
+          {/* Canvas scroll area */}
           <div
             id="block-canvas"
             className="absolute inset-0 overflow-y-auto pt-3 pb-24"
@@ -572,16 +636,41 @@ export default function EmailTemplateEditorPage() {
               subject={subject}
               senderName={senderName}
               availableVars={allVars}
+              context="cert"
               onChange={handleBlocksChange}
               onSelect={setSelectedId}
               onStartFresh={handleStartFresh}
               onSubjectChange={handleSubjectChange}
               onSenderNameChange={setSenderName}
               onAddBlock={addBlock}
-              onVarClick={handleVarClick}
             />
           </div>
         </div>
+
+        {/* ── RIGHT PANEL: Block properties ────────────────────────── */}
+        {rightPanelVisible && (
+          <div className="w-64 shrink-0 border-l border-border/50 flex flex-col bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-muted/30 shrink-0">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Properties</p>
+              <button onClick={() => setRightPanelVisible(false)} className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <BlockPropertiesPanel
+              block={blocks.find(b => b.id === selectedId) ?? null}
+              onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
+            />
+          </div>
+        )}
+        {!rightPanelVisible && (
+          <button
+            className="absolute z-40 right-4 bottom-20 flex flex-col items-center gap-1 bg-card border border-border/50 rounded-xl shadow-md px-2 py-2.5 hover:bg-muted/50 transition-colors select-none"
+            onClick={() => setRightPanelVisible(true)}
+            title="Show properties panel"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
 
         {/* ── RIGHT: Preview (collapsible, resizable) ───────────────── */}
         {/* Collapsed preview — floating pill button */}
@@ -688,144 +777,98 @@ export default function EmailTemplateEditorPage() {
         </div>
       </div>
 
-      {/* ── BOTTOM DOCK — truly floating, fixed to viewport bottom ──── */}
+      {/* ── BOTTOM DOCK ──────────────────────────────────────────────── */}
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-        <div className="pointer-events-auto inline-flex flex-col items-stretch bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="pointer-events-auto inline-flex items-center gap-2 px-3 py-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 rounded-2xl shadow-2xl">
 
-          {/* Replace indicator — only when selectedVar */}
-          {selectedVar && (
-            <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b border-[#3ECF8E]/20 bg-[#3ECF8E]/5">
-              <span className="text-[10px] text-[#3ECF8E]/90">
-                Replacing{" "}
-                <code className="font-mono bg-[#3ECF8E]/15 px-1 rounded">{`{{${selectedVar}}}`}</code>
-                {" "}— click a field below to replace, or{" "}
-                <button onClick={() => setSelectedVar(null)} className="underline hover:text-[#3ECF8E] transition-colors">cancel</button>
-              </span>
-            </div>
+          {/* Undo / Redo */}
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+            title="Undo (⌘Z)"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+            title="Redo (⌘⇧Z)"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Preview toggle */}
+          {panelWidth === 0 && (
+            <button
+              onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-[#3ECF8E] hover:bg-zinc-800 transition-colors shrink-0"
+              title="Show preview"
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
           )}
 
-          <div className="flex items-center gap-2 px-3 py-2">
+          <div className="w-px h-5 bg-zinc-700/60 shrink-0" />
 
-            {/* Fields — always visible and always clickable */}
-            {!dockMinimized && (
-              <>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">Fields</p>
-                <div
-                  className="flex items-center gap-1.5 overflow-x-auto"
-                  style={{ maxWidth: 420, scrollbarWidth: "none" }}
-                >
-                  {CERT_DOCK_FIELDS.map(f => (
-                    <button
-                      key={f.key}
-                      type="button"
-                      onClick={() => handleDockFieldClick(f)}
-                      title={
-                        f.isBlock
-                          ? `Add ${f.label} block`
-                          : selectedVar
-                            ? `Replace {{${selectedVar}}} with {{${f.varName}}}`
-                            : `Insert {{${f.varName}}} into selected block`
-                      }
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all shrink-0",
-                        !f.isBlock && selectedVar
-                          ? "border-[#3ECF8E]/60 bg-[#3ECF8E]/15 text-[#3ECF8E] hover:bg-[#3ECF8E]/25"
-                          : "border-zinc-700/50 bg-zinc-800/40 hover:bg-[#3ECF8E]/10 hover:border-[#3ECF8E]/40 text-zinc-400 hover:text-zinc-200"
-                      )}
-                    >
-                      <f.Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="text-[11px] font-medium whitespace-nowrap">{f.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="w-px h-5 bg-zinc-700/60 shrink-0" />
-              </>
-            )}
-
-            {/* Minimize/expand toggle */}
-            <button
-              onClick={() => setDockMinimized(d => !d)}
-              className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors shrink-0"
-              title={dockMinimized ? "Show fields" : "Collapse fields"}
-            >
-              {dockMinimized
-                ? <ChevronRight className="w-3.5 h-3.5" />
-                : <ChevronLeft className="w-3.5 h-3.5" />
-              }
-            </button>
-
-            {/* Preview toggle — shows when preview panel is hidden */}
-            {panelWidth === 0 && (
-              <button
-                onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
-                className="p-1 rounded-lg text-zinc-500 hover:text-[#3ECF8E] hover:bg-zinc-800 transition-colors shrink-0"
-                title="Show preview"
-              >
-                <Eye className="w-3.5 h-3.5" />
+          {/* Keyboard shortcuts popover */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors shrink-0" title="Keyboard shortcuts">
+                <Keyboard className="w-3.5 h-3.5" />
               </button>
-            )}
+            </PopoverTrigger>
+            <PopoverContent align="center" side="top" className="w-56 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Shortcuts</p>
+              <div className="space-y-1">
+                {KEYBOARD_SHORTCUTS.map(s => (
+                  <div key={s.key} className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">{s.label}</span>
+                    <kbd className="font-mono text-[10px] bg-muted border border-border rounded px-1.5 py-0.5 text-foreground shrink-0">{s.key}</kbd>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
 
-            {/* Error */}
-            {error && (
-              <p className="text-xs text-destructive flex items-center gap-1 shrink-0 max-w-[140px] truncate">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                {error}
-              </p>
-            )}
+          {/* Error */}
+          {error && (
+            <p className="text-xs text-destructive flex items-center gap-1 shrink-0 max-w-35 truncate">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              {error}
+            </p>
+          )}
 
-            {/* Test send */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 h-8 text-xs border-zinc-700 text-zinc-400 hover:text-foreground hover:border-zinc-600 shrink-0"
-                >
-                  <FlaskConical className="w-3.5 h-3.5" />
-                  Test
+          {/* Test send */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs border-zinc-700 text-zinc-400 hover:text-foreground hover:border-zinc-600 shrink-0">
+                <FlaskConical className="w-3.5 h-3.5" />
+                Test
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="center" side="top" className="w-72 p-3 space-y-2">
+              <p className="text-xs font-semibold">Send a test email</p>
+              <p className="text-[11px] text-muted-foreground">Variables use sample data — a banner in the email will flag this.</p>
+              <div className="flex gap-2">
+                <Input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="your@email.com" className="h-8 text-sm flex-1" onKeyDown={e => { if (e.key === "Enter") handleTestSend(); }} />
+                <Button size="sm" onClick={handleTestSend} disabled={testSending || !testEmail.trim()} className="gap-1.5 h-8 bg-[#3ECF8E] hover:bg-[#34b87a] text-white shrink-0">
+                  {testSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  Send
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent align="center" side="top" className="w-72 p-3 space-y-2">
-                <p className="text-xs font-semibold">Send a test email</p>
-                <p className="text-[11px] text-muted-foreground">Preview this template in your inbox using sample data.</p>
-                <div className="flex gap-2">
-                  <Input
-                    type="email"
-                    value={testEmail}
-                    onChange={e => setTestEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="h-8 text-sm flex-1"
-                    onKeyDown={e => { if (e.key === "Enter") handleTestSend(); }}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleTestSend}
-                    disabled={testSending || !testEmail.trim()}
-                    className="gap-1.5 h-8 bg-[#3ECF8E] hover:bg-[#34b87a] text-white shrink-0"
-                  >
-                    {testSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    Send
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
+              </div>
+            </PopoverContent>
+          </Popover>
 
-            {/* Save */}
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving}
-              className="gap-1.5 h-8 text-xs bg-[#3ECF8E] hover:bg-[#34b87a] text-white shrink-0"
-            >
-              {saving
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : returnToSend
-                  ? <SendHorizonal className="w-3.5 h-3.5" />
-                  : <Save className="w-3.5 h-3.5" />
-              }
-              {returnToSend ? "Save & Send" : "Save"}
-            </Button>
-          </div>
+          {/* Save */}
+          <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5 h-8 text-xs bg-[#3ECF8E] hover:bg-[#34b87a] text-white shrink-0">
+            {saving
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : returnToSend ? <SendHorizonal className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />
+            }
+            {returnToSend ? "Save & Send" : "Save"}
+          </Button>
         </div>
       </div>
     </div>
