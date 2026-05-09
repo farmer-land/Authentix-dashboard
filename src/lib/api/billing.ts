@@ -74,4 +74,8 @@ export const billingApi = {
     });
     return response.data!;
   },
+
+  resendNotification: async (invoiceId: string): Promise<void> => {
+    await apiRequest(`/billing/invoices/${invoiceId}/resend-notification`, { method: "POST" });
+  },
 };

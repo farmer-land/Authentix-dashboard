@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useInvoiceList } from '@/lib/billing-ui/hooks/use-invoice-list';
 import { paiseToRupees } from '@/lib/billing-ui/types';
 import { getPaymentStatusInfo } from '@/lib/billing-ui/utils/invoice-helpers';
+import { billingApi } from '@/lib/api/billing';
 import type { InvoiceEntity } from '@/lib/billing-ui/types';
 
 interface InvoiceListProps {
@@ -25,6 +27,36 @@ const COLOR_CLASSES: Record<string, string> = {
   red:    'bg-red-100 text-red-800',
   blue:   'bg-blue-100 text-blue-800',
 };
+
+function ResendButton({ invoiceId }: { invoiceId: string }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+
+  async function handleResend() {
+    setState('sending');
+    try {
+      await billingApi.resendNotification(invoiceId);
+      setState('sent');
+      setTimeout(() => setState('idle'), 4000);
+    } catch {
+      setState('error');
+      setTimeout(() => setState('idle'), 3000);
+    }
+  }
+
+  const labels = { idle: 'Resend', sending: 'Sending…', sent: 'Sent!', error: 'Failed' };
+  const colors = {
+    idle: 'text-muted-foreground hover:text-foreground',
+    sending: 'text-muted-foreground opacity-60 pointer-events-none',
+    sent: 'text-emerald-600',
+    error: 'text-red-500',
+  };
+
+  return (
+    <button onClick={handleResend} className={`text-xs ${colors[state]} transition-colors`}>
+      {labels[state]}
+    </button>
+  );
+}
 
 export function InvoiceList({ organizationId }: InvoiceListProps) {
   const { invoices, loading, error } = useInvoiceList(organizationId);
@@ -94,7 +126,7 @@ export function InvoiceList({ organizationId }: InvoiceListProps) {
                   )}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <Link
                       href={`billing/invoices/${inv.id}`}
                       className="text-sm text-primary hover:underline"
@@ -110,6 +142,9 @@ export function InvoiceList({ organizationId }: InvoiceListProps) {
                       >
                         Pay Now
                       </a>
+                    )}
+                    {inv.payable && inv.razorpay_payment_link_id && (
+                      <ResendButton invoiceId={inv.id} />
                     )}
                   </div>
                 </td>
