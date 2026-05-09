@@ -26,8 +26,6 @@ export interface InvoiceEntity {
   pdf_file_id: string | null;
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
-  razorpay_invoice_id: string | null;
-  razorpay_invoice_url: string | null;
   razorpay_payment_link_id: string | null;
   razorpay_payment_link_url: string | null;
   created_at: string;
