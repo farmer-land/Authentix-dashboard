@@ -116,7 +116,7 @@ export const PALETTE = [...EMAIL_BLOCKS_PALETTE, ...CERT_BLOCKS_PALETTE];
 export function defaultBlock(type: BlockType): EmailBlock {
   const id = nanoid(8);
   switch (type) {
-    case "header":      return { id, type, bgColor: "#3ECF8E", titleColor: "#ffffff", title: "Congratulations, {{recipient_name}}!", subtitle: "You've completed {{course_name}}" };
+    case "header":      return { id, type, bgColor: "#1e293b", titleColor: "#ffffff", title: "Congratulations, {{recipient_name}}!", subtitle: "You've completed {{course_name}}" };
     case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb" };
     case "text":        return { id, type, content: "We are delighted to inform you that you have successfully completed this program. Your certificate is ready below.", textColor: "#d1d5db" };
     case "markdown":    return { id, type, content: "## Congratulations, **{{recipient_name}}**!\n\nYou have successfully completed **{{course_name}}**.\n\n- 📅 Issued on {{issue_date}}\n- 🔗 [View & verify your certificate]({{verification_url}})\n\n> Your achievement has been recorded and is ready to share.", textColor: "#d1d5db" };
@@ -1104,23 +1104,29 @@ function BlockLiveView({
   switch (block.type) {
     case "header":
       return (
-        <div style={{ background: `linear-gradient(135deg, ${block.bgColor || "#3ECF8E"} 0%, ${darken(block.bgColor || "#3ECF8E")} 100%)`, padding: "44px 32px", textAlign: "center" }}>
-          <EditableText
-            value={block.title || ""}
-            onChange={v => u({ title: v })}
-            tag="h1"
-            placeholder="Header title…"
-            availableVars={availableVars}
-            style={{ color: block.titleColor || "#ffffff", fontSize: 28, fontWeight: 700, margin: "0 0 8px", letterSpacing: "-0.5px", fontFamily: ff, display: "block" }}
-          />
-          <EditableText
-            value={block.subtitle || ""}
-            onChange={v => u({ subtitle: v })}
-            tag="p"
-            placeholder="Subtitle…"
-            availableVars={availableVars}
-            style={{ color: "rgba(255,255,255,0.85)", fontSize: 16, margin: 0, fontFamily: ff, display: "block" }}
-          />
+        <div style={{ position: "relative", background: block.bgColor || "#1e293b", padding: "44px 32px", textAlign: "center", overflow: "hidden" }}>
+          {/* Depth overlay — works on any base color */}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0.35) 100%)", pointerEvents: "none" }} />
+          {/* Brand accent line at top */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "#3ECF8E", pointerEvents: "none" }} />
+          <div style={{ position: "relative" }}>
+            <EditableText
+              value={block.title || ""}
+              onChange={v => u({ title: v })}
+              tag="h1"
+              placeholder="Header title…"
+              availableVars={availableVars}
+              style={{ color: block.titleColor || "#ffffff", fontSize: 28, fontWeight: 700, margin: "0 0 8px", letterSpacing: "-0.5px", fontFamily: ff, display: "block" }}
+            />
+            <EditableText
+              value={block.subtitle || ""}
+              onChange={v => u({ subtitle: v })}
+              tag="p"
+              placeholder="Subtitle…"
+              availableVars={availableVars}
+              style={{ color: block.titleColor ? `${block.titleColor}cc` : "rgba(255,255,255,0.8)", fontSize: 16, margin: 0, fontFamily: ff, display: "block" }}
+            />
+          </div>
         </div>
       );
 
@@ -1191,7 +1197,14 @@ function BlockLiveView({
             {rows.map((r, i) => (
               <div key={i} style={{ minWidth: 110 }}>
                 <p style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>{r.label}</p>
-                <p style={{ fontSize: 15, fontWeight: 600, color: block.detailTextColor || "#3ECF8E", margin: 0 }}>{r.value}</p>
+                <EditableText
+                  value={r.value}
+                  onChange={v => { const upd = [...rows]; upd[i] = { ...upd[i]!, value: v }; u({ detailRows: upd }); }}
+                  tag="span"
+                  placeholder="{{variable}}"
+                  availableVars={availableVars}
+                  style={{ fontSize: 15, fontWeight: 600, color: block.detailTextColor || "#3ECF8E", display: "block", fontFamily: ff }}
+                />
               </div>
             ))}
           </div>

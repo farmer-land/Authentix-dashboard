@@ -640,7 +640,7 @@ export default function EmailTemplateEditorPage() {
                           <button
                             key={v}
                             type="button"
-                            onClick={() => insertSubjectVar(v)}
+                            onMouseDown={e => { e.preventDefault(); insertSubjectVar(v); }}
                             className="font-mono text-[10px] font-medium px-1.5 py-0.5 rounded border border-[#3ECF8E]/30 bg-[#3ECF8E]/10 text-[#3ECF8E] hover:bg-[#3ECF8E]/20 transition-colors"
                             title={`Insert {{${v}}}`}
                           >
@@ -729,7 +729,10 @@ export default function EmailTemplateEditorPage() {
           </div>
 
           {/* Zoom controls — bottom-left of canvas, above bottom dock */}
-          <div className="absolute bottom-24 left-4 z-50 flex items-center gap-0.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg p-1 backdrop-blur-sm shadow-lg select-none">
+          <div
+            className="absolute bottom-24 z-50 flex items-center gap-0.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg p-1 backdrop-blur-sm shadow-lg select-none transition-[left] duration-200"
+            style={{ left: leftPanelVisible ? 284 : 16 }}
+          >
             <button
               onClick={() => setZoom(z => +Math.max(0.25, z - 0.1).toFixed(2))}
               className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light"
