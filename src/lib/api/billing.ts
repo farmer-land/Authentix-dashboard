@@ -78,4 +78,59 @@ export const billingApi = {
   resendNotification: async (invoiceId: string): Promise<void> => {
     await apiRequest(`/billing/invoices/${invoiceId}/resend-notification`, { method: "POST" });
   },
+
+  listPaymentMethods: async (): Promise<PaymentMethod[]> => {
+    const response = await apiRequest<{ methods: PaymentMethod[] }>("/billing/payment-methods");
+    return (response.data as any)?.methods ?? [];
+  },
+
+  deletePaymentMethod: async (id: string): Promise<void> => {
+    await apiRequest(`/billing/payment-methods/${id}`, { method: "DELETE" });
+  },
+
+  saveUpi: async (upiVpa: string): Promise<PaymentMethod> => {
+    const response = await apiRequest<{ method: PaymentMethod }>("/billing/payment-methods/save-upi", {
+      method: "POST",
+      body: JSON.stringify({ upi_vpa: upiVpa }),
+    });
+    return response.data!.method;
+  },
+
+  setupCard: async (): Promise<{
+    razorpay_order_id: string;
+    razorpay_key_id: string;
+    amount_paise: number;
+    currency: string;
+  }> => {
+    const response = await apiRequest<{
+      razorpay_order_id: string;
+      razorpay_key_id: string;
+      amount_paise: number;
+      currency: string;
+    }>("/billing/payment-methods/setup-card", { method: "POST" });
+    return response.data!;
+  },
+
+  savePaymentMethod: async (params: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+    method_type: string;
+  }): Promise<PaymentMethod> => {
+    const response = await apiRequest<{ method: PaymentMethod }>("/billing/payment-methods", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    return response.data!.method;
+  },
 };
+
+export interface PaymentMethod {
+  id: string;
+  method_type: "card" | "upi" | string;
+  display_name: string;
+  is_default: boolean;
+  upi_vpa?: string | null;
+  card_last4?: string | null;
+  card_network?: string | null;
+}

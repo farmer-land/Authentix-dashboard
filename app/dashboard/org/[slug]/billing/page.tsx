@@ -5,6 +5,7 @@ import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { TrialBanner } from './components/trial-banner';
 import { UsageCard } from './components/usage-card';
 import { InvoiceList } from './components/invoice-list';
+import { PaymentMethodsCard } from './components/payment-methods-card';
 
 export default function BillingPage() {
   const { organization } = useOrganization();
@@ -39,7 +40,7 @@ export default function BillingPage() {
   const isLocked   = org_billing.billing_status === 'locked';
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
@@ -79,6 +80,9 @@ export default function BillingPage() {
         </div>
       )}
 
+      {/* Payment methods */}
+      {org && <PaymentMethodsCard organizationId={org.id} />}
+
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
@@ -94,7 +98,11 @@ export default function BillingPage() {
           value={isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit
             ? '₹0'
             : formatINR(current_usage.estimated_total)}
-          sub={isTrialing ? 'Covered by free trial' : `Incl. ${current_usage.gst_rate}% GST`}
+          sub={
+            isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit
+              ? 'Covered by free trial'
+              : `Incl. ${current_usage.gst_rate}% GST`
+          }
           accent={!isTrialing && current_usage.estimated_total > 0}
         />
         <StatCard
