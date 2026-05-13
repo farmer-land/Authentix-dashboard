@@ -34,10 +34,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Type, AlignLeft, Image as ImageIcon, QrCode, MousePointerClick,
+  Type, AlignLeft, AlignCenter, AlignRight, Image as ImageIcon, QrCode, MousePointerClick,
   TableProperties, Minus, ArrowUpDown, LayoutTemplate, Plus, Trash2,
-  GripVertical, AlertCircle, RefreshCw, Copy, SlidersHorizontal,
-  ArrowUp, ArrowDown, ChevronDown,
+  GripVertical, GripHorizontal, AlertCircle, RefreshCw, Copy, SlidersHorizontal,
+  ArrowUp, ArrowDown, ChevronDown, ChevronRight, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
@@ -77,7 +77,9 @@ export interface EmailBlock {
   btnLabel?: string;
   btnUrl?: string;
   btnColor?: string;
+  btnRadius?: number;
   height?: number;
+  qrUrl?: string;
   // two_column
   leftContent?: string;
   rightContent?: string;
@@ -1312,75 +1314,214 @@ function BlockLiveView({
   }
 }
 
-// ── StyleToolbar — floating style controls for selected block ─────────────────
+// ── Block properties panel helpers ───────────────────────────────────────────
 
 const EMAIL_FONT_LIST = CERTIFICATE_FONTS.map(f => ({ value: f.value, label: f.name, category: f.category }));
 
-const ALIGN_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "left",   label: "←" },
-  { value: "center", label: "↔" },
-  { value: "right",  label: "→" },
+const ALIGN_OPTIONS = [
+  { value: "left",   icon: <AlignLeft  className="w-3 h-3" /> },
+  { value: "center", icon: <AlignCenter className="w-3 h-3" /> },
+  { value: "right",  icon: <AlignRight className="w-3 h-3" /> },
 ];
+
+const FONT_SIZE_PRESETS = [10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48];
 
 const QUICK_COLORS = ["#ffffff","#18181b","#3ECF8E","#3b82f6","#f59e0b","#ef4444","#8b5cf6","#6b7280","#e5e7eb","#d1d5db"];
 
-function ColorSwatch({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+// ── Collapsible section accordion ────────────────────────────────────────────
+
+function Section({ label, children, defaultOpen = true }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-t border-border/30">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left group"
+      >
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none group-hover:text-muted-foreground/90 transition-colors">
+          {label}
+        </p>
+        <ChevronRight className={cn("w-3 h-3 text-muted-foreground/30 transition-transform duration-150", open && "rotate-90")} />
+      </button>
+      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+    </div>
+  );
+}
+
+// ── Draggable floating colour picker ─────────────────────────────────────────
+
+function FloatingColorPicker({ color, label, initialPos, onClose, onChange }: {
+  color: string;
+  label: string;
+  initialPos: { x: number; y: number };
+  onClose: () => void;
+  onChange: (c: string) => void;
+}) {
+  const [pos, setPos] = useState(initialPos);
+  const dragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragOrigin.current) return;
+      setPos({ x: dragOrigin.current.px + (e.clientX - dragOrigin.current.mx), y: dragOrigin.current.py + (e.clientY - dragOrigin.current.my) });
+    };
+    const onUp = () => { dragOrigin.current = null; };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#ffffff";
+
+  return (
+    <div
+      className="fixed z-[9999] bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden select-none"
+      style={{ left: pos.x, top: pos.y, width: 232 }}
+    >
+      <div
+        className="flex items-center justify-between px-3 py-2 border-b border-border/30 cursor-grab active:cursor-grabbing bg-muted/20"
+        onMouseDown={e => { e.preventDefault(); dragOrigin.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y }; }}
+      >
+        <div className="flex items-center gap-1.5">
+          <GripHorizontal className="w-3 h-3 text-muted-foreground" />
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</span>
+        </div>
+        <button
+          type="button"
+          className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted transition-colors"
+          onClick={onClose}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <X className="w-3 h-3 text-muted-foreground" />
+        </button>
+      </div>
+      <div className="p-3 cp-compact">
+        <HexColorPicker color={safeColor} onChange={onChange} style={{ width: "100%", height: 160 }} />
+      </div>
+      <div className="px-3 pb-3 pt-0 border-t border-border/30">
+        <div className="flex items-center gap-2 py-2">
+          <span className="text-[9px] font-mono text-muted-foreground/60 shrink-0 select-none">HEX</span>
+          <input
+            type="text"
+            value={color}
+            onChange={e => { const v = e.target.value; if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v); }}
+            className="flex-1 text-[11px] border border-border rounded px-1.5 py-0.5 font-mono bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 uppercase"
+          />
+        </div>
+        <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Presets</p>
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_COLORS.map(c => (
+            <button
+              key={c}
+              type="button"
+              title={c}
+              className="w-5 h-5 rounded-full border-2 border-transparent hover:border-[#3ECF8E]/60 hover:scale-110 transition-all shrink-0"
+              style={{ backgroundColor: c }}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => onChange(c)}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState({ x: 0, y: 0 });
+  const swatchRef = useRef<HTMLButtonElement>(null);
+
+  const openPicker = () => {
+    if (swatchRef.current) {
+      const rect = swatchRef.current.getBoundingClientRect();
+      setPickerPos({
+        x: Math.max(8, Math.min(rect.left - 240, window.innerWidth - 248)),
+        y: Math.max(8, Math.min(rect.top, window.innerHeight - 340)),
+      });
+    }
+    setPickerOpen(true);
+  };
+
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-foreground/70 select-none">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase">{value}</span>
+        <button
+          ref={swatchRef}
+          type="button"
+          onClick={openPicker}
+          className="w-6 h-6 rounded-md border border-border/60 shadow-sm hover:ring-2 hover:ring-[#3ECF8E]/40 transition-all shrink-0"
+          style={{ background: value || "#ffffff" }}
+        />
+      </div>
+      {pickerOpen && createPortal(
+        <FloatingColorPicker
+          color={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff"}
+          label={label}
+          initialPos={pickerPos}
+          onClose={() => setPickerOpen(false)}
+          onChange={onChange}
+        />,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ── Font size input with preset dropdown ─────────────────────────────────────
+
+function FontSizeInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
+    const onOut = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("mousedown", onOut);
+    return () => document.removeEventListener("mousedown", onOut);
   }, [open]);
 
-  const safeValue = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff";
-
   return (
-    <div className="relative" ref={ref}>
-      <label className="flex items-center justify-between cursor-pointer group/swatch">
-        <span className="text-[10px] text-muted-foreground font-medium">{label}</span>
+    <div ref={ref} className="relative">
+      <div className="flex items-center bg-background border border-border rounded-md h-7 overflow-hidden">
+        <input
+          type="number"
+          value={Math.round(value)}
+          min={8}
+          max={72}
+          onChange={e => onChange(Math.max(8, Math.min(72, parseInt(e.target.value) || 14)))}
+          className="flex-1 min-w-0 bg-transparent text-xs px-2 outline-none text-foreground"
+        />
+        <span className="text-[9px] text-muted-foreground/50 pr-1 select-none">px</span>
         <button
           type="button"
+          className="h-full px-1.5 border-l border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center"
+          onMouseDown={e => e.preventDefault()}
           onClick={() => setOpen(v => !v)}
-          className="w-6 h-6 rounded border border-border shadow-sm group-hover/swatch:ring-2 group-hover/swatch:ring-[#3ECF8E]/40 transition-all shrink-0"
-          style={{ background: value || "#ffffff" }}
-        />
-      </label>
-      {open && createPortal(
-        <div
-          className="fixed z-99999 bg-card border border-border rounded-xl shadow-2xl p-3 space-y-2"
-          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + 6 : 0, left: ref.current ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 228) : 0, width: 228 }}
-          onClick={e => e.stopPropagation()}
-          onMouseDown={e => e.stopPropagation()}
         >
-          <HexColorPicker color={safeValue} onChange={onChange} style={{ width: "100%", height: 160 }} />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground shrink-0">Hex</span>
-            <input
-              type="text"
-              value={value}
-              onChange={e => { const v = e.target.value; if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v); }}
-              className="flex-1 text-[11px] border border-border rounded px-1.5 py-0.5 font-mono bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
-            />
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {QUICK_COLORS.map(c => (
+          <ChevronDown className="w-2.5 h-2.5" />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute top-full right-0 z-50 mt-0.5 bg-card border border-border/50 rounded-lg shadow-xl overflow-hidden w-20">
+          <div className="max-h-44 overflow-y-auto">
+            {FONT_SIZE_PRESETS.map(s => (
               <button
-                key={c}
+                key={s}
                 type="button"
-                onClick={() => onChange(c)}
-                className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
-                style={{ background: c }}
-                title={c}
-              />
+                className={cn("w-full text-left px-2.5 py-1 text-xs hover:bg-muted transition-colors", Math.round(value) === s ? "text-[#3ECF8E] font-semibold" : "text-foreground")}
+                onClick={() => { onChange(s); setOpen(false); }}
+              >
+                {s}
+              </button>
             ))}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );
@@ -1471,18 +1612,32 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
   );
 }
 
-function StyleToolbar({ block, onChange }: { block: EmailBlock; onChange: (b: EmailBlock) => void }) {
+// ── Unified Block Properties Panel ───────────────────────────────────────────
+
+export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | null; onChange: (b: EmailBlock) => void }) {
+  if (!block) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center">
+        <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
+          <SlidersHorizontal className="w-4 h-4 text-muted-foreground/50" />
+        </div>
+        <p className="text-xs text-muted-foreground/60 leading-relaxed">Select a block to edit its properties</p>
+      </div>
+    );
+  }
+
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
+  // Which sections apply
+  const hasContent   = !["cert_image", "divider"].includes(type);
+  const hasTypo      = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column", "markdown"].includes(type);
+  const hasColors    = !["cert_image", "divider", "spacer"].includes(type);
+
   const showBg       = ["header", "text", "greeting", "footer", "qr_code", "markdown", "linkedin", "two_column"].includes(type);
-  const showText     = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "markdown"].includes(type);
-  const showFont     = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column"].includes(type);
-  const showSize     = ["header", "text", "greeting", "cta_button"].includes(type);
+  const showFont     = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column", "markdown"].includes(type);
+  const showSize     = ["header", "text", "greeting", "cta_button", "markdown"].includes(type);
   const showAlign    = ["text", "greeting", "header", "footer", "linkedin", "cta_button"].includes(type);
-  const showBtn      = type === "cta_button";
-  const showDetailBg = type === "details_box";
-  const showTwoCols  = type === "two_column";
 
   const defaultTextColor = (() => {
     if (type === "greeting") return "#e5e7eb";
@@ -1500,274 +1655,224 @@ function StyleToolbar({ block, onChange }: { block: EmailBlock; onChange: (b: Em
     return 15;
   })();
 
-  const hasColors = showBg || showText || showBtn || showDetailBg || showTwoCols;
-  const hasTypography = showFont || showSize || showAlign;
+  const INP = "w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
 
-  return (
-    <div className="flex flex-col divide-y divide-border/30 text-xs" onClick={e => e.stopPropagation()}>
-      {hasColors && (
-        <div className="px-3 py-2.5 space-y-2.5">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Colors</p>
-          {showBg && (
-            <ColorSwatch
-              label={type === "header" ? "Header BG" : "Background"}
-              value={type === "header" ? (block.bgColor || "#3ECF8E") : type === "qr_code" ? (block.bgColor || "#1e1e1e") : (block.bgColor || "#18181b")}
-              onChange={v => u({ bgColor: v })}
-            />
-          )}
-          {type === "header" && (
-            <ColorSwatch label="Title" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
-          )}
-          {showText && type !== "header" && (
-            <ColorSwatch label="Text" value={block.textColor || defaultTextColor} onChange={v => u({ textColor: v })} />
-          )}
-          {showBtn && (
-            <ColorSwatch label="Button BG" value={block.btnColor || "#3ECF8E"} onChange={v => u({ btnColor: v })} />
-          )}
-          {showDetailBg && (
-            <>
-              <ColorSwatch label="Box BG" value={block.detailBgColor || "#1a1a1a"} onChange={v => u({ detailBgColor: v })} />
-              <ColorSwatch label="Values" value={block.detailTextColor || "#3ECF8E"} onChange={v => u({ detailTextColor: v })} />
-            </>
-          )}
-          {showTwoCols && (
-            <>
-              <ColorSwatch label="Left text" value={block.leftTextColor || "#d1d5db"} onChange={v => u({ leftTextColor: v })} />
-              <ColorSwatch label="Right text" value={block.rightTextColor || "#d1d5db"} onChange={v => u({ rightTextColor: v })} />
-            </>
-          )}
+  // ── Content section ───────────────────────────────────────────────────────
+
+  const contentSection = (() => {
+    if (type === "header") return (
+      <Section label="Content">
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Title</label>
+          <input value={block.title ?? ""} onChange={e => u({ title: e.target.value })} placeholder="Congratulations, {{recipient_name}}!" className={INP} />
         </div>
-      )}
-      {hasTypography && (
-        <div className="px-3 py-2.5 space-y-2.5">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Typography</p>
-          {showFont && (
-            <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
-          )}
-          {showSize && (
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground font-medium">Size</span>
-              <input
-                type="number"
-                min={10}
-                max={72}
-                value={block.fontSize || defaultSize}
-                onChange={e => u({ fontSize: Number(e.target.value) })}
-                className="w-16 text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right"
-              />
-            </div>
-          )}
-          {showAlign && (
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground font-medium">Align</span>
-              <div className="flex border border-border rounded overflow-hidden">
-                {ALIGN_OPTIONS.map(a => (
-                  <button
-                    key={a.value}
-                    type="button"
-                    onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
-                    className={cn(
-                      "px-2 py-0.5 text-[11px] transition-colors",
-                      (block.textAlign || "left") === a.value
-                        ? "bg-[#3ECF8E] text-white"
-                        : "hover:bg-muted text-muted-foreground"
-                    )}
-                    title={`Align ${a.value}`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Subtitle</label>
+          <input value={block.subtitle ?? ""} onChange={e => u({ subtitle: e.target.value })} placeholder="You've completed {{course_name}}" className={INP} />
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── Extra controls for complex blocks (details rows, btn url, spacer height) ─
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-[11px] font-medium text-muted-foreground">{label}</Label>
-      {children}
-    </div>
-  );
-}
-
-function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b: EmailBlock) => void }) {
-  const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
-
-  if (block.type === "header") {
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        <Field label="Title">
-          <input
-            value={block.title ?? ""}
-            onChange={e => u({ title: e.target.value })}
-            placeholder="Congratulations, {{recipient_name}}!"
-            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
-          />
-        </Field>
-        <Field label="Subtitle">
-          <input
-            value={block.subtitle ?? ""}
-            onChange={e => u({ subtitle: e.target.value })}
-            placeholder="You've completed {{course_name}}"
-            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
-          />
-        </Field>
-      </div>
+      </Section>
     );
-  }
 
-  if (block.type === "text" || block.type === "greeting" || block.type === "footer" || block.type === "linkedin") {
-    const placeholders: Record<string, string> = {
-      text: "We are delighted to inform you…",
-      greeting: "Hi {{recipient_name}},",
-      footer: "© {{organization_name}} · Powered by Authentix",
-      linkedin: "🎓 Share your achievement on LinkedIn and inspire others!",
-    };
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        <textarea
-          value={block.content ?? ""}
-          onChange={e => u({ content: e.target.value })}
-          rows={block.type === "text" ? 5 : 3}
-          placeholder={placeholders[block.type] ?? ""}
-          className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 resize-y font-mono leading-relaxed"
-        />
-      </div>
+    if (type === "text" || type === "greeting" || type === "footer" || type === "linkedin") {
+      const ph: Record<string, string> = {
+        text: "We are delighted to inform you…",
+        greeting: "Hi {{recipient_name}},",
+        footer: "© {{organization_name}} · Powered by Authentix",
+        linkedin: "🎓 Share your achievement on LinkedIn and inspire others!",
+      };
+      return (
+        <Section label="Content">
+          <textarea value={block.content ?? ""} onChange={e => u({ content: e.target.value })} rows={type === "text" ? 5 : 3} placeholder={ph[type] ?? ""} className={`${INP} resize-y font-mono leading-relaxed`} />
+        </Section>
+      );
+    }
+
+    if (type === "markdown") return (
+      <Section label="Content">
+        <p className="text-[9px] text-muted-foreground/50 -mt-1">Markdown and HTML supported</p>
+        <textarea value={block.content ?? ""} onChange={e => u({ content: e.target.value })} rows={6} placeholder="**Bold**, *italic*, tables, links…" className={`${INP} resize-y font-mono leading-relaxed`} />
+      </Section>
     );
-  }
 
-  if (block.type === "qr_code") {
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        <Field label="Caption">
-          <input
-            value={block.content ?? ""}
-            onChange={e => u({ content: e.target.value })}
-            placeholder="Scan QR to verify certificate authenticity"
-            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
-          />
-        </Field>
-      </div>
+    if (type === "qr_code") return (
+      <Section label="Content">
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Caption</label>
+          <input value={block.content ?? ""} onChange={e => u({ content: e.target.value })} placeholder="Scan to verify certificate authenticity" className={INP} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">QR URL (leave blank for auto)</label>
+          <input value={block.qrUrl ?? ""} onChange={e => u({ qrUrl: e.target.value })} placeholder="{{verification_url}}" className={`${INP} font-mono`} />
+        </div>
+        <p className="text-[9px] text-muted-foreground/40 leading-relaxed">The QR code will encode the recipient's verification URL when sent.</p>
+      </Section>
     );
-  }
 
-  if (block.type === "details_box") {
-    const rows = block.detailRows ?? [];
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-3 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        {rows.map((row, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <Input value={row.label} onChange={e => { const r = [...rows]; r[i] = { ...r[i]!, label: e.target.value }; u({ detailRows: r }); }} placeholder="Label" className="h-7 text-xs w-24" />
-            <span className="text-muted-foreground text-xs">→</span>
-            <Input value={row.value} onChange={e => { const r = [...rows]; r[i] = { ...r[i]!, value: e.target.value }; u({ detailRows: r }); }} placeholder="{{variable}}" className="h-7 text-xs flex-1 font-mono" />
-            <button type="button" onClick={() => u({ detailRows: rows.filter((_, j) => j !== i) })} className="text-destructive/60 hover:text-destructive">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+    if (type === "details_box") {
+      const rows = block.detailRows ?? [];
+      return (
+        <Section label="Content">
+          <p className="text-[9px] text-muted-foreground/50 -mt-1">Each row shows a label and a value (supports variables)</p>
+          {rows.map((row, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <input value={row.label} onChange={e => { const r = [...rows]; r[i] = { ...r[i]!, label: e.target.value }; u({ detailRows: r }); }} placeholder="Label" className="w-20 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 shrink-0" />
+              <span className="text-muted-foreground/40 text-xs">→</span>
+              <input value={row.value} onChange={e => { const r = [...rows]; r[i] = { ...r[i]!, value: e.target.value }; u({ detailRows: r }); }} placeholder="{{variable}}" className="flex-1 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 font-mono min-w-0" />
+              <button type="button" onClick={() => u({ detailRows: rows.filter((_, j) => j !== i) })} className="text-destructive/50 hover:text-destructive shrink-0">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={() => u({ detailRows: [...rows, { label: "", value: "" }] })} className="flex items-center gap-1 text-xs text-[#3ECF8E] font-medium hover:text-[#34b87a]">
+            <Plus className="w-3 h-3" /> Add Row
+          </button>
+        </Section>
+      );
+    }
+
+    if (type === "cta_button") return (
+      <Section label="Content">
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Button Label</label>
+          <input value={block.btnLabel ?? ""} onChange={e => u({ btnLabel: e.target.value })} placeholder="View & Verify Certificate" className={INP} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">URL</label>
+          <input value={block.btnUrl ?? ""} onChange={e => u({ btnUrl: e.target.value })} placeholder="{{verification_url}}" className={`${INP} font-mono`} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Corner radius (px)</label>
+          <input type="number" min={0} max={40} value={block.btnRadius ?? 8} onChange={e => u({ btnRadius: Number(e.target.value) })} className="w-20 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40" />
+        </div>
+      </Section>
+    );
+
+    if (type === "spacer") return (
+      <Section label="Content">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Height</span>
+          <div className="flex items-center gap-1.5">
+            <input type="number" min={4} max={200} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className="w-16 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right" />
+            <span className="text-[9px] text-muted-foreground/50 select-none">px</span>
           </div>
-        ))}
-        <button type="button" onClick={() => u({ detailRows: [...rows, { label: "", value: "" }] })} className="flex items-center gap-1 text-xs text-[#3ECF8E] font-medium hover:text-[#34b87a]">
-          <Plus className="w-3 h-3" /> Add Row
-        </button>
-      </div>
-    );
-  }
-
-  if (block.type === "cta_button") {
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        <Field label="Button Label">
-          <Input value={block.btnLabel ?? ""} onChange={e => u({ btnLabel: e.target.value })} placeholder="View & Verify Certificate" className="h-7 text-xs" />
-        </Field>
-        <Field label="Button URL">
-          <Input value={block.btnUrl ?? ""} onChange={e => u({ btnUrl: e.target.value })} placeholder="{{verification_url}}" className="h-7 text-xs font-mono" />
-        </Field>
-      </div>
-    );
-  }
-
-  if (block.type === "spacer") {
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        <Field label="Height (px)">
-          <Input type="number" min={4} max={120} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className="h-7 w-24 text-xs" />
-        </Field>
-      </div>
-    );
-  }
-
-  if (block.type === "two_column") {
-    return (
-      <div className="px-3 pb-4 pt-2.5 space-y-3 border-t border-border/30">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
-        <Field label="Left column (markdown supported)">
-          <textarea
-            value={block.leftContent ?? ""}
-            onChange={e => u({ leftContent: e.target.value })}
-            rows={4}
-            placeholder="Left column content…"
-            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 resize-y font-mono leading-relaxed"
-          />
-        </Field>
-        <Field label="Right column (markdown supported)">
-          <textarea
-            value={block.rightContent ?? ""}
-            onChange={e => u({ rightContent: e.target.value })}
-            rows={4}
-            placeholder="Right column content…"
-            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 resize-y font-mono leading-relaxed"
-          />
-        </Field>
-      </div>
-    );
-  }
-
-  return null;
-}
-
-// ── Block properties panel (exported for right sidebar) ──────────────────────
-
-export function BlockPropertiesPanel({
-  block,
-  onChange,
-}: {
-  block: EmailBlock | null;
-  onChange: (b: EmailBlock) => void;
-}) {
-  if (!block) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center">
-        <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
-          <SlidersHorizontal className="w-4 h-4 text-muted-foreground/50" />
         </div>
-        <p className="text-xs text-muted-foreground/60 leading-relaxed">
-          Select a block to edit its style and properties
-        </p>
-      </div>
+      </Section>
     );
-  }
+
+    if (type === "two_column") return (
+      <Section label="Content">
+        <p className="text-[9px] text-muted-foreground/50 -mt-1">Markdown supported in both columns</p>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Left column</label>
+          <textarea value={block.leftContent ?? ""} onChange={e => u({ leftContent: e.target.value })} rows={4} placeholder="Left column…" className={`${INP} resize-y font-mono leading-relaxed`} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Right column</label>
+          <textarea value={block.rightContent ?? ""} onChange={e => u({ rightContent: e.target.value })} rows={4} placeholder="Right column…" className={`${INP} resize-y font-mono leading-relaxed`} />
+        </div>
+      </Section>
+    );
+
+    return null;
+  })();
+
+  // ── Colors section ────────────────────────────────────────────────────────
+
+  const colorsSection = hasColors ? (
+    <Section label="Colors">
+      {showBg && (
+        <ColorRow
+          label={type === "header" ? "Header BG" : "Background"}
+          value={type === "header" ? (block.bgColor || "#1e293b") : type === "qr_code" ? (block.bgColor || "#1e1e1e") : (block.bgColor || "#18181b")}
+          onChange={v => u({ bgColor: v })}
+        />
+      )}
+      {type === "header" && (
+        <ColorRow label="Title color" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
+      )}
+      {["text", "greeting", "footer", "linkedin", "markdown"].includes(type) && (
+        <ColorRow label="Text color" value={block.textColor || defaultTextColor} onChange={v => u({ textColor: v })} />
+      )}
+      {type === "cta_button" && (
+        <>
+          <ColorRow label="Button BG" value={block.btnColor || "#3ECF8E"} onChange={v => u({ btnColor: v })} />
+          <ColorRow label="Button text" value={block.textColor || "#ffffff"} onChange={v => u({ textColor: v })} />
+        </>
+      )}
+      {type === "details_box" && (
+        <>
+          <ColorRow label="Box BG" value={block.detailBgColor || "#1a1a1a"} onChange={v => u({ detailBgColor: v })} />
+          <ColorRow label="Values color" value={block.detailTextColor || "#3ECF8E"} onChange={v => u({ detailTextColor: v })} />
+        </>
+      )}
+      {type === "two_column" && (
+        <>
+          <ColorRow label="Left text" value={block.leftTextColor || "#d1d5db"} onChange={v => u({ leftTextColor: v })} />
+          <ColorRow label="Right text" value={block.rightTextColor || "#d1d5db"} onChange={v => u({ rightTextColor: v })} />
+        </>
+      )}
+      {type === "qr_code" && (
+        <ColorRow label="QR color" value={block.textColor || "#ffffff"} onChange={v => u({ textColor: v })} />
+      )}
+    </Section>
+  ) : null;
+
+  // ── Typography section ────────────────────────────────────────────────────
+
+  const typoSection = hasTypo ? (
+    <Section label="Typography">
+      {showFont && (
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Font family</label>
+          <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
+        </div>
+      )}
+      {showSize && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-foreground/70 shrink-0">Font size</span>
+          <div className="w-24">
+            <FontSizeInput value={block.fontSize || defaultSize} onChange={v => u({ fontSize: v })} />
+          </div>
+        </div>
+      )}
+      {showAlign && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Alignment</span>
+          <div className="flex border border-border rounded-md overflow-hidden">
+            {ALIGN_OPTIONS.map(a => (
+              <button
+                key={a.value}
+                type="button"
+                onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
+                className={cn(
+                  "w-8 h-7 flex items-center justify-center transition-colors",
+                  (block.textAlign || "left") === a.value
+                    ? "bg-[#3ECF8E] text-white"
+                    : "text-muted-foreground hover:bg-muted"
+                )}
+                title={`Align ${a.value}`}
+              >
+                {a.icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </Section>
+  ) : null;
 
   return (
-    <div className="flex flex-col min-h-0 overflow-y-auto">
-      <div className="px-3 py-2 border-b border-[#3ECF8E]/15 bg-[#3ECF8E]/5 shrink-0">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-[#3ECF8E]/70">
+    <div className="flex flex-col min-h-0">
+      {/* Block type badge */}
+      <div className="px-4 py-2.5 border-b border-[#3ECF8E]/15 bg-[#3ECF8E]/5 shrink-0">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-[#3ECF8E]/80">
           {BLOCK_LABELS[block.type]}
         </p>
       </div>
-      <StyleToolbar block={block} onChange={onChange} />
-      <BlockExtrasPanel block={block} onChange={onChange} />
+      {/* Accordion sections — Content first (most used), then Colors, then Typography */}
+      {contentSection}
+      {colorsSection}
+      {typoSection}
     </div>
   );
 }
