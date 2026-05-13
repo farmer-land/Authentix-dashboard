@@ -1,10 +1,32 @@
 'use client';
 
+import { useState, useCallback, useEffect } from 'react';
 import { useBillingOverview } from '@/lib/hooks/queries/billing';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { InvoiceList } from './components/invoice-list';
 import { PaymentMethodsCard } from './components/payment-methods-card';
-import { AlertTriangle, Lock, TrendingUp, Receipt, CreditCard, Zap } from 'lucide-react';
+import { billingApi } from '@/lib/api/billing';
+import { AlertTriangle, Lock, TrendingUp, Receipt, CreditCard, Zap, Loader2 } from 'lucide-react';
+
+function preloadRazorpay() {
+  if (typeof window === 'undefined' || (window as any).Razorpay) return;
+  if (document.getElementById('rzp-checkout-js')) return;
+  const s = document.createElement('script');
+  s.id = 'rzp-checkout-js';
+  s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  document.head.appendChild(s);
+}
+
+function waitForRazorpay(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).Razorpay) { resolve(); return; }
+    const el = document.getElementById('rzp-checkout-js');
+    if (!el) { reject(new Error('Razorpay script not injected')); return; }
+    const tid = setTimeout(() => reject(new Error('Razorpay load timed out')), 10_000);
+    el.addEventListener('load', () => { clearTimeout(tid); resolve(); });
+    el.addEventListener('error', () => { clearTimeout(tid); reject(new Error('Razorpay script failed to load')); });
+  });
+}
 
 function formatINR(amount: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -16,7 +38,9 @@ function formatDate(iso: string) {
 
 export default function BillingPage() {
   const { organization } = useOrganization();
-  const { overview, loading, error } = useBillingOverview();
+  const { overview, loading, error, refresh } = useBillingOverview();
+
+  useEffect(() => { preloadRazorpay(); }, []);
   const org = organization as unknown as { id: string; name: string; slug: string } | undefined;
 
   if (loading) {
@@ -135,6 +159,7 @@ export default function BillingPage() {
             isTrialing={isTrialing}
             orgBilling={org_billing}
             billFree={billFree}
+            onPaySuccess={refresh}
           />
 
           {/* Invoice history */}
@@ -241,12 +266,15 @@ function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, p
   );
 }
 
-function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree }: {
+function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree, onPaySuccess }: {
   usage: any; billingProfile: any; isTrialing: boolean; orgBilling: any; billFree: boolean;
+  onPaySuccess?: () => void;
 }) {
   const certsAboveTrial = isTrialing
     ? Math.max(0, usage.certificate_count - orgBilling.trial_free_certificates_limit)
     : usage.certificate_count;
+
+  const canPayNow = !billFree && usage.estimated_total > 0;
 
   return (
     <div className="rounded-2xl border bg-card overflow-hidden">
@@ -287,7 +315,84 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
             {billFree && <span className="text-xs font-normal text-muted-foreground ml-1.5">trial covers this</span>}
           </span>
         </div>
+
+        {canPayNow && (
+          <div className="pt-4">
+            <PayNowButton amount={usage.estimated_total} onSuccess={onPaySuccess} />
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PayNowButton({ amount, onSuccess }: { amount: number; onSuccess?: () => void }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handlePayNow = useCallback(async () => {
+    setState('loading');
+    setErrorMsg('');
+    try {
+      await waitForRazorpay();
+      const order = await billingApi.payNow();
+      const RzpClass = (window as any).Razorpay;
+      if (!RzpClass) throw new Error('Razorpay not available');
+
+      const rzp = new RzpClass({
+        key: order.razorpay_key_id,
+        amount: order.amount_paise,
+        currency: order.currency,
+        name: 'Authentix',
+        description: `Invoice ${order.invoice_number}`,
+        order_id: order.razorpay_order_id,
+        theme: { color: '#3ECF8E' },
+        handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+          try {
+            await billingApi.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              invoice_id: order.invoice_id,
+            });
+            setState('idle');
+            onSuccess?.();
+          } catch {
+            setErrorMsg('Payment received but verification failed — contact support.');
+            setState('error');
+          }
+        },
+        modal: { ondismiss: () => setState('idle') },
+      });
+      rzp.on('payment.failed', () => {
+        setErrorMsg('Payment failed. Please try again.');
+        setState('error');
+      });
+      rzp.open();
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Failed to open payment — please try again.');
+      setState('error');
+    }
+  }, [onSuccess]);
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={handlePayNow}
+        disabled={state === 'loading'}
+        className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {state === 'loading'
+          ? <><Loader2 className="w-4 h-4 animate-spin" /> Preparing payment…</>
+          : <>Pay {formatINR(amount)} now — reset billing period</>
+        }
+      </button>
+      {state === 'error' && errorMsg && (
+        <p className="text-xs text-destructive text-center">{errorMsg}</p>
+      )}
+      <p className="text-[10px] text-muted-foreground text-center">
+        Clears current usage · Next cycle starts from today · Secured by Razorpay
+      </p>
     </div>
   );
 }

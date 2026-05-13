@@ -123,6 +123,25 @@ export const billingApi = {
     });
     return response.data!.method;
   },
+
+  payNow: async (): Promise<{
+    razorpay_order_id: string;
+    razorpay_key_id: string;
+    amount_paise: number;
+    currency: string;
+    invoice_id: string;
+    invoice_number: string;
+  }> => {
+    const response = await apiRequest<{
+      razorpay_order_id: string;
+      razorpay_key_id: string;
+      amount_paise: number;
+      currency: string;
+      invoice_id: string;
+      invoice_number: string;
+    }>("/billing/pay-now", { method: "POST" });
+    return response.data!;
+  },
 };
 
 export interface PaymentMethod {
