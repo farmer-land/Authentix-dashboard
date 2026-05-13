@@ -31,12 +31,12 @@ function buildCSP(nonce: string): string {
   const evalDirective = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://vercel.live${evalDirective}`,
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://vercel.live https://checkout.razorpay.com${evalDirective}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "img-src 'self' blob: data: https://*.supabase.co https://vercel.com https://*.vercel.com",
+    "img-src 'self' blob: data: https://*.supabase.co https://vercel.com https://*.vercel.com https://*.razorpay.com",
     "font-src 'self' data: https://fonts.gstatic.com https://vercel.live",
-    "frame-src 'self' blob: https://*.supabase.co https://vercel.live",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.digicertificates.in",
+    "frame-src 'self' blob: https://*.supabase.co https://vercel.live https://api.razorpay.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.digicertificates.in https://api.razorpay.com https://lumberjack.razorpay.com",
     "object-src 'self' blob:",
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
