@@ -34,8 +34,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
-        {/* Razorpay Checkout JS — loaded globally for invoice payment from dashboard */}
-        <script src="https://checkout.razorpay.com/v1/checkout.js" async />
+        {/* Razorpay Checkout JS — loaded on-demand by payment-methods-card.tsx */}
         {/* Unregister any stale service workers from other projects on the same origin */}
         {/* suppressHydrationWarning: nonce is server-only (request header) and will
             intentionally differ from the empty string the client sees during hydration. */}

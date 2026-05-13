@@ -47,10 +47,29 @@ export function PaymentMethodsCard({ organizationId: _ }: PaymentMethodsCardProp
     }
   }
 
+  function loadRazorpayScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if ((window as any).Razorpay) { resolve(); return; }
+      const existing = document.getElementById('rzp-checkout-js');
+      if (existing) {
+        existing.addEventListener('load', () => resolve());
+        existing.addEventListener('error', () => reject(new Error('Razorpay script failed to load')));
+        return;
+      }
+      const s = document.createElement('script');
+      s.id = 'rzp-checkout-js';
+      s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Razorpay script failed to load'));
+      document.head.appendChild(s);
+    });
+  }
+
   async function handleSetupCard() {
     setCardSetting(true);
     setCardError('');
     try {
+      await loadRazorpayScript();
       const order = await billingApi.setupCard();
       const Razorpay = (window as any).Razorpay;
       if (!Razorpay) {
