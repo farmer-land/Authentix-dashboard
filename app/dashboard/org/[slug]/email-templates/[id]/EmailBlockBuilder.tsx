@@ -675,11 +675,12 @@ export function PaletteItemCard({
             <div className="px-3 py-1.5 border-b border-zinc-700 bg-zinc-800/80">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{item.label} preview</p>
             </div>
-            <div
-              className="overflow-hidden"
-              style={{ transform: "scale(0.65)", transformOrigin: "top left", width: "154%" }}
-              dangerouslySetInnerHTML={{ __html: previewHtml || `<div style="padding:16px;color:#6b7280;font-size:12px;font-family:sans-serif">${item.label}</div>` }}
-            />
+            <div className="overflow-hidden">
+              <div
+                style={{ transform: "scale(0.65)", transformOrigin: "top center", width: "154%", marginLeft: "-27%" }}
+                dangerouslySetInnerHTML={{ __html: previewHtml || `<div style="padding:16px;color:#6b7280;font-size:12px;font-family:sans-serif">${item.label}</div>` }}
+              />
+            </div>
           </div>
         </div>,
         document.body
@@ -1234,8 +1235,17 @@ function BlockLiveView({
 
     case "spacer":
       return (
-        <div style={{ height: block.height || 24, background: isSelected ? "rgba(62,207,142,0.06)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {isSelected && <span style={{ fontSize: 10, color: "#9ca3af", userSelect: "none" }}>↕ {block.height || 24}px spacer — change height below</span>}
+        <div style={{
+          height: block.height || 24,
+          background: isSelected
+            ? "rgba(62,207,142,0.07)"
+            : "repeating-linear-gradient(135deg, transparent, transparent 6px, rgba(255,255,255,0.025) 6px, rgba(255,255,255,0.025) 12px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {isSelected
+            ? <span style={{ fontSize: 10, color: "#9ca3af", userSelect: "none" }}>↕ {block.height || 24}px spacer — change height in panel</span>
+            : <span style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", userSelect: "none", letterSpacing: "0.12em", fontWeight: 600 }}>SPACER</span>
+          }
         </div>
       );
 
@@ -1577,6 +1587,67 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b: EmailBlock) => void }) {
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
 
+  if (block.type === "header") {
+    return (
+      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
+        <Field label="Title">
+          <input
+            value={block.title ?? ""}
+            onChange={e => u({ title: e.target.value })}
+            placeholder="Congratulations, {{recipient_name}}!"
+            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+          />
+        </Field>
+        <Field label="Subtitle">
+          <input
+            value={block.subtitle ?? ""}
+            onChange={e => u({ subtitle: e.target.value })}
+            placeholder="You've completed {{course_name}}"
+            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+          />
+        </Field>
+      </div>
+    );
+  }
+
+  if (block.type === "text" || block.type === "greeting" || block.type === "footer" || block.type === "linkedin") {
+    const placeholders: Record<string, string> = {
+      text: "We are delighted to inform you…",
+      greeting: "Hi {{recipient_name}},",
+      footer: "© {{organization_name}} · Powered by Authentix",
+      linkedin: "🎓 Share your achievement on LinkedIn and inspire others!",
+    };
+    return (
+      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
+        <textarea
+          value={block.content ?? ""}
+          onChange={e => u({ content: e.target.value })}
+          rows={block.type === "text" ? 5 : 3}
+          placeholder={placeholders[block.type] ?? ""}
+          className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 resize-y font-mono leading-relaxed"
+        />
+      </div>
+    );
+  }
+
+  if (block.type === "qr_code") {
+    return (
+      <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
+        <Field label="Caption">
+          <input
+            value={block.content ?? ""}
+            onChange={e => u({ content: e.target.value })}
+            placeholder="Scan QR to verify certificate authenticity"
+            className="w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+          />
+        </Field>
+      </div>
+    );
+  }
+
   if (block.type === "details_box") {
     const rows = block.detailRows ?? [];
     return (
@@ -1603,6 +1674,9 @@ function BlockExtrasPanel({ block, onChange }: { block: EmailBlock; onChange: (b
     return (
       <div className="px-3 pb-4 pt-2.5 space-y-2.5 border-t border-border/30">
         <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Content</p>
+        <Field label="Button Label">
+          <Input value={block.btnLabel ?? ""} onChange={e => u({ btnLabel: e.target.value })} placeholder="View & Verify Certificate" className="h-7 text-xs" />
+        </Field>
         <Field label="Button URL">
           <Input value={block.btnUrl ?? ""} onChange={e => u({ btnUrl: e.target.value })} placeholder="{{verification_url}}" className="h-7 text-xs font-mono" />
         </Field>
@@ -1757,6 +1831,11 @@ interface SortableBlockCardProps {
 function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate, onMoveUp, onMoveDown, onChange, availableVars = [], isFirst, isLast }: SortableBlockCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [isNew, setIsNew] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIsNew(false), 220);
+    return () => clearTimeout(t);
+  }, []);
 
   const contextItems: ContextMenuItem[] = [
     ...(!isFirst ? [{ label: "Move up", icon: <ArrowUp className="w-3 h-3" />, action: onMoveUp }] : []),
@@ -1769,62 +1848,53 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className={cn("relative group mx-2 mt-7 mb-2", isDragging && "z-50")}
+      className={cn("relative group", isDragging && "z-50", isNew && "block-enter")}
       onContextMenu={e => {
         e.preventDefault();
         e.stopPropagation();
         setContextMenu({ x: e.clientX, y: e.clientY });
       }}
     >
-      {/* Left drag handle — wider for easier grab */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing z-30 opacity-30 group-hover:opacity-70 hover:opacity-100! transition-opacity"
-        onClick={e => e.stopPropagation()}
-        title="Drag to reorder"
-      >
-        <GripVertical className="w-4 h-4 text-zinc-400" />
-      </div>
-
-      {/* Block type label */}
+      {/* Card — full-width, Figma-style selection ring */}
       <div className={cn(
-        "absolute -top-5 left-9 z-20 flex items-center gap-1 px-2.5 py-0.75 text-[8px] font-bold uppercase tracking-widest pointer-events-none select-none",
-        "rounded-t-md border-t border-l border-r",
+        "relative overflow-hidden transition-all duration-100",
         isSelected
-          ? "bg-zinc-900 text-[#3ECF8E] border-[#3ECF8E]/50"
-          : "bg-zinc-900 text-zinc-500 border-zinc-700/50"
+          ? "outline outline-2 outline-[#3ECF8E] shadow-[0_0_0_4px_rgba(62,207,142,0.12)]"
+          : "outline outline-0 outline-transparent hover:outline hover:outline-1 hover:outline-[#3ECF8E]/25",
       )}>
-        {BLOCK_LABELS[block.type]}
-      </div>
+        {/* Drag handle — slim left edge overlay, visible on hover */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute left-0 top-0 bottom-0 w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-30 opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: "linear-gradient(to right, rgba(0,0,0,0.45), transparent)" }}
+          onClick={e => e.stopPropagation()}
+          title="Drag to reorder"
+        >
+          <GripVertical className="w-3 h-3 text-zinc-300 drop-shadow-sm" />
+        </div>
 
-      {/* Card */}
-      <div className={cn(
-        "ml-9 relative rounded-lg border border-dashed transition-all overflow-hidden",
-        isSelected
-          ? "border-[#3ECF8E]/70 shadow-md shadow-[#3ECF8E]/10 ring-1 ring-[#3ECF8E]/20"
-          : "border-zinc-700/50 hover:border-[#3ECF8E]/40",
-      )}>
-        {/* Left selection accent */}
-        <div className={cn(
-          "absolute left-0 top-0 bottom-0 w-0.75 z-10 transition-all duration-150",
-          isSelected ? "bg-[#3ECF8E]" : "bg-transparent group-hover:bg-[#3ECF8E]/30"
-        )} />
+        {/* Block type badge — only when selected, top-left */}
+        {isSelected && (
+          <div className="absolute top-0 left-0 z-20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest bg-[#3ECF8E] text-zinc-900 pointer-events-none select-none rounded-br-md">
+            {BLOCK_LABELS[block.type]}
+          </div>
+        )}
 
-        {/* Floating controls */}
+        {/* Floating controls — top right, appear on hover/select */}
         <div className={cn(
-          "absolute top-2 right-2 z-20 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-zinc-900/95 border border-zinc-700 shadow-md transition-opacity pointer-events-auto",
+          "absolute top-1.5 right-1.5 z-20 flex items-center gap-0.5 px-1 py-0.5 rounded-md bg-zinc-900/90 border border-zinc-700/70 shadow-sm transition-opacity pointer-events-auto",
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}>
           <button type="button" onClick={e => { e.stopPropagation(); onDuplicate(); }} className="p-0.5 text-zinc-500 hover:text-[#3ECF8E] transition-colors" title="Duplicate (⌘D)">
-            <Copy className="w-3.5 h-3.5" />
+            <Copy className="w-3 h-3" />
           </button>
           <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors" title="Delete (⌫)">
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Selection overlay — intercepts single click to just select, not enter edit mode */}
+        {/* Selection overlay — intercepts single click to select without entering edit mode */}
         {!isSelected && (
           <div
             className="absolute inset-0 z-10 cursor-pointer"
@@ -1832,15 +1902,13 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
           />
         )}
 
-        {/* Rendered block */}
-        <div className="transition-all duration-150">
-          <BlockLiveView
-            block={block}
-            isSelected={isSelected}
-            onChange={onChange}
-            availableVars={availableVars}
-          />
-        </div>
+        {/* Block content */}
+        <BlockLiveView
+          block={block}
+          isSelected={isSelected}
+          onChange={onChange}
+          availableVars={availableVars}
+        />
       </div>
 
       {contextMenu && (
@@ -1955,7 +2023,7 @@ export function EmailBlockBuilder({
 
   return (
     <div
-      className="py-10 px-8"
+      className="py-16 px-10 min-h-full"
       onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
       onDrop={e => {
         e.preventDefault();
@@ -1963,12 +2031,21 @@ export function EmailBlockBuilder({
         if (type) onAddBlock?.(type);
       }}
     >
-      <div className="max-w-[600px] mx-auto rounded-2xl overflow-hidden" style={{ boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)" }}>
+      {/* Artboard label — above the email card, like Figma's frame label */}
+      <div className="max-w-[600px] mx-auto mb-2 flex items-center justify-between select-none">
+        <span className="text-[10px] text-zinc-600 font-medium tracking-wide">Email Template</span>
+        <span className="text-[10px] text-zinc-700 font-mono">600px</span>
+      </div>
 
-        {/* Email client header chrome */}
-        <div className="bg-zinc-800 border-b border-zinc-700 px-5 py-4">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-full bg-[#3ECF8E] flex items-center justify-center text-white text-sm font-bold shrink-0 select-none">
+      {/* Artboard — the email card */}
+      <div
+        className="max-w-[600px] mx-auto"
+        style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 20px 60px rgba(0,0,0,0.55)" }}
+      >
+        {/* Email client mock header */}
+        <div className="bg-zinc-800 border-b border-zinc-700/80 px-5 py-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-9 h-9 rounded-full bg-[#3ECF8E] flex items-center justify-center text-white text-sm font-bold shrink-0 select-none">
               {senderName.trim()[0]?.toUpperCase() || "A"}
             </div>
             <div className="flex-1 min-w-0">
@@ -1980,27 +2057,24 @@ export function EmailBlockBuilder({
                   placeholder="Sender Name"
                   title="Click to edit sender name"
                 />
-                <span className="text-xs text-zinc-500 shrink-0">via Authentix</span>
+                <span className="text-[11px] text-zinc-600 shrink-0">via Authentix</span>
               </div>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-xs text-zinc-500 shrink-0 font-medium">Subject:</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[11px] text-zinc-600 shrink-0 font-medium">Subject:</span>
                 <input
                   value={subject}
                   onChange={e => onSubjectChange?.(e.target.value)}
-                  className="text-sm text-zinc-300 bg-transparent border-none outline-none flex-1 min-w-0 cursor-text hover:bg-zinc-700/40 focus:bg-zinc-700/60 rounded px-1 -ml-0.5 transition-colors"
+                  className="text-[13px] text-zinc-300 bg-transparent border-none outline-none flex-1 min-w-0 cursor-text hover:bg-zinc-700/40 focus:bg-zinc-700/60 rounded px-1 -ml-0.5 transition-colors"
                   placeholder="Your Certificate from {{organization_name}}"
-                  title="Click to edit email subject"
+                  title="Click to edit subject — or use Settings panel"
                 />
               </div>
             </div>
-            <div className="text-xs text-zinc-500 select-none shrink-0">just now</div>
+            <span className="text-[11px] text-zinc-700 select-none shrink-0 mt-0.5">just now</span>
           </div>
-          <p className="text-[10px] text-zinc-500 mt-2.5 pl-14 leading-relaxed">
-            Single-click to select · double-click to edit text · drag grip to reorder · right-click for options
-          </p>
         </div>
 
-        {/* Email body */}
+        {/* Email body — blocks */}
         <div style={{ background: "#18181b" }}>
           <DndContext
             sensors={sensors}
@@ -2014,16 +2088,17 @@ export function EmailBlockBuilder({
                 {blocks.map((block, idx) => (
                   <React.Fragment key={block.id}>
                     {idx > 0 && (
-                      <div className="relative h-3 group/insert mx-8">
-                        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover/insert:opacity-100 transition-opacity">
+                      <div className="relative h-6 group/insert">
+                        <div className="absolute inset-0 flex items-center opacity-0 group-hover/insert:opacity-100 transition-all duration-150">
                           <div className="flex-1 border-t border-dashed border-[#3ECF8E]/50" />
                           <button
                             type="button"
                             onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertBlockAfter(blocks[idx - 1]!.id); }}
-                            className="mx-2 w-5 h-5 rounded-full bg-[#3ECF8E] text-white flex items-center justify-center hover:bg-[#2aac76] shadow-sm transition-colors shrink-0"
+                            className="mx-2 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#3ECF8E] text-zinc-900 text-[10px] font-bold hover:bg-[#2aac76] shadow-sm transition-colors shrink-0"
                             title="Insert text block here"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-2.5 h-2.5" />
+                            Insert
                           </button>
                           <div className="flex-1 border-t border-dashed border-[#3ECF8E]/50" />
                         </div>
@@ -2047,10 +2122,28 @@ export function EmailBlockBuilder({
               </div>
             </SortableContext>
 
-            {/* Drag ghost overlay — full-width semi-transparent clone */}
+            {/* Add block at end */}
+            <div
+              className="flex justify-center py-3"
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (blocks.length > 0) insertBlockAfter(blocks[blocks.length - 1]!.id);
+                }}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600 hover:text-[#3ECF8E] transition-all duration-150 px-4 py-1.5 rounded-full border border-dashed border-zinc-700/40 hover:border-[#3ECF8E]/50 hover:bg-[#3ECF8E]/5"
+              >
+                <Plus className="w-3 h-3" />
+                Add block
+              </button>
+            </div>
+
             <DragOverlay dropAnimation={null}>
               {activeBlock && (
-                <div style={{ opacity: 0.5, pointerEvents: "none", background: "#18181b", borderRadius: 8, border: "1px dashed #3ECF8E", overflow: "hidden", maxWidth: 560, margin: "0 auto" }}>
+                <div style={{ opacity: 0.55, pointerEvents: "none", background: "#18181b", border: "2px solid #3ECF8E", overflow: "hidden", width: 600 }}>
                   <BlockLiveView block={activeBlock} isSelected={false} onChange={() => {}} />
                 </div>
               )}
@@ -2058,7 +2151,13 @@ export function EmailBlockBuilder({
           </DndContext>
         </div>
       </div>
-      <div className="h-8" />
+
+      {/* Artboard footer hint */}
+      <div className="max-w-[600px] mx-auto mt-3 text-center select-none">
+        <span className="text-[10px] text-zinc-700">Drag blocks to reorder · right-click for options · use Settings to edit subject</span>
+      </div>
+
+      <div className="h-16" />
     </div>
   );
 }

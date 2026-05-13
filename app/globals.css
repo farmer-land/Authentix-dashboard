@@ -277,3 +277,28 @@ body {
 
 .animate-accordion-down { animation: accordion-down 0.2s ease-out; }
 .animate-accordion-up   { animation: accordion-up   0.2s ease-out; }
+
+/* ── Email canvas: contentEditable placeholder ─────────────────────────── */
+[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #6b7280;
+  pointer-events: none;
+  opacity: 0.45;
+  font-style: italic;
+}
+
+[data-placeholder][contenteditable]:focus {
+  box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.22);
+  border-radius: 3px;
+  outline: none;
+}
+
+/* ── Email canvas: block entrance animation ────────────────────────────── */
+@keyframes blockEnter {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.block-enter {
+  animation: blockEnter 0.18s cubic-bezier(0.4, 0, 0.2, 1) both;
+}

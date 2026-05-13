@@ -44,6 +44,8 @@ const KEYBOARD_SHORTCUTS = [
   { key: "↑ / ↓", label: "Move block up / down" },
   { key: "Esc", label: "Deselect" },
   { key: "@  or  {{", label: "Insert variable" },
+  { key: "⌘+ / ⌘−", label: "Zoom in / out" },
+  { key: "⌘0", label: "Reset zoom to 100%" },
 ] as const;
 
 // ── Live preview ──────────────────────────────────────────────────────────────
@@ -111,6 +113,10 @@ export default function EmailTemplateEditorPage() {
   // Right panel for block properties
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
 
+  // Canvas zoom (Ctrl+scroll or +/- controls)
+  const [zoom, setZoom] = useState(1.0);
+  const canvasScrollRef = useRef<HTMLDivElement>(null);
+
   // Undo/redo history (stored in refs to avoid re-renders on push)
   const historyRef = useRef<{ past: EmailBlock[][]; future: EmailBlock[][] }>({ past: [], future: [] });
   const blocksRef = useRef(blocks);
@@ -130,6 +136,20 @@ export default function EmailTemplateEditorPage() {
   const dragStartWidth = useRef(0);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
+
+  function insertSubjectVar(variable: string) {
+    const tag = `{{${variable}}}`;
+    const el = subjectInputRef.current;
+    const start = el?.selectionStart ?? subject.length;
+    const end = el?.selectionEnd ?? subject.length;
+    const next = subject.slice(0, start) + tag + subject.slice(end);
+    handleSubjectChange(next);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  }
 
   // Hide left panel on small screens; hide right panel too
   useEffect(() => {
@@ -188,6 +208,21 @@ export default function EmailTemplateEditorPage() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
+  }, []);
+
+  // Canvas zoom: Ctrl+scroll on the canvas area
+  useEffect(() => {
+    const el = canvasScrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = -e.deltaY * 0.0015;
+        setZoom(z => +Math.min(2.5, Math.max(0.25, z + delta)).toFixed(2));
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
   const loadTemplate = async () => {
@@ -340,6 +375,9 @@ export default function EmailTemplateEditorPage() {
 
       if (mod && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if (mod && (e.key === "Z" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); redo(); return; }
+      if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); setZoom(z => +Math.min(2.5, z + 0.1).toFixed(2)); return; }
+      if (mod && e.key === "-") { e.preventDefault(); setZoom(z => +Math.max(0.25, z - 0.1).toFixed(2)); return; }
+      if (mod && e.key === "0") { e.preventDefault(); setZoom(1); return; }
       if (mod && e.key === "d" && selectedId) {
         e.preventDefault();
         // Trigger duplicate via blocks change
@@ -579,6 +617,39 @@ export default function EmailTemplateEditorPage() {
 
                 {leftPanelTab === "settings" && (
                   <div className="p-3 space-y-4 pb-4">
+
+                    {/* Subject line */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Subject Line</p>
+                      <input
+                        ref={subjectInputRef}
+                        value={subject}
+                        onChange={e => handleSubjectChange(e.target.value)}
+                        placeholder="🎓 Your Certificate — {{course_name}}"
+                        className="w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+                      />
+                      <p className="text-[9px] text-muted-foreground/60">Click a variable to insert it at cursor</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { v: "recipient_name",    label: "Name" },
+                          { v: "course_name",       label: "Course" },
+                          { v: "organization_name", label: "Org" },
+                          { v: "start_date",        label: "Start date" },
+                          { v: "end_date",          label: "End date" },
+                        ].map(({ v, label }) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => insertSubjectVar(v)}
+                            className="font-mono text-[10px] font-medium px-1.5 py-0.5 rounded border border-[#3ECF8E]/30 bg-[#3ECF8E]/10 text-[#3ECF8E] hover:bg-[#3ECF8E]/20 transition-colors"
+                            title={`Insert {{${v}}}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Template toggles */}
                     <div className="space-y-2.5">
                       <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Template</p>
@@ -625,66 +696,100 @@ export default function EmailTemplateEditorPage() {
             </div>
           )}
 
-          {/* Canvas scroll area — padding-left when left panel is visible so mx-auto centers in the visible area */}
+          {/* Canvas scroll area — dot grid background, Figma-style */}
           <div
+            ref={canvasScrollRef}
             id="block-canvas"
-            className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
-            style={{ paddingLeft: leftPanelVisible ? 272 : 0 }}
+            className="absolute inset-0 overflow-auto transition-[padding] duration-200"
+            style={{
+              paddingLeft: leftPanelVisible ? 272 : 0,
+              paddingRight: rightPanelVisible ? 272 : 0,
+              backgroundColor: "#0d0d0d",
+              backgroundImage: "radial-gradient(circle, #2a2a2a 1.5px, transparent 1.5px)",
+              backgroundSize: "22px 22px",
+            }}
+            onClick={e => { if (e.target === e.currentTarget) setSelectedId(null); }}
           >
-            <EmailBlockBuilder
-              blocks={blocks}
-              selectedId={selectedId}
-              subject={subject}
-              senderName={senderName}
-              availableVars={allVars}
-              context="cert"
-              onChange={handleBlocksChange}
-              onSelect={setSelectedId}
-              onStartFresh={handleStartFresh}
-              onSubjectChange={handleSubjectChange}
-              onSenderNameChange={setSenderName}
-              onAddBlock={addBlock}
-            />
+            <div style={{ zoom, minHeight: "100%" }}>
+              <EmailBlockBuilder
+                blocks={blocks}
+                selectedId={selectedId}
+                subject={subject}
+                senderName={senderName}
+                availableVars={allVars}
+                context="cert"
+                onChange={handleBlocksChange}
+                onSelect={setSelectedId}
+                onStartFresh={handleStartFresh}
+                onSubjectChange={handleSubjectChange}
+                onSenderNameChange={setSenderName}
+                onAddBlock={addBlock}
+              />
+            </div>
           </div>
+
+          {/* Zoom controls — bottom-left of canvas, above bottom dock */}
+          <div className="absolute bottom-24 left-4 z-50 flex items-center gap-0.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg p-1 backdrop-blur-sm shadow-lg select-none">
+            <button
+              onClick={() => setZoom(z => +Math.max(0.25, z - 0.1).toFixed(2))}
+              className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light"
+              title="Zoom out (⌘−)"
+            >
+              −
+            </button>
+            <button
+              onClick={() => setZoom(1)}
+              className="px-2 h-6 text-[11px] text-zinc-400 hover:text-white font-mono hover:bg-zinc-700/70 rounded transition-colors min-w-12 text-center"
+              title="Reset zoom (⌘0)"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              onClick={() => setZoom(z => +Math.min(2.5, z + 0.1).toFixed(2))}
+              className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light"
+              title="Zoom in (⌘+)"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Floating right panel — properties (mirrors left panel style) */}
+          {rightPanelVisible && (
+            <div
+              className="absolute z-40 right-4 top-3 w-64 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+              style={{ height: "calc(100% - 24px)" }}
+            >
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 border-b border-border/40 shrink-0 select-none">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <p className="flex-1 text-xs font-semibold text-foreground">Properties</p>
+                <button
+                  onClick={() => setRightPanelVisible(false)}
+                  className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <BlockPropertiesPanel
+                  block={blocks.find(b => b.id === selectedId) ?? null}
+                  onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
+                />
+              </div>
+            </div>
+          )}
+          {!rightPanelVisible && (
+            <button
+              className="absolute z-40 right-4 top-3 flex items-center gap-2 bg-card border border-border/50 rounded-xl shadow-md px-3 py-2 hover:bg-muted/50 transition-colors select-none"
+              onClick={() => setRightPanelVisible(true)}
+              title="Show properties panel"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-xs font-semibold text-foreground">Properties</span>
+            </button>
+          )}
         </div>
 
-        {/* ── RIGHT PANEL: Block properties ────────────────────────── */}
-        {rightPanelVisible && (
-          <div className="w-64 shrink-0 border-l border-border/50 flex flex-col bg-card overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-muted/30 shrink-0">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Properties</p>
-              <button onClick={() => setRightPanelVisible(false)} className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <BlockPropertiesPanel
-              block={blocks.find(b => b.id === selectedId) ?? null}
-              onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
-            />
-          </div>
-        )}
-        {!rightPanelVisible && (
-          <button
-            className="absolute z-40 right-4 bottom-20 flex flex-col items-center gap-1 bg-card border border-border/50 rounded-xl shadow-md px-2 py-2.5 hover:bg-muted/50 transition-colors select-none"
-            onClick={() => setRightPanelVisible(true)}
-            title="Show properties panel"
-          >
-            <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-          </button>
-        )}
-
         {/* ── RIGHT: Preview (collapsible, resizable) ───────────────── */}
-        {/* Collapsed preview — floating pill button */}
-        {panelWidth === 0 && (
-          <button
-            className="absolute z-40 right-4 top-3 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-xl shadow-md px-3 py-2 hover:bg-zinc-800 transition-colors select-none text-zinc-400 hover:text-zinc-200"
-            onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
-            title="Show preview"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span className="text-xs font-medium">Preview</span>
-          </button>
-        )}
         <div
           style={{ width: panelWidth }}
           className={cn(
