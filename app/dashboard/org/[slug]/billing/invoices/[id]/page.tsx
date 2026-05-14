@@ -25,8 +25,8 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    billingApi.getInvoice(invoiceId)
-      .then(setInvoice)
+    billingApi.getInvoiceWithLineItems(invoiceId)
+      .then(({ invoice }) => setInvoice(invoice))
       .catch((err) => setError(err?.message ?? 'Failed to load invoice'))
       .finally(() => setLoading(false));
   }, [invoiceId]);
