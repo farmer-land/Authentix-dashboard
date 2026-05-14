@@ -194,6 +194,17 @@ export default function BillingPage() {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+  return (
+    <span className="relative group/tip inline-flex items-center">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 w-60 rounded-lg border border-border/60 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150 whitespace-normal text-left">
+        {content}
+      </span>
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map = {
     trialing: { label: 'Free Trial',  dot: 'bg-brand-500',   bg: 'bg-brand-500/10',   text: 'text-brand-500' },
@@ -236,9 +247,11 @@ function MetricCard({ icon, label, value, sub, tooltip, color }: {
         {icon}
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
         {tooltip && (
-          <span title={tooltip} className="ml-auto cursor-help">
-            <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
-          </span>
+          <Tooltip content={tooltip}>
+            <span className="ml-auto cursor-help">
+              <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
+            </span>
+          </Tooltip>
         )}
       </div>
       <p className={`text-2xl font-bold tabular-nums ${valueColor[color]}`}>{value}</p>
@@ -404,9 +417,11 @@ function BillingLine({ label, value, sub, tooltip, muted }: {
         <div className="flex items-center gap-1.5">
           <span className={`text-sm ${muted ? 'text-muted-foreground' : 'text-foreground'}`}>{label}</span>
           {tooltip && (
-            <span title={tooltip} className="cursor-help shrink-0">
-              <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
-            </span>
+            <Tooltip content={tooltip}>
+              <span className="cursor-help shrink-0">
+                <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
+              </span>
+            </Tooltip>
           )}
         </div>
         {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
