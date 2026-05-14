@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { billingApi } from '@/lib/api/billing';
-import type { InvoiceEntity } from '@/lib/billing-ui/types';
+import type { InvoiceEntity, InvoiceLineItem } from '@/lib/billing-ui/types';
 import { PayNowButton } from '../../components/pay-now-button';
 import { preloadRazorpay } from '@/lib/razorpay';
 import { ArrowLeft, Download, ExternalLink, Loader2, FileText } from 'lucide-react';
 
 function formatINR(paise: number) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100);
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(paise / 100);
 }
 
 function formatDate(iso: string) {
@@ -23,20 +23,24 @@ export default function InvoiceDetailPage() {
   const slug = params.slug as string;
 
   const [invoice, setInvoice] = useState<InvoiceEntity | null>(null);
+  const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { preloadRazorpay(); }, []);
 
-  const loadInvoice = () => {
+  const loadInvoice = useCallback(() => {
     setLoading(true);
     billingApi.getInvoiceWithLineItems(invoiceId)
-      .then(({ invoice }) => setInvoice(invoice))
+      .then(({ invoice, line_items }) => {
+        setInvoice(invoice);
+        setLineItems(line_items ?? []);
+      })
       .catch((err) => setError(err?.message ?? 'Failed to load invoice'))
       .finally(() => setLoading(false));
-  };
+  }, [invoiceId]);
 
-  useEffect(() => { loadInvoice(); }, [invoiceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadInvoice(); }, [loadInvoice]);
 
   const backHref = `/dashboard/org/${slug}/billing`;
 
@@ -66,9 +70,9 @@ export default function InvoiceDetailPage() {
   const billTo = invoice.bill_to as { name?: string; email?: string; address?: string } | null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-12">
+    <div className="max-w-2xl mx-auto space-y-4 pb-12">
 
-      {/* ── Back ─────────────────────────────────────────────────────────── */}
+      {/* Back */}
       <Link
         href={backHref}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -76,7 +80,7 @@ export default function InvoiceDetailPage() {
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Billing
       </Link>
 
-      {/* ── Invoice card ─────────────────────────────────────────────────── */}
+      {/* Invoice card */}
       <div className="rounded-2xl border bg-card overflow-hidden">
 
         {/* Header */}
@@ -91,28 +95,81 @@ export default function InvoiceDetailPage() {
           <StatusBadge status={invoice.status} />
         </div>
 
-        {/* Amounts */}
-        <div className="px-6 py-5 grid grid-cols-3 gap-4 border-b border-border/40">
+        {/* Bill to / Bill from row */}
+        <div className="px-6 py-4 border-b border-border/40 grid grid-cols-2 gap-6">
           <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total</p>
-            <p className="text-2xl font-bold tabular-nums">{formatINR(invoice.total_paise)}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Billed to</p>
+            {billTo?.name && <p className="text-sm font-medium">{billTo.name}</p>}
+            {billTo?.email && <p className="text-xs text-muted-foreground">{billTo.email}</p>}
+            {billTo?.address && <p className="text-xs text-muted-foreground mt-0.5">{billTo.address}</p>}
           </div>
           <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Paid</p>
-            <p className="text-xl font-semibold tabular-nums text-emerald-600">{formatINR(invoice.amount_paid_paise)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Due</p>
-            <p className={`text-xl font-semibold tabular-nums ${invoice.amount_due_paise > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-              {formatINR(invoice.amount_due_paise)}
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Due date</p>
+            <p className="text-sm font-medium">{formatDate(invoice.due_date)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isPaid ? 'Paid in full' : invoice.amount_due_paise > 0 ? 'Payment pending' : ''}
             </p>
           </div>
         </div>
 
+        {/* Line items */}
+        {lineItems.length > 0 && (
+          <div className="px-6 py-4 border-b border-border/40">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/40">
+                  <th className="pb-2 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Description</th>
+                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 w-16">Qty</th>
+                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 w-24">Unit price</th>
+                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 w-24">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {lineItems.map((item) => (
+                  <tr key={item.id}>
+                    <td className="py-2.5 pr-4 text-sm">{item.description}</td>
+                    <td className="py-2.5 text-right tabular-nums text-muted-foreground">{item.quantity}</td>
+                    <td className="py-2.5 text-right tabular-nums text-muted-foreground">{formatINR(item.unit_price)}</td>
+                    <td className="py-2.5 text-right tabular-nums font-medium">{formatINR(item.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Totals */}
+        <div className="px-6 py-4 border-b border-border/40 space-y-1.5">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="tabular-nums">{formatINR(invoice.subtotal_paise)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Tax (GST 18%)</span>
+            <span className="tabular-nums">{formatINR(invoice.tax_paise)}</span>
+          </div>
+          <div className="flex justify-between text-sm font-semibold pt-1.5 border-t border-border/40 mt-1.5">
+            <span>Total</span>
+            <span className="tabular-nums">{formatINR(invoice.total_paise)}</span>
+          </div>
+          {invoice.amount_paid_paise > 0 && (
+            <div className="flex justify-between text-sm text-emerald-600">
+              <span>Paid</span>
+              <span className="tabular-nums">{formatINR(invoice.amount_paid_paise)}</span>
+            </div>
+          )}
+          {invoice.amount_due_paise > 0 && (
+            <div className="flex justify-between text-sm font-bold text-red-500 pt-1">
+              <span>Amount due</span>
+              <span className="tabular-nums">{formatINR(invoice.amount_due_paise)}</span>
+            </div>
+          )}
+        </div>
+
         {/* Action area */}
-        <div className="px-6 py-5 space-y-3">
+        <div className="px-6 py-5">
           {isPaid ? (
-            <>
+            <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Payment received. Your receipt is available on Razorpay.</p>
               {razorpayUrl && (
                 <a
@@ -124,7 +181,7 @@ export default function InvoiceDetailPage() {
                   <Download className="w-4 h-4" /> Download Receipt (PDF)
                 </a>
               )}
-            </>
+            </div>
           ) : isPayable ? (
             <div className="space-y-3">
               <PayNowButton
@@ -147,22 +204,9 @@ export default function InvoiceDetailPage() {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <FileText className="w-4 h-4 shrink-0" />
-              <span>This invoice is {invoice.status} and requires no action.</span>
-            </div>
+            <p className="text-sm text-muted-foreground">This invoice is {invoice.status} and requires no action.</p>
           )}
         </div>
-
-        {/* Bill to */}
-        {billTo && (
-          <div className="px-6 py-4 border-t border-border/40 bg-muted/20">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Billed to</p>
-            {billTo.name && <p className="text-sm font-medium">{billTo.name}</p>}
-            {billTo.email && <p className="text-xs text-muted-foreground">{billTo.email}</p>}
-            {billTo.address && <p className="text-xs text-muted-foreground mt-0.5">{billTo.address}</p>}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -170,11 +214,13 @@ export default function InvoiceDetailPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    pending:  { label: 'Pending',   cls: 'bg-yellow-500/10 text-yellow-600' },
-    paid:     { label: 'Paid',      cls: 'bg-emerald-500/10 text-emerald-600' },
-    overdue:  { label: 'Overdue',   cls: 'bg-red-500/10 text-red-500' },
-    draft:    { label: 'Draft',     cls: 'bg-muted text-muted-foreground' },
-    cancelled:{ label: 'Cancelled', cls: 'bg-muted text-muted-foreground' },
+    pending:   { label: 'Pending',   cls: 'bg-yellow-500/10 text-yellow-600' },
+    paid:      { label: 'Paid',      cls: 'bg-emerald-500/10 text-emerald-600' },
+    overdue:   { label: 'Overdue',   cls: 'bg-red-500/10 text-red-500' },
+    draft:     { label: 'Draft',     cls: 'bg-muted text-muted-foreground' },
+    cancelled: { label: 'Cancelled', cls: 'bg-muted text-muted-foreground' },
+    refunded:  { label: 'Refunded',  cls: 'bg-blue-500/10 text-blue-600' },
+    failed:    { label: 'Failed',    cls: 'bg-red-500/10 text-red-500' },
   };
   const s = map[status] ?? { label: status, cls: 'bg-muted text-muted-foreground' };
   return (

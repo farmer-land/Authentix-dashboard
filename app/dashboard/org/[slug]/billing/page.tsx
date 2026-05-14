@@ -7,7 +7,7 @@ import { InvoiceList } from './components/invoice-list';
 import { preloadRazorpay } from '@/lib/razorpay';
 import { PayNowButton } from './components/pay-now-button';
 import { AlertTriangle, Lock, TrendingUp, Receipt, Sparkles, Zap, Mail, Info } from 'lucide-react';
-import type { CurrentUsage, BillingProfile, OrgBilling } from '@/lib/billing-ui/types';
+import type { CurrentUsage, BillingProfile, OrgBilling, InvoiceEntity } from '@/lib/billing-ui/types';
 
 const PLAN_NAME = 'Flex';
 
@@ -65,8 +65,8 @@ export default function BillingPage() {
   const totalEmailsThisPeriod = (current_usage.email_count ?? 0) + (current_usage.broadcast_own_smtp_count ?? 0);
   const hasEmailUsage = totalEmailsThisPeriod > 0;
 
-  // Outstanding vs estimated differ when new usage occurred after the last invoice was issued
-  const amountsDiffer = total_outstanding > 0 && Math.abs(total_outstanding - current_usage.estimated_total) > 1;
+  // First payable invoice — used for the pay card so we show the exact outstanding amount
+  const pendingInvoice = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -154,18 +154,6 @@ export default function BillingPage() {
         />
       </div>
 
-      {/* ── Outstanding ≠ Estimated notice ──────────────────────────────────── */}
-      {amountsDiffer && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-yellow-500/25 bg-yellow-500/5 px-4 py-3">
-          <Info className="w-3.5 h-3.5 text-yellow-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">Outstanding ({formatINR(total_outstanding)})</span> is what's due on your existing invoice.{' '}
-            <span className="font-semibold text-foreground">Estimated ({formatINR(current_usage.estimated_total)})</span> includes usage added since that invoice was issued.{' '}
-            Paying now clears the outstanding balance and resets your billing period.
-          </p>
-        </div>
-      )}
-
       {/* ── Usage breakdown ─────────────────────────────────────────────────── */}
       <UsageBreakdown
         usage={current_usage}
@@ -173,10 +161,20 @@ export default function BillingPage() {
         isTrialing={isTrialing}
         orgBilling={org_billing}
         billFree={billFree}
-        orgName={org?.name}
-        orgEmail={org?.email}
-        onPaySuccess={refresh}
       />
+
+      {/* ── Pay card ────────────────────────────────────────────────────────── */}
+      {!billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
+        <PayCard
+          pendingInvoice={pendingInvoice}
+          estimatedTotal={current_usage.estimated_total}
+          certCount={current_usage.certificate_count}
+          emailCount={totalEmailsThisPeriod}
+          orgName={org?.name}
+          orgEmail={org?.email}
+          onSuccess={refresh}
+        />
+      )}
 
       {/* ── Invoice history ─────────────────────────────────────────────────── */}
       <div>
@@ -295,15 +293,12 @@ function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, a
   );
 }
 
-function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree, orgName, orgEmail, onPaySuccess }: {
+function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree }: {
   usage: CurrentUsage; billingProfile: BillingProfile; isTrialing: boolean; orgBilling: OrgBilling; billFree: boolean;
-  orgName?: string; orgEmail?: string; onPaySuccess?: () => void;
 }) {
   const certsAboveTrial = isTrialing
     ? Math.max(0, usage.certificate_count - orgBilling.trial_free_certificates_limit)
     : usage.certificate_count;
-
-  const canPayNow = !billFree && usage.estimated_total > 0;
 
   return (
     <div className="rounded-2xl border bg-card overflow-hidden">
@@ -382,27 +377,61 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
 
         <div className="flex items-center justify-between pt-4 mt-1">
           <div>
-            <span className="font-semibold">Estimated total</span>
-            <p className="text-xs text-muted-foreground mt-0.5">Current period · updates as you use the platform</p>
+            <span className="font-semibold">Period estimate</span>
+            <p className="text-xs text-muted-foreground mt-0.5">Live — updates as you use the platform</p>
           </div>
           <span className={`text-2xl font-bold tabular-nums ${billFree ? 'text-brand-500' : 'text-foreground'}`}>
             {billFree ? '₹0' : formatINR(usage.estimated_total)}
             {billFree && <span className="text-xs font-normal text-muted-foreground ml-1.5 block text-right">trial covers this</span>}
           </span>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {canPayNow && (
-          <div className="pt-4">
-            <PayNowButton
-              amount={usage.estimated_total}
-              certCount={usage.certificate_count}
-              emailCount={(usage.email_count ?? 0) + (usage.broadcast_own_smtp_count ?? 0)}
-              orgName={orgName}
-              orgEmail={orgEmail}
-              onSuccess={onPaySuccess}
-            />
-          </div>
-        )}
+function PayCard({ pendingInvoice, estimatedTotal, certCount, emailCount, orgName, orgEmail, onSuccess }: {
+  pendingInvoice?: InvoiceEntity;
+  estimatedTotal: number;
+  certCount: number;
+  emailCount: number;
+  orgName?: string;
+  orgEmail?: string;
+  onSuccess?: () => void;
+}) {
+  const hasOutstanding = !!pendingInvoice;
+  const amount = hasOutstanding
+    ? pendingInvoice!.amount_due_paise / 100
+    : estimatedTotal;
+
+  return (
+    <div className="rounded-2xl border bg-card overflow-hidden">
+      <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between gap-4">
+        <div>
+          <p className="font-semibold">
+            {hasOutstanding ? 'Amount outstanding' : 'Pay current period'}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {hasOutstanding
+              ? `Invoice ${pendingInvoice!.invoice_number} · Paying resets your billing period to today`
+              : 'Pay now to reset your billing period · Invoice generated immediately'}
+          </p>
+        </div>
+        <span className="text-2xl font-bold tabular-nums shrink-0">
+          {formatINR(amount)}
+        </span>
+      </div>
+      <div className="px-5 py-4">
+        <PayNowButton
+          amount={amount}
+          invoiceId={pendingInvoice?.id}
+          invoiceNumber={pendingInvoice?.invoice_number}
+          certCount={certCount}
+          emailCount={emailCount}
+          orgName={orgName}
+          orgEmail={orgEmail}
+          onSuccess={onSuccess}
+        />
       </div>
     </div>
   );
