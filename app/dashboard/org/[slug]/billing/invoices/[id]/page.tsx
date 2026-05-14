@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { billingApi } from '@/lib/api/billing';
 import type { InvoiceEntity } from '@/lib/billing-ui/types';
+import { PayNowButton } from '../../components/pay-now-button';
+import { preloadRazorpay } from '@/lib/razorpay';
 import { ArrowLeft, Download, ExternalLink, Loader2, FileText } from 'lucide-react';
 
 function formatINR(paise: number) {
@@ -24,12 +26,17 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useEffect(() => { preloadRazorpay(); }, []);
+
+  const loadInvoice = () => {
+    setLoading(true);
     billingApi.getInvoiceWithLineItems(invoiceId)
       .then(({ invoice }) => setInvoice(invoice))
       .catch((err) => setError(err?.message ?? 'Failed to load invoice'))
       .finally(() => setLoading(false));
-  }, [invoiceId]);
+  };
+
+  useEffect(() => { loadInvoice(); }, [invoiceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const backHref = `/dashboard/org/${slug}/billing`;
 
@@ -54,7 +61,9 @@ export default function InvoiceDetailPage() {
   }
 
   const isPaid = invoice.status === 'paid';
+  const isPayable = invoice.payable && invoice.amount_due_paise > 0;
   const razorpayUrl = invoice.razorpay_payment_link_url;
+  const billTo = invoice.bill_to as { name?: string; email?: string; address?: string } | null;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
@@ -100,47 +109,60 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
 
-        {/* Razorpay action area */}
+        {/* Action area */}
         <div className="px-6 py-5 space-y-3">
-          {razorpayUrl ? (
+          {isPaid ? (
             <>
-              <p className="text-sm text-muted-foreground">
-                {isPaid
-                  ? 'Your receipt and PDF download are available on Razorpay.'
-                  : 'View and pay this invoice on the Razorpay hosted page.'}
-              </p>
-              <a
-                href={razorpayUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors"
-              >
-                {isPaid
-                  ? <><Download className="w-4 h-4" /> Download Receipt (PDF)</>
-                  : <><ExternalLink className="w-4 h-4" /> View &amp; Pay Invoice</>
-                }
-              </a>
+              <p className="text-sm text-muted-foreground">Payment received. Your receipt is available on Razorpay.</p>
+              {razorpayUrl && (
+                <a
+                  href={razorpayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors"
+                >
+                  <Download className="w-4 h-4" /> Download Receipt (PDF)
+                </a>
+              )}
             </>
+          ) : isPayable ? (
+            <div className="space-y-3">
+              <PayNowButton
+                amount={invoice.amount_due_paise / 100}
+                invoiceId={invoice.id}
+                invoiceNumber={invoice.invoice_number}
+                orgName={billTo?.name}
+                orgEmail={billTo?.email}
+                onSuccess={loadInvoice}
+              />
+              {razorpayUrl && (
+                <a
+                  href={razorpayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" /> Or pay via Razorpay hosted page
+                </a>
+              )}
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              No Razorpay payment link has been generated for this invoice yet.
-              {!isPaid && ' A link will be created when you initiate payment.'}
-            </p>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FileText className="w-4 h-4 shrink-0" />
+              <span>This invoice is {invoice.status} and requires no action.</span>
+            </div>
           )}
         </div>
 
         {/* Bill to */}
-        {invoice.bill_to && (() => {
-          const billTo = invoice.bill_to as { name?: string; email?: string; address?: string };
-          return (
-            <div className="px-6 py-4 border-t border-border/40 bg-muted/20">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Billed to</p>
-              <p className="text-sm font-medium">{billTo.name}</p>
-              {billTo.email && <p className="text-xs text-muted-foreground">{billTo.email}</p>}
-              {billTo.address && <p className="text-xs text-muted-foreground mt-0.5">{billTo.address}</p>}
-            </div>
-          );
-        })()}
+        {billTo && (
+          <div className="px-6 py-4 border-t border-border/40 bg-muted/20">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Billed to</p>
+            {billTo.name && <p className="text-sm font-medium">{billTo.name}</p>}
+            {billTo.email && <p className="text-xs text-muted-foreground">{billTo.email}</p>}
+            {billTo.address && <p className="text-xs text-muted-foreground mt-0.5">{billTo.address}</p>}
+          </div>
+        )}
       </div>
     </div>
   );
