@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useInvoiceList } from '@/lib/billing-ui/hooks/use-invoice-list';
 import { paiseToRupees } from '@/lib/billing-ui/types';
 import { getPaymentStatusInfo } from '@/lib/billing-ui/utils/invoice-helpers';
@@ -35,6 +37,8 @@ export function InvoiceList({
   orgEmail?: string;
 }) {
   const { invoices, loading, error, refresh: refetch } = useInvoiceList(organizationId);
+  const params = useParams();
+  const slug = params.slug as string;
 
   useEffect(() => { preloadRazorpay(); }, []);
 
@@ -66,71 +70,96 @@ export function InvoiceList({
 
   return (
     <div className="rounded-2xl border bg-card overflow-hidden">
-      {/* Table header */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-5 py-3 bg-muted/30 border-b border-border/50">
-        {['Invoice', 'Issued', 'Status', 'Amount', ''].map((h, i) => (
-          <span key={i} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{h}</span>
-        ))}
-      </div>
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-muted/30 border-b border-border/50">
+            <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 w-[40%]">Invoice</th>
+            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 whitespace-nowrap">Issued</th>
+            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Status</th>
+            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 text-right">Amount</th>
+            <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 text-right"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/40">
+          {invoices.map((inv: InvoiceEntity) => {
+            const statusInfo = getPaymentStatusInfo(inv.status);
+            const total = paiseToRupees(inv.total_paise);
+            const amountDue = paiseToRupees(inv.amount_due_paise);
+            const razorpayUrl = inv.razorpay_payment_link_url;
+            const detailHref = `/dashboard/org/${slug}/billing/invoices/${inv.id}`;
 
-      <div className="divide-y divide-border/40">
-        {invoices.map((inv: InvoiceEntity) => {
-          const statusInfo = getPaymentStatusInfo(inv.status);
-          const total = paiseToRupees(inv.total_paise);
-          const amountDue = paiseToRupees(inv.amount_due_paise);
-          const razorpayUrl = inv.razorpay_payment_link_url;
+            return (
+              <tr key={inv.id} className="hover:bg-muted/20 transition-colors">
+                {/* Invoice number — links to detail page */}
+                <td className="px-5 py-3.5">
+                  <Link href={detailHref} className="group">
+                    <p className="text-sm font-medium group-hover:text-brand-500 transition-colors">{inv.invoice_number}</p>
+                    <p className="text-xs text-muted-foreground">Due {formatDate(inv.due_date)}</p>
+                  </Link>
+                </td>
 
-          return (
-            <div key={inv.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-5 py-3.5 hover:bg-muted/20 transition-colors">
-              <div>
-                <p className="text-sm font-medium">{inv.invoice_number}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(inv.due_date)} due</p>
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(inv.issue_date)}</span>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${STATUS_STYLES[statusInfo.color] ?? STATUS_STYLES.gray}`}>
-                {statusInfo.label}
-              </span>
-              <div className="text-right">
-                <p className="text-sm font-semibold tabular-nums">{formatINR(total, inv.currency)}</p>
-                {inv.payable && amountDue > 0 && (
-                  <p className="text-[10px] text-red-500 tabular-nums">Due: {formatINR(amountDue, inv.currency)}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 justify-end">
-                {/* Open Razorpay hosted page — paid = receipt/PDF download, pending = payment */}
-                {razorpayUrl ? (
-                  <a
-                    href={razorpayUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={inv.status === 'paid' ? 'Download receipt (PDF via Razorpay)' : 'View & pay invoice'}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {inv.status === 'paid'
-                      ? <Download className="w-3.5 h-3.5" />
-                      : <ExternalLink className="w-3.5 h-3.5" />
-                    }
-                  </a>
-                ) : (
-                  <span title="No invoice link yet" className="text-muted-foreground/30 cursor-default">
-                    <FileText className="w-3.5 h-3.5" />
+                {/* Issued date */}
+                <td className="px-4 py-3.5">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(inv.issue_date)}</span>
+                </td>
+
+                {/* Status badge */}
+                <td className="px-4 py-3.5">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${STATUS_STYLES[statusInfo.color] ?? STATUS_STYLES.gray}`}>
+                    {statusInfo.label}
                   </span>
-                )}
-                {inv.payable && amountDue > 0 && (
-                  <PayNowButton
-                    amount={amountDue}
-                    invoiceId={inv.id}
-                    invoiceNumber={inv.invoice_number}
-                    orgName={orgName}
-                    orgEmail={orgEmail}
-                    onSuccess={refetch}
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                </td>
+
+                {/* Amount */}
+                <td className="px-4 py-3.5 text-right">
+                  <p className="text-sm font-semibold tabular-nums">{formatINR(total, inv.currency)}</p>
+                  {inv.payable && amountDue > 0 && (
+                    <p className="text-[10px] text-red-500 tabular-nums">Due: {formatINR(amountDue, inv.currency)}</p>
+                  )}
+                </td>
+
+                {/* Actions */}
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-2 justify-end">
+                    {razorpayUrl ? (
+                      <a
+                        href={razorpayUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={inv.status === 'paid' ? 'Download receipt (PDF)' : 'View invoice on Razorpay'}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {inv.status === 'paid'
+                          ? <Download className="w-3.5 h-3.5" />
+                          : <ExternalLink className="w-3.5 h-3.5" />
+                        }
+                      </a>
+                    ) : (
+                      <Link
+                        href={detailHref}
+                        title="View invoice details"
+                        className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </Link>
+                    )}
+                    {inv.payable && amountDue > 0 && (
+                      <PayNowButton
+                        amount={amountDue}
+                        invoiceId={inv.id}
+                        invoiceNumber={inv.invoice_number}
+                        orgName={orgName}
+                        orgEmail={orgEmail}
+                        onSuccess={refetch}
+                      />
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
