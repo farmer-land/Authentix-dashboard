@@ -34,13 +34,13 @@ export const billingApi = {
   },
 
   getInvoice: async (id: string): Promise<InvoiceEntity> => {
-    const response = await apiRequest<InvoiceEntity>(`/billing/invoices/${id}`);
-    return response.data!;
+    const response = await apiRequest<{ invoice: InvoiceEntity; line_items: InvoiceLineItem[] }>(`/billing/invoices/${id}`);
+    return response.data!.invoice;
   },
 
   getInvoiceWithLineItems: async (id: string): Promise<{ invoice: InvoiceEntity; line_items: InvoiceLineItem[] }> => {
     const response = await apiRequest<{ invoice: InvoiceEntity; line_items: InvoiceLineItem[] }>(
-      `/billing/invoices/${id}/line-items`,
+      `/billing/invoices/${id}`,
     );
     return response.data!;
   },
