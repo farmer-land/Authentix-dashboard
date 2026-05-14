@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { billingApi } from '@/lib/api/billing';
+import type { InvoiceEntity } from '@/lib/billing-ui/types';
 import { ArrowLeft, Download, ExternalLink, Loader2, FileText } from 'lucide-react';
 
 function formatINR(paise: number) {
@@ -19,7 +20,7 @@ export default function InvoiceDetailPage() {
   const invoiceId = params.id as string;
   const slug = params.slug as string;
 
-  const [invoice, setInvoice] = useState<any>(null);
+  const [invoice, setInvoice] = useState<InvoiceEntity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,18 +130,17 @@ export default function InvoiceDetailPage() {
         </div>
 
         {/* Bill to */}
-        {invoice.bill_to && (
-          <div className="px-6 py-4 border-t border-border/40 bg-muted/20">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Billed to</p>
-            <p className="text-sm font-medium">{(invoice.bill_to as any).name}</p>
-            {(invoice.bill_to as any).email && (
-              <p className="text-xs text-muted-foreground">{(invoice.bill_to as any).email}</p>
-            )}
-            {(invoice.bill_to as any).address && (
-              <p className="text-xs text-muted-foreground mt-0.5">{(invoice.bill_to as any).address}</p>
-            )}
-          </div>
-        )}
+        {invoice.bill_to && (() => {
+          const billTo = invoice.bill_to as { name?: string; email?: string; address?: string };
+          return (
+            <div className="px-6 py-4 border-t border-border/40 bg-muted/20">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Billed to</p>
+              <p className="text-sm font-medium">{billTo.name}</p>
+              {billTo.email && <p className="text-xs text-muted-foreground">{billTo.email}</p>}
+              {billTo.address && <p className="text-xs text-muted-foreground mt-0.5">{billTo.address}</p>}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { InvoiceList } from './components/invoice-list';
 import { preloadRazorpay } from '@/lib/razorpay';
 import { PayNowButton } from './components/pay-now-button';
 import { AlertTriangle, Lock, TrendingUp, Receipt, Sparkles, Zap, Mail, Info } from 'lucide-react';
+import type { CurrentUsage, BillingProfile, OrgBilling } from '@/lib/billing-ui/types';
 
 const PLAN_NAME = 'Flex';
 
@@ -88,8 +89,8 @@ export default function BillingPage() {
           remaining={trialCertsLeft}
           pct={trialPct}
           pricePerCert={billing_profile.certificate_unit_price}
-          authentixEmailPrice={(billing_profile as any).authentix_email_unit_price ?? 0.25}
-          ownEmailPrice={(billing_profile as any).own_email_unit_price ?? 0.10}
+          authentixEmailPrice={billing_profile.authentix_email_unit_price ?? 0.25}
+          ownEmailPrice={billing_profile.own_email_unit_price ?? 0.10}
         />
       )}
       {isOverdue && (
@@ -122,7 +123,7 @@ export default function BillingPage() {
             label="Emails sent"
             value={String(totalEmailsThisPeriod)}
             sub={`${current_usage.email_count ?? 0} via Authentix · ${current_usage.broadcast_own_smtp_count ?? 0} via own`}
-            tooltip={`Authentix-sent emails: ${formatINR((billing_profile as any).authentix_email_unit_price ?? 0.25)}/email · Own integration: ${formatINR((billing_profile as any).own_email_unit_price ?? 0.10)}/email`}
+            tooltip={`Authentix-sent emails: ${formatINR(billing_profile.authentix_email_unit_price ?? 0.25)}/email · Own integration: ${formatINR(billing_profile.own_email_unit_price ?? 0.10)}/email`}
             color="default"
           />
         )}
@@ -282,7 +283,7 @@ function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, a
 }
 
 function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree, orgName, orgEmail, onPaySuccess }: {
-  usage: any; billingProfile: any; isTrialing: boolean; orgBilling: any; billFree: boolean;
+  usage: CurrentUsage; billingProfile: BillingProfile; isTrialing: boolean; orgBilling: OrgBilling; billFree: boolean;
   orgName?: string; orgEmail?: string; onPaySuccess?: () => void;
 }) {
   const certsAboveTrial = isTrialing

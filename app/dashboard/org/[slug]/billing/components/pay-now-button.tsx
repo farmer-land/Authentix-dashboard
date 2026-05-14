@@ -5,6 +5,12 @@ import { billingApi } from '@/lib/api/billing';
 import { waitForRazorpay, RAZORPAY_BRAND } from '@/lib/razorpay';
 import { Loader2 } from 'lucide-react';
 
+type RazorpayConstructor = new (options: Record<string, unknown>) => {
+  open(): void;
+  on(event: string, handler: () => void): void;
+};
+type RazorpayWindow = Window & { Razorpay?: RazorpayConstructor };
+
 function formatINR(amount: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 }
@@ -42,7 +48,7 @@ export function PayNowButton({
         ? await billingApi.createOrder(invoiceId)
         : await billingApi.payNow();
 
-      const RzpClass = (window as any).Razorpay;
+      const RzpClass = (window as RazorpayWindow).Razorpay;
       if (!RzpClass) throw new Error('Razorpay not available');
 
       // Build a detailed description customers can read in the checkout modal
@@ -88,7 +94,7 @@ export function PayNowButton({
           razorpay_signature: string;
         }) => {
           try {
-            const effectiveInvoiceId = invoiceId ?? (order as any).invoice_id;
+            const effectiveInvoiceId = (invoiceId ?? (order as { invoice_id?: string }).invoice_id) ?? '';
             await billingApi.verifyPayment({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -109,8 +115,8 @@ export function PayNowButton({
         setState('error');
       });
       rzp.open();
-    } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Failed to open payment — please refresh and try again.');
+    } catch (err: unknown) {
+      setErrorMsg((err as { message?: string })?.message ?? 'Failed to open payment — please refresh and try again.');
       setState('error');
     }
   }, [invoiceId, invoiceNumber, certCount, emailCount, amount, orgName, orgEmail, onSuccess]);
