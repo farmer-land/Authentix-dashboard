@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
 import { useInvoiceList } from '@/lib/billing-ui/hooks/use-invoice-list';
 import { paiseToRupees } from '@/lib/billing-ui/types';
 import { getPaymentStatusInfo } from '@/lib/billing-ui/utils/invoice-helpers';
 import type { InvoiceEntity } from '@/lib/billing-ui/types';
 import { PayNowButton } from './pay-now-button';
 import { preloadRazorpay } from '@/lib/razorpay';
-import { FileText } from 'lucide-react';
+import { FileText, Download, ExternalLink } from 'lucide-react';
 
 function formatINR(rupees: number, currency = 'INR') {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(rupees);
@@ -79,6 +78,7 @@ export function InvoiceList({
           const statusInfo = getPaymentStatusInfo(inv.status);
           const total = paiseToRupees(inv.total_paise);
           const amountDue = paiseToRupees(inv.amount_due_paise);
+          const razorpayUrl = inv.razorpay_payment_link_url;
 
           return (
             <div key={inv.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-5 py-3.5 hover:bg-muted/20 transition-colors">
@@ -97,13 +97,25 @@ export function InvoiceList({
                 )}
               </div>
               <div className="flex items-center gap-2 justify-end">
-                <Link
-                  href={`billing/invoices/${inv.id}`}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  title="View invoice"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                </Link>
+                {/* Open Razorpay hosted page — paid = receipt/PDF download, pending = payment */}
+                {razorpayUrl ? (
+                  <a
+                    href={razorpayUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={inv.status === 'paid' ? 'Download receipt (PDF via Razorpay)' : 'View & pay invoice'}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {inv.status === 'paid'
+                      ? <Download className="w-3.5 h-3.5" />
+                      : <ExternalLink className="w-3.5 h-3.5" />
+                    }
+                  </a>
+                ) : (
+                  <span title="No invoice link yet" className="text-muted-foreground/30 cursor-default">
+                    <FileText className="w-3.5 h-3.5" />
+                  </span>
+                )}
                 {inv.payable && amountDue > 0 && (
                   <PayNowButton
                     amount={amountDue}

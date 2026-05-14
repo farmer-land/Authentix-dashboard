@@ -92,9 +92,6 @@ export function UsageCard({ usage, billingProfile, isTrialing, orgBilling }: Usa
             sub={`${usage.broadcast_own_smtp_count} sent`}
           />
         )}
-        {usage.broadcast_platform_fee > 0 && (
-          <Line label="Platform broadcast fee" value={formatINR(usage.broadcast_platform_fee)} />
-        )}
 
         <div className="pt-1">
           <Line

@@ -6,10 +6,10 @@ import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { InvoiceList } from './components/invoice-list';
 import { preloadRazorpay } from '@/lib/razorpay';
 import { PayNowButton } from './components/pay-now-button';
-import { AlertTriangle, Lock, TrendingUp, Receipt, Sparkles, Zap } from 'lucide-react';
+import { AlertTriangle, Lock, TrendingUp, Receipt, Sparkles, Zap, Mail, Info } from 'lucide-react';
+import type { CurrentUsage, BillingProfile, OrgBilling } from '@/lib/billing-ui/types';
 
-// Plan name — single pay-as-you-go plan
-const PLAN_NAME = 'Authentix Flex';
+const PLAN_NAME = 'Flex';
 
 function formatINR(amount: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -62,6 +62,11 @@ export default function BillingPage() {
     : 0;
 
   const billFree = isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit;
+  const totalEmailsThisPeriod = (current_usage.email_count ?? 0) + (current_usage.broadcast_own_smtp_count ?? 0);
+  const hasEmailUsage = totalEmailsThisPeriod > 0;
+
+  // Outstanding vs estimated differ when new usage occurred after the last invoice was issued
+  const amountsDiffer = total_outstanding > 0 && Math.abs(total_outstanding - current_usage.estimated_total) > 1;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -84,7 +89,8 @@ export default function BillingPage() {
           remaining={trialCertsLeft}
           pct={trialPct}
           pricePerCert={billing_profile.certificate_unit_price}
-          platformFee={billing_profile.platform_fee_amount}
+          authentixEmailPrice={billing_profile.authentix_email_unit_price ?? 0.25}
+          ownEmailPrice={billing_profile.own_email_unit_price ?? 0.10}
         />
       )}
       {isOverdue && (
@@ -100,26 +106,43 @@ export default function BillingPage() {
       )}
 
       {/* ── Metric cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid gap-4 grid-cols-2 ${hasEmailUsage ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
         <MetricCard
           icon={<Zap className="w-4 h-4" />}
           label="Certificates"
           value={String(current_usage.certificate_count)}
           sub={isTrialing ? `${trialCertsLeft} free remaining` : `× ${formatINR(billing_profile.certificate_unit_price)} each`}
+          tooltip={isTrialing
+            ? `First ${org_billing.trial_free_certificates_limit} certificates are free. Charged at ${formatINR(billing_profile.certificate_unit_price)}/cert beyond that.`
+            : `Every certificate generated this month is charged at ${formatINR(billing_profile.certificate_unit_price)}.`}
           color="default"
         />
+        {hasEmailUsage && (
+          <MetricCard
+            icon={<Mail className="w-4 h-4" />}
+            label="Emails sent"
+            value={String(totalEmailsThisPeriod)}
+            sub={`${current_usage.email_count ?? 0} via Authentix · ${current_usage.broadcast_own_smtp_count ?? 0} via own`}
+            tooltip={`Authentix-sent emails: ${formatINR(billing_profile.authentix_email_unit_price ?? 0.25)}/email · Own integration: ${formatINR(billing_profile.own_email_unit_price ?? 0.10)}/email`}
+            color="default"
+          />
+        )}
         <MetricCard
           icon={<TrendingUp className="w-4 h-4" />}
           label="Estimated bill"
           value={billFree ? '₹0' : formatINR(current_usage.estimated_total)}
           sub={billFree ? 'Covered by trial' : `Incl. ${current_usage.gst_rate}% GST`}
+          tooltip="What you would be charged if invoiced right now for the current billing period. Updates as you issue certificates or send emails."
           color={!billFree && current_usage.estimated_total > 0 ? 'brand' : 'default'}
         />
         <MetricCard
           icon={<Receipt className="w-4 h-4" />}
           label="Outstanding"
           value={total_outstanding > 0 ? formatINR(total_outstanding) : '₹0'}
-          sub={total_outstanding > 0 ? 'Payment due' : 'All clear'}
+          sub={total_outstanding > 0 ? 'Pending payment' : 'All clear'}
+          tooltip={total_outstanding > 0
+            ? "Total due on invoices already issued. Pay these to keep your account in good standing."
+            : "No unpaid invoices. You're all clear."}
           color={total_outstanding > 0 ? 'red' : 'default'}
         />
         <MetricCard
@@ -130,6 +153,18 @@ export default function BillingPage() {
           color="default"
         />
       </div>
+
+      {/* ── Outstanding ≠ Estimated notice ──────────────────────────────────── */}
+      {amountsDiffer && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-yellow-500/25 bg-yellow-500/5 px-4 py-3">
+          <Info className="w-3.5 h-3.5 text-yellow-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">Outstanding ({formatINR(total_outstanding)})</span> is what's due on your existing invoice.{' '}
+            <span className="font-semibold text-foreground">Estimated ({formatINR(current_usage.estimated_total)})</span> includes usage added since that invoice was issued.{' '}
+            Paying now clears the outstanding balance and resets your billing period.
+          </p>
+        </div>
+      )}
 
       {/* ── Usage breakdown ─────────────────────────────────────────────────── */}
       <UsageBreakdown
@@ -188,8 +223,8 @@ function Alert({ icon, color, title, children }: { icon: React.ReactNode; color:
   );
 }
 
-function MetricCard({ icon, label, value, sub, color }: {
-  icon: React.ReactNode; label: string; value: string; sub?: string;
+function MetricCard({ icon, label, value, sub, tooltip, color }: {
+  icon: React.ReactNode; label: string; value: string; sub?: string; tooltip?: string;
   color: 'default' | 'brand' | 'red';
 }) {
   const valueColor = { default: 'text-foreground', brand: 'text-brand-500', red: 'text-red-400' };
@@ -200,6 +235,11 @@ function MetricCard({ icon, label, value, sub, color }: {
       <div className={`flex items-center gap-2 ${iconColor[color]}`}>
         {icon}
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+        {tooltip && (
+          <span title={tooltip} className="ml-auto cursor-help">
+            <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
+          </span>
+        )}
       </div>
       <p className={`text-2xl font-bold tabular-nums ${valueColor[color]}`}>{value}</p>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
@@ -207,9 +247,9 @@ function MetricCard({ icon, label, value, sub, color }: {
   );
 }
 
-function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, platformFee }: {
+function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, authentixEmailPrice, ownEmailPrice }: {
   used: number; limit: number; trialEndsAt: string | null; remaining: number;
-  pct: number; pricePerCert: number; platformFee: number;
+  pct: number; pricePerCert: number; authentixEmailPrice: number; ownEmailPrice: number;
 }) {
   const barColor = pct >= 90 ? 'bg-red-500' : pct >= 65 ? 'bg-yellow-500' : 'bg-brand-500';
   return (
@@ -225,9 +265,9 @@ function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, p
             of your {limit}-certificate allowance
           </p>
         </div>
-        <div className="text-right text-xs text-muted-foreground shrink-0">
-          <p className="text-sm font-bold text-foreground">₹{platformFee.toLocaleString('en-IN')}<span className="font-normal text-muted-foreground">/mo</span></p>
-          <p>+ ₹{pricePerCert}/cert after trial</p>
+        <div className="text-right text-xs text-muted-foreground shrink-0 space-y-0.5">
+          <p className="text-sm font-bold text-foreground">₹{pricePerCert}/cert <span className="font-normal">after trial</span></p>
+          <p>Emails: ₹{authentixEmailPrice} via Authentix · ₹{ownEmailPrice} via own</p>
         </div>
       </div>
       <div>
@@ -243,7 +283,7 @@ function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, p
 }
 
 function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree, orgName, orgEmail, onPaySuccess }: {
-  usage: any; billingProfile: any; isTrialing: boolean; orgBilling: any; billFree: boolean;
+  usage: CurrentUsage; billingProfile: BillingProfile; isTrialing: boolean; orgBilling: OrgBilling; billFree: boolean;
   orgName?: string; orgEmail?: string; onPaySuccess?: () => void;
 }) {
   const certsAboveTrial = isTrialing
@@ -272,38 +312,65 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
       )}
 
       <div className="px-5 py-4 space-y-0 divide-y divide-border/40">
-        <BillingLine
-          label="Platform fee"
-          value={isTrialing ? '₹0' : formatINR(usage.platform_fee)}
-          sub={isTrialing ? `Waived during trial (₹${billingProfile.platform_fee_amount.toLocaleString('en-IN')}/mo normally)` : 'Monthly base fee'}
-          muted={isTrialing}
-        />
+        {/* Platform fee row — only shown for active (non-trial) orgs */}
+        {!isTrialing && (
+          <BillingLine
+            label="Platform fee"
+            value={formatINR(usage.platform_fee)}
+            sub="Monthly base fee · charged only when ≥1 certificate is issued"
+            tooltip={`A fixed monthly fee of ${formatINR(billingProfile.platform_fee_amount)} applied when at least one certificate is issued during the billing period. Waived during trial.`}
+          />
+        )}
+
         <BillingLine
           label="Certificates issued"
           value={String(usage.certificate_count)}
           sub={isTrialing
-            ? `${Math.min(usage.certificate_count, orgBilling.trial_free_certificates_limit)} free · ${certsAboveTrial} billable @ ₹${billingProfile.certificate_unit_price} each`
+            ? `${Math.min(usage.certificate_count, orgBilling.trial_free_certificates_limit)} free · ${certsAboveTrial} billable @ ${formatINR(billingProfile.certificate_unit_price)} each`
             : `${formatINR(billingProfile.certificate_unit_price)} per certificate`}
+          tooltip={isTrialing
+            ? `Your first ${orgBilling.trial_free_certificates_limit} certificates are free. Certificates beyond that are charged at ${formatINR(billingProfile.certificate_unit_price)} each.`
+            : `Each certificate generated this billing period costs ${formatINR(billingProfile.certificate_unit_price)}.`}
         />
         <BillingLine
           label="Certificate charges"
           value={isTrialing && certsAboveTrial === 0 ? '₹0' : formatINR(usage.usage_cost)}
-          sub={isTrialing && certsAboveTrial === 0 ? 'Covered by trial allowance' : undefined}
+          sub={isTrialing && certsAboveTrial === 0 ? 'Covered by trial allowance' : `${isTrialing ? certsAboveTrial : usage.certificate_count} billable cert${(isTrialing ? certsAboveTrial : usage.certificate_count) !== 1 ? 's' : ''} × ${formatINR(billingProfile.certificate_unit_price)}`}
           muted={isTrialing && certsAboveTrial === 0}
         />
-        {usage.email_count > 0 && (
-          <BillingLine label="Email delivery" value={formatINR(usage.email_cost)} sub={`${usage.email_count} emails sent`} />
+
+        {/* Email rows — only shown when there's email usage */}
+        {(usage.email_count ?? 0) > 0 && (
+          <BillingLine
+            label="Email delivery — Authentix"
+            value={formatINR(usage.email_cost)}
+            sub={`${(usage.email_count).toLocaleString('en-IN')} email${usage.email_count !== 1 ? 's' : ''} × ${formatINR(billingProfile.authentix_email_unit_price ?? 0.25)}`}
+            tooltip={`Emails sent using Authentix's email infrastructure (Resend). Charged at ${formatINR(billingProfile.authentix_email_unit_price ?? 0.25)} per email sent.`}
+          />
+        )}
+        {(usage.broadcast_own_smtp_count ?? 0) > 0 && (
+          <BillingLine
+            label="Email delivery — own integration"
+            value={formatINR(usage.broadcast_own_smtp_cost)}
+            sub={`${(usage.broadcast_own_smtp_count).toLocaleString('en-IN')} email${usage.broadcast_own_smtp_count !== 1 ? 's' : ''} × ${formatINR(billingProfile.own_email_unit_price ?? 0.10)}`}
+            tooltip={`Emails sent through your own email provider (SES, SMTP, or your own Resend key). Charged at ${formatINR(billingProfile.own_email_unit_price ?? 0.10)} per email as a platform usage fee.`}
+          />
         )}
 
         <div className="pt-3 space-y-1.5">
           <BillingLine label="Subtotal (excl. GST)" value={billFree ? '₹0' : formatINR(usage.subtotal)} muted />
-          <BillingLine label={`GST @ ${usage.gst_rate}%`} value={billFree ? '₹0' : formatINR(usage.gst_amount)} muted />
+          <BillingLine
+            label={`GST @ ${usage.gst_rate}%`}
+            value={billFree ? '₹0' : formatINR(usage.gst_amount)}
+            tooltip="18% Goods & Services Tax applied on the subtotal as per Indian tax regulations."
+            muted
+          />
         </div>
 
         <div className="flex items-center justify-between pt-4 mt-1">
           <div>
             <span className="font-semibold">Estimated total</span>
-            <p className="text-xs text-muted-foreground mt-0.5">For current period · subject to change</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Current period · updates as you use the platform</p>
           </div>
           <span className={`text-2xl font-bold tabular-nums ${billFree ? 'text-brand-500' : 'text-foreground'}`}>
             {billFree ? '₹0' : formatINR(usage.estimated_total)}
@@ -316,6 +383,7 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
             <PayNowButton
               amount={usage.estimated_total}
               certCount={usage.certificate_count}
+              emailCount={(usage.email_count ?? 0) + (usage.broadcast_own_smtp_count ?? 0)}
               orgName={orgName}
               orgEmail={orgEmail}
               onSuccess={onPaySuccess}
@@ -327,11 +395,20 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
   );
 }
 
-function BillingLine({ label, value, sub, muted }: { label: string; value: string; sub?: string; muted?: boolean }) {
+function BillingLine({ label, value, sub, tooltip, muted }: {
+  label: string; value: string; sub?: string; tooltip?: string; muted?: boolean;
+}) {
   return (
     <div className="flex items-start justify-between py-2.5 gap-4">
-      <div>
-        <span className={`text-sm ${muted ? 'text-muted-foreground' : 'text-foreground'}`}>{label}</span>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-sm ${muted ? 'text-muted-foreground' : 'text-foreground'}`}>{label}</span>
+          {tooltip && (
+            <span title={tooltip} className="cursor-help shrink-0">
+              <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
+            </span>
+          )}
+        </div>
         {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </div>
       <span className={`text-sm font-medium tabular-nums shrink-0 ${muted ? 'text-muted-foreground' : 'text-foreground'}`}>{value}</span>
