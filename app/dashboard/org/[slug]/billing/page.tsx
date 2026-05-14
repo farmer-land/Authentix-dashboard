@@ -84,7 +84,8 @@ export default function BillingPage() {
           remaining={trialCertsLeft}
           pct={trialPct}
           pricePerCert={billing_profile.certificate_unit_price}
-          platformFee={billing_profile.platform_fee_amount}
+          authentixEmailPrice={billing_profile.authentix_email_unit_price}
+          ownEmailPrice={billing_profile.own_email_unit_price}
         />
       )}
       {isOverdue && (
@@ -207,9 +208,9 @@ function MetricCard({ icon, label, value, sub, color }: {
   );
 }
 
-function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, platformFee }: {
+function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, authentixEmailPrice, ownEmailPrice }: {
   used: number; limit: number; trialEndsAt: string | null; remaining: number;
-  pct: number; pricePerCert: number; platformFee: number;
+  pct: number; pricePerCert: number; authentixEmailPrice: number; ownEmailPrice: number;
 }) {
   const barColor = pct >= 90 ? 'bg-red-500' : pct >= 65 ? 'bg-yellow-500' : 'bg-brand-500';
   return (
@@ -225,9 +226,9 @@ function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, p
             of your {limit}-certificate allowance
           </p>
         </div>
-        <div className="text-right text-xs text-muted-foreground shrink-0">
-          <p className="text-sm font-bold text-foreground">₹{platformFee.toLocaleString('en-IN')}<span className="font-normal text-muted-foreground">/mo</span></p>
-          <p>+ ₹{pricePerCert}/cert after trial</p>
+        <div className="text-right text-xs text-muted-foreground shrink-0 space-y-0.5">
+          <p className="text-sm font-bold text-foreground">₹{pricePerCert}/cert <span className="font-normal">after trial</span></p>
+          <p>Emails: ₹{authentixEmailPrice} (Authentix) · ₹{ownEmailPrice} (own)</p>
         </div>
       </div>
       <div>
@@ -292,7 +293,18 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
           muted={isTrialing && certsAboveTrial === 0}
         />
         {usage.email_count > 0 && (
-          <BillingLine label="Email delivery" value={formatINR(usage.email_cost)} sub={`${usage.email_count} emails sent`} />
+          <BillingLine
+            label="Email delivery (Authentix)"
+            value={formatINR(usage.email_cost)}
+            sub={`${usage.email_count.toLocaleString('en-IN')} emails × ${formatINR(billingProfile.authentix_email_unit_price)}`}
+          />
+        )}
+        {usage.broadcast_own_smtp_count > 0 && (
+          <BillingLine
+            label="Email delivery (own integration)"
+            value={formatINR(usage.broadcast_own_smtp_cost)}
+            sub={`${usage.broadcast_own_smtp_count.toLocaleString('en-IN')} emails × ${formatINR(billingProfile.own_email_unit_price)}`}
+          />
         )}
 
         <div className="pt-3 space-y-1.5">
