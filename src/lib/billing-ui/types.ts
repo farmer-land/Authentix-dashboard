@@ -48,9 +48,11 @@ export interface InvoiceLineItem {
 }
 
 export interface BillingProfile {
-  platform_fee_amount: number;    // rupees/month
-  certificate_unit_price: number; // rupees per cert
-  gst_rate: number;               // percent, e.g. 18
+  platform_fee_amount: number;          // rupees/month
+  certificate_unit_price: number;       // rupees per cert
+  authentix_email_unit_price: number;   // rupees per email (Authentix sends)
+  own_email_unit_price: number;         // rupees per email (org's own integration)
+  gst_rate: number;                     // percent, e.g. 18
   currency: string;
 }
 
@@ -58,11 +60,10 @@ export interface CurrentUsage {
   certificate_count: number;
   platform_fee: number;
   usage_cost: number;
-  email_count: number;
+  email_count: number;             // emails sent via Authentix Resend
   email_cost: number;
-  broadcast_own_smtp_count: number;
+  broadcast_own_smtp_count: number; // emails sent via org's own integration
   broadcast_own_smtp_cost: number;
-  broadcast_platform_fee: number;
   subtotal: number;
   gst_amount: number;
   estimated_total: number;

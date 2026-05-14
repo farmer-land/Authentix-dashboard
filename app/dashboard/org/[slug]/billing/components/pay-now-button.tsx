@@ -12,6 +12,7 @@ function formatINR(amount: number) {
 export function PayNowButton({
   amount,
   certCount,
+  emailCount,
   orgName,
   orgEmail,
   invoiceId,
@@ -20,6 +21,7 @@ export function PayNowButton({
 }: {
   amount: number;
   certCount?: number;
+  emailCount?: number;
   orgName?: string;
   orgEmail?: string;
   /** If provided, creates an order for this specific invoice. Otherwise calls pay-now (current period). */
@@ -43,10 +45,22 @@ export function PayNowButton({
       const RzpClass = (window as any).Razorpay;
       if (!RzpClass) throw new Error('Razorpay not available');
 
+      // Build a detailed description customers can read in the checkout modal
       const descParts: string[] = [];
       if (invoiceNumber) descParts.push(`Invoice ${invoiceNumber}`);
-      if (certCount !== undefined) descParts.push(`${certCount} certificate${certCount !== 1 ? 's' : ''}`);
-      if (descParts.length === 0) descParts.push('Authentix Flex — Pay as You Go');
+      descParts.push('Flex Plan');
+      if (certCount !== undefined && certCount > 0) descParts.push(`${certCount} certificate${certCount !== 1 ? 's' : ''}`);
+      if (emailCount !== undefined && emailCount > 0) descParts.push(`${emailCount} email${emailCount !== 1 ? 's' : ''}`);
+      descParts.push('18% GST included');
+
+      const notes: Record<string, string> = {
+        Plan: 'Flex',
+      };
+      if (invoiceNumber) notes['Invoice'] = invoiceNumber;
+      if (certCount !== undefined && certCount > 0) notes['Certificates'] = String(certCount);
+      if (emailCount !== undefined && emailCount > 0) notes['Emails sent'] = String(emailCount);
+      notes['Amount'] = formatINR(amount);
+      notes['Tax'] = '18% GST included';
 
       const rzp = new RzpClass({
         key: order.razorpay_key_id,
@@ -61,10 +75,12 @@ export function PayNowButton({
           name: orgName ?? '',
           email: orgEmail ?? '',
         },
-        notes: {
-          Plan: 'Authentix Flex',
-          ...(invoiceNumber ? { Invoice: invoiceNumber } : {}),
-          ...(certCount !== undefined ? { Certificates: String(certCount) } : {}),
+        notes,
+        config: {
+          display: {
+            hide: [{ method: 'paylater' }],
+            preferences: { show_default_blocks: true },
+          },
         },
         handler: async (response: {
           razorpay_order_id: string;
@@ -97,9 +113,9 @@ export function PayNowButton({
       setErrorMsg(err?.message ?? 'Failed to open payment — please refresh and try again.');
       setState('error');
     }
-  }, [invoiceId, invoiceNumber, certCount, orgName, orgEmail, onSuccess]);
+  }, [invoiceId, invoiceNumber, certCount, emailCount, amount, orgName, orgEmail, onSuccess]);
 
-  // For inline invoice-table use: compact button
+  // Compact inline button for invoice table rows
   if (invoiceNumber) {
     return (
       <div className="flex flex-col items-end gap-1">
@@ -114,7 +130,7 @@ export function PayNowButton({
           }
         </button>
         {state === 'error' && errorMsg && (
-          <p className="text-[10px] text-destructive max-w-[140px] text-right">{errorMsg}</p>
+          <p className="text-[10px] text-destructive max-w-35 text-right">{errorMsg}</p>
         )}
       </div>
     );
@@ -137,7 +153,7 @@ export function PayNowButton({
         <p className="text-xs text-destructive text-center">{errorMsg}</p>
       )}
       <p className="text-[10px] text-muted-foreground text-center">
-        Resets billing period to today · Secured by Razorpay
+        Resets billing period to today · Secured by Razorpay · 18% GST included
       </p>
     </div>
   );

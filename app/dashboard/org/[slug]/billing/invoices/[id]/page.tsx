@@ -1,102 +1,163 @@
-/**
- * INVOICE DETAIL PAGE
- *
- * Detailed view of single invoice with line items and payment options.
- */
-
-"use client";
+'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api/client';
-import { InvoiceDetail } from '../../components/invoice-detail';
+import { billingApi } from '@/lib/api/billing';
+import { ArrowLeft, Download, ExternalLink, Loader2, FileText } from 'lucide-react';
+
+function formatINR(paise: number) {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100);
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 export default function InvoiceDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const invoiceId = params.id as string;
-  const [organization, setOrganization] = useState<{ name: string; email: string | null } | null>(null);
+  const slug = params.slug as string;
+
+  const [invoice, setInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadOrganization();
-  }, []);
+    billingApi.getInvoice(invoiceId)
+      .then(setInvoice)
+      .catch((err) => setError(err?.message ?? 'Failed to load invoice'))
+      .finally(() => setLoading(false));
+  }, [invoiceId]);
 
-  const loadOrganization = async () => {
-    try {
-      const organizationData = await api.organizations.get() as { name: string; email: string | null };
-      setOrganization({ name: organizationData.name, email: organizationData.email });
-    } catch (error) {
-      console.error('Error loading organization:', error);
-      router.push('/login');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const backHref = `/dashboard/org/${slug}/billing`;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center h-[40vh]">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  if (!organization) {
-    return null;
-  }
-
-  return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Back Button */}
-      <div className="mb-6">
-        <Link
-          href="/dashboard/billing"
-          className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
-        >
-          <svg
-            className="w-4 h-4 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          Back to Billing
+  if (error || !invoice) {
+    return (
+      <div className="max-w-lg mx-auto mt-12 rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="font-semibold text-destructive">Failed to load invoice</p>
+        <p className="text-sm text-muted-foreground mt-1">{error ?? 'Invoice not found.'}</p>
+        <Link href={backHref} className="mt-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Billing
         </Link>
       </div>
+    );
+  }
 
-      {/* Invoice Detail */}
-      <InvoiceDetail invoiceId={invoiceId} />
+  const isPaid = invoice.status === 'paid';
+  const razorpayUrl = invoice.razorpay_payment_link_url;
 
-      {/* Print Button */}
-      <div className="mt-6 flex justify-end">
-        <button
-          onClick={() => window.print()}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <svg
-            className="w-4 h-4 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
-            />
-          </svg>
-          Print Invoice
-        </button>
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 pb-12">
+
+      {/* ── Back ─────────────────────────────────────────────────────────── */}
+      <Link
+        href={backHref}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" /> Back to Billing
+      </Link>
+
+      {/* ── Invoice card ─────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border bg-card overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-border/60 flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <h1 className="font-semibold text-lg">{invoice.invoice_number}</h1>
+              <p className="text-xs text-muted-foreground">Issued {formatDate(invoice.issue_date)}</p>
+            </div>
+          </div>
+          <StatusBadge status={invoice.status} />
+        </div>
+
+        {/* Amounts */}
+        <div className="px-6 py-5 grid grid-cols-3 gap-4 border-b border-border/40">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total</p>
+            <p className="text-2xl font-bold tabular-nums">{formatINR(invoice.total_paise)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Paid</p>
+            <p className="text-xl font-semibold tabular-nums text-emerald-600">{formatINR(invoice.amount_paid_paise)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Due</p>
+            <p className={`text-xl font-semibold tabular-nums ${invoice.amount_due_paise > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+              {formatINR(invoice.amount_due_paise)}
+            </p>
+          </div>
+        </div>
+
+        {/* Razorpay action area */}
+        <div className="px-6 py-5 space-y-3">
+          {razorpayUrl ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {isPaid
+                  ? 'Your receipt and PDF download are available on Razorpay.'
+                  : 'View and pay this invoice on the Razorpay hosted page.'}
+              </p>
+              <a
+                href={razorpayUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors"
+              >
+                {isPaid
+                  ? <><Download className="w-4 h-4" /> Download Receipt (PDF)</>
+                  : <><ExternalLink className="w-4 h-4" /> View &amp; Pay Invoice</>
+                }
+              </a>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No Razorpay payment link has been generated for this invoice yet.
+              {!isPaid && ' A link will be created when you initiate payment.'}
+            </p>
+          )}
+        </div>
+
+        {/* Bill to */}
+        {invoice.bill_to && (
+          <div className="px-6 py-4 border-t border-border/40 bg-muted/20">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Billed to</p>
+            <p className="text-sm font-medium">{(invoice.bill_to as any).name}</p>
+            {(invoice.bill_to as any).email && (
+              <p className="text-xs text-muted-foreground">{(invoice.bill_to as any).email}</p>
+            )}
+            {(invoice.bill_to as any).address && (
+              <p className="text-xs text-muted-foreground mt-0.5">{(invoice.bill_to as any).address}</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pending:  { label: 'Pending',   cls: 'bg-yellow-500/10 text-yellow-600' },
+    paid:     { label: 'Paid',      cls: 'bg-emerald-500/10 text-emerald-600' },
+    overdue:  { label: 'Overdue',   cls: 'bg-red-500/10 text-red-500' },
+    draft:    { label: 'Draft',     cls: 'bg-muted text-muted-foreground' },
+    cancelled:{ label: 'Cancelled', cls: 'bg-muted text-muted-foreground' },
+  };
+  const s = map[status] ?? { label: status, cls: 'bg-muted text-muted-foreground' };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${s.cls}`}>
+      {s.label}
+    </span>
   );
 }
