@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useInvoiceList } from '@/lib/billing-ui/hooks/use-invoice-list';
 import { paiseToRupees } from '@/lib/billing-ui/types';
 import { getPaymentStatusInfo } from '@/lib/billing-ui/utils/invoice-helpers';
-import { billingApi } from '@/lib/api/billing';
 import type { InvoiceEntity } from '@/lib/billing-ui/types';
-import { FileText, ExternalLink, Send, Loader2 } from 'lucide-react';
+import { PayNowButton } from './pay-now-button';
+import { preloadRazorpay } from '@/lib/razorpay';
+import { FileText } from 'lucide-react';
 
 function formatINR(rupees: number, currency = 'INR') {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(rupees);
@@ -25,34 +26,18 @@ const STATUS_STYLES: Record<string, string> = {
   blue:   'bg-blue-500/10 text-blue-600',
 };
 
-function ResendButton({ invoiceId }: { invoiceId: string }) {
-  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+export function InvoiceList({
+  organizationId,
+  orgName,
+  orgEmail,
+}: {
+  organizationId: string;
+  orgName?: string;
+  orgEmail?: string;
+}) {
+  const { invoices, loading, error, refresh: refetch } = useInvoiceList(organizationId);
 
-  async function handleResend() {
-    setState('sending');
-    try {
-      await billingApi.resendNotification(invoiceId);
-      setState('sent');
-      setTimeout(() => setState('idle'), 4000);
-    } catch {
-      setState('error');
-      setTimeout(() => setState('idle'), 3000);
-    }
-  }
-
-  if (state === 'sending') return <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />;
-  if (state === 'sent')    return <span className="text-[11px] text-emerald-600 font-medium">Sent!</span>;
-  if (state === 'error')   return <span className="text-[11px] text-red-500">Failed</span>;
-
-  return (
-    <button onClick={handleResend} title="Resend invoice email" className="text-muted-foreground hover:text-foreground transition-colors">
-      <Send className="w-3.5 h-3.5" />
-    </button>
-  );
-}
-
-export function InvoiceList({ organizationId }: { organizationId: string }) {
-  const { invoices, loading, error } = useInvoiceList(organizationId);
+  useEffect(() => { preloadRazorpay(); }, []);
 
   if (loading) {
     return (
@@ -75,7 +60,7 @@ export function InvoiceList({ organizationId }: { organizationId: string }) {
       <div className="rounded-2xl border border-dashed border-border/60 py-12 text-center">
         <FileText className="w-7 h-7 text-muted-foreground/30 mx-auto mb-2" />
         <p className="text-sm text-muted-foreground">No invoices yet</p>
-        <p className="text-xs text-muted-foreground/60 mt-0.5">Generated on the 1st of each month</p>
+        <p className="text-xs text-muted-foreground/60 mt-0.5">Generated automatically on the 1st of each month</p>
       </div>
     );
   }
@@ -111,17 +96,24 @@ export function InvoiceList({ organizationId }: { organizationId: string }) {
                   <p className="text-[10px] text-red-500 tabular-nums">Due: {formatINR(amountDue, inv.currency)}</p>
                 )}
               </div>
-              <div className="flex items-center gap-2.5 justify-end">
-                <Link href={`billing/invoices/${inv.id}`} className="text-muted-foreground hover:text-foreground transition-colors" title="View invoice">
+              <div className="flex items-center gap-2 justify-end">
+                <Link
+                  href={`billing/invoices/${inv.id}`}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  title="View invoice"
+                >
                   <FileText className="w-3.5 h-3.5" />
                 </Link>
-                {inv.payable && inv.payment_cta_url && (
-                  <a href={inv.payment_cta_url} target="_blank" rel="noopener noreferrer" title="Pay now"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors whitespace-nowrap">
-                    Pay <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
+                {inv.payable && amountDue > 0 && (
+                  <PayNowButton
+                    amount={amountDue}
+                    invoiceId={inv.id}
+                    invoiceNumber={inv.invoice_number}
+                    orgName={orgName}
+                    orgEmail={orgEmail}
+                    onSuccess={refetch}
+                  />
                 )}
-                {inv.payable && inv.razorpay_payment_link_id && <ResendButton invoiceId={inv.id} />}
               </div>
             </div>
           );
