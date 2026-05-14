@@ -1507,8 +1507,14 @@ function FontSizeInput({ value, onChange }: { value: number; onChange: (v: numbe
           <ChevronDown className="w-2.5 h-2.5" />
         </button>
       </div>
-      {open && (
-        <div className="absolute top-full right-0 z-50 mt-0.5 bg-card border border-border/50 rounded-lg shadow-xl overflow-hidden w-20">
+      {open && createPortal(
+        <div
+          className="fixed z-[99999] bg-card border border-border/50 rounded-lg shadow-xl overflow-hidden w-20"
+          style={{
+            top: ref.current ? ref.current.getBoundingClientRect().bottom + 2 : 0,
+            left: ref.current ? Math.max(8, ref.current.getBoundingClientRect().right - 80) : 0,
+          }}
+        >
           <div className="max-h-44 overflow-y-auto">
             {FONT_SIZE_PRESETS.map(s => (
               <button
@@ -1521,7 +1527,8 @@ function FontSizeInput({ value, onChange }: { value: number; onChange: (v: numbe
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1571,7 +1578,7 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
       {open && createPortal(
         <div
           className="fixed z-99999 bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
-          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0, left: ref.current ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 200) : 0, width: 200, maxHeight: 280 }}
+          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0, left: ref.current ? Math.max(8, ref.current.getBoundingClientRect().right - 200) : 0, width: 200, maxHeight: 280 }}
           onClick={e => e.stopPropagation()}
           onMouseDown={e => e.stopPropagation()}
         >

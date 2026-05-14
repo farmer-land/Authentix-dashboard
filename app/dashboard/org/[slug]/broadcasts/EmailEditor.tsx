@@ -20,7 +20,6 @@ import {
   blocksToHtml,
   extractBlocksFromHtml,
   defaultBlock,
-  STARTER_BLOCKS,
   EMAIL_BLOCKS_PALETTE,
   applyPreviewMocks,
   type EmailBlock,
@@ -242,7 +241,16 @@ export function EmailEditor({
   }, []);
 
   const handleStartFresh = useCallback(() => {
-    const fresh = STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
+    // Broadcast-only starter: no cert-specific blocks (cert_image, qr_code, details_box)
+    const fresh = [
+      defaultBlock("header"),
+      defaultBlock("greeting"),
+      defaultBlock("text"),
+      defaultBlock("cta_button"),
+      defaultBlock("linkedin"),
+      defaultBlock("divider"),
+      defaultBlock("footer"),
+    ].map(b => ({ ...b, id: nanoid(8) }));
     historyRef.current.past = [...historyRef.current.past, blocksRef.current];
     historyRef.current.future = [];
     blocksRef.current = fresh;
@@ -330,7 +338,7 @@ export function EmailEditor({
   }, []);
 
   return (
-    <div className="flex flex-col h-screen -m-6 overflow-hidden">
+    <div className="fixed inset-0 left-14 flex flex-col overflow-hidden">
 
       {/* ── Header ── */}
       <header className="h-11 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0 z-10">
@@ -364,10 +372,10 @@ export function EmailEditor({
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
-        {/* ── CENTER: canvas + floating left panel ── */}
+        {/* ── CENTER: canvas + floating panels ── */}
         <div className="flex-1 relative overflow-hidden min-w-0">
 
-          {/* Collapsed panel restore pill */}
+          {/* Left panel — collapsed restore pill */}
           {!leftPanelVisible && (
             <button
               className="absolute z-40 left-4 top-3 flex items-center gap-2 bg-card border border-border/50 rounded-xl shadow-md px-3 py-2 hover:bg-muted/50 transition-colors select-none"
@@ -387,7 +395,6 @@ export function EmailEditor({
               className="absolute z-40 left-4 top-3 w-64 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
               style={{ height: "calc(100% - 24px)" }}
             >
-              {/* Panel header */}
               <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 border-b border-border/40 shrink-0 select-none">
                 <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <span className="flex-1 min-w-0 text-xs font-semibold text-foreground truncate">
@@ -401,7 +408,6 @@ export function EmailEditor({
                 </button>
               </div>
 
-              {/* Tab switcher */}
               <div className="px-3 pt-2 pb-1.5 shrink-0">
                 <div className="flex items-center bg-muted rounded-lg p-1 gap-1 h-8">
                   <button
@@ -431,10 +437,7 @@ export function EmailEditor({
                 </div>
               </div>
 
-              {/* Tab content */}
               <div className="flex-1 overflow-y-auto min-h-0">
-
-                {/* Blocks tab */}
                 {leftPanelTab === "blocks" && (
                   <div className="p-3 pb-4">
                     <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Blocks</p>
@@ -452,11 +455,9 @@ export function EmailEditor({
                   </div>
                 )}
 
-                {/* Settings tab — meta fields */}
                 {leftPanelTab === "settings" && (
                   <div className="p-3 space-y-3 pb-4">
                     <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Email settings</p>
-
                     {[
                       { id: "bc-subject",  label: "Subject",      val: subject,     set: setSubject,     ph: "Your email subject…" },
                       { id: "bc-from",     label: "From name",    val: fromName,    set: setFromName,    ph: "DigiCertificates" },
@@ -506,59 +507,70 @@ export function EmailEditor({
             </div>
           )}
 
-          {/* Canvas scroll area — padding-left when left panel visible so mx-auto centers in the visible area */}
+          {/* Floating right panel — block properties */}
+          {rightPanelVisible && (
+            <div
+              className="absolute z-40 right-4 top-3 w-64 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+              style={{ height: "calc(100% - 24px)" }}
+            >
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 border-b border-border/40 shrink-0 select-none">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <p className="flex-1 text-xs font-semibold text-foreground">Properties</p>
+                <button
+                  onClick={() => setRightPanelVisible(false)}
+                  className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <BlockPropertiesPanel
+                  block={blocks.find(b => b.id === selectedId) ?? null}
+                  onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
+                />
+              </div>
+            </div>
+          )}
+          {!rightPanelVisible && (
+            <button
+              className="absolute z-40 right-4 top-3 flex items-center gap-2 bg-card border border-border/50 rounded-xl shadow-md px-3 py-2 hover:bg-muted/50 transition-colors select-none"
+              onClick={() => setRightPanelVisible(true)}
+              title="Show properties panel"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-xs font-semibold text-foreground">Properties</span>
+            </button>
+          )}
+
+          {/* Canvas — dot grid background, Figma-style */}
           <div
             id="broadcast-canvas"
             className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
-            style={{ paddingLeft: leftPanelVisible ? 272 : 0 }}
+            style={{
+              paddingLeft: leftPanelVisible ? 272 : 0,
+              paddingRight: rightPanelVisible ? 272 : 0,
+              backgroundColor: "#0d0d0d",
+              backgroundImage: "radial-gradient(circle, #2a2a2a 1.5px, transparent 1.5px)",
+              backgroundSize: "22px 22px",
+            }}
+            onClick={e => { if (e.target === e.currentTarget) setSelectedId(null); }}
           >
             <EmailBlockBuilder
               blocks={blocks}
               selectedId={selectedId}
               subject={subject}
+              senderName={fromName}
               availableVars={availableVars}
               context="broadcast"
               onChange={handleBlocksChange}
               onSelect={setSelectedId}
               onStartFresh={handleStartFresh}
               onSubjectChange={setSubject}
+              onSenderNameChange={setFromName}
               onAddBlock={addBlock}
             />
           </div>
         </div>
-
-        {/* ── PROPERTIES panel (fixed right column) ── */}
-        {rightPanelVisible && (
-          <div className="w-60 shrink-0 border-l border-border/50 flex flex-col bg-card overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 shrink-0 bg-muted/40 select-none">
-              <p className="text-xs font-semibold text-foreground">Properties</p>
-              <button
-                onClick={() => setRightPanelVisible(false)}
-                className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <BlockPropertiesPanel
-              block={blocks.find(b => b.id === selectedId) ?? null}
-              onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
-            />
-          </div>
-        )}
-
-        {/* ── RIGHT: Preview panel (optional) ── */}
-
-        {/* Floating preview pill — only when panel hidden */}
-        {panelWidth === 0 && (
-          <button
-            className="absolute z-40 right-4 top-3 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-xl shadow-md px-3 py-2 hover:bg-zinc-800 transition-colors select-none text-zinc-400 hover:text-zinc-200"
-            onClick={() => setPanelWidth(previewMode === "mobile" ? 440 : 660)}
-            title="Show preview"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span className="text-xs font-medium">Preview</span>
-          </button>
-        )}
 
         <div
           style={{ width: panelWidth }}

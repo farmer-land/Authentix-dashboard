@@ -498,7 +498,7 @@ export default function EmailTemplateEditorPage() {
   ];
 
   return (
-    <div className="flex flex-col h-screen -m-6 overflow-hidden">
+    <div className="fixed inset-0 left-14 flex flex-col overflow-hidden">
 
       {/* ── Main flex body ────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden min-h-0">
@@ -728,34 +728,6 @@ export default function EmailTemplateEditorPage() {
             </div>
           </div>
 
-          {/* Zoom controls — bottom-left of canvas, above bottom dock */}
-          <div
-            className="absolute bottom-24 z-50 flex items-center gap-0.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg p-1 backdrop-blur-sm shadow-lg select-none transition-[left] duration-200"
-            style={{ left: leftPanelVisible ? 284 : 16 }}
-          >
-            <button
-              onClick={() => setZoom(z => +Math.max(0.25, z - 0.1).toFixed(2))}
-              className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light"
-              title="Zoom out (⌘−)"
-            >
-              −
-            </button>
-            <button
-              onClick={() => setZoom(1)}
-              className="px-2 h-6 text-[11px] text-zinc-400 hover:text-white font-mono hover:bg-zinc-700/70 rounded transition-colors min-w-12 text-center"
-              title="Reset zoom (⌘0)"
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <button
-              onClick={() => setZoom(z => +Math.min(2.5, z + 0.1).toFixed(2))}
-              className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light"
-              title="Zoom in (⌘+)"
-            >
-              +
-            </button>
-          </div>
-
           {/* Floating right panel — properties (mirrors left panel style) */}
           {rightPanelVisible && (
             <div
@@ -906,6 +878,31 @@ export default function EmailTemplateEditorPage() {
             title="Redo (⌘⇧Z)"
           >
             <Redo2 className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-5 bg-zinc-700/60 shrink-0" />
+
+          {/* Zoom */}
+          <button
+            onClick={() => setZoom(z => +Math.max(0.25, z - 0.1).toFixed(2))}
+            className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light shrink-0"
+            title="Zoom out (⌘−)"
+          >
+            −
+          </button>
+          <button
+            onClick={() => setZoom(1)}
+            className="px-1.5 h-6 text-[11px] text-zinc-400 hover:text-white font-mono hover:bg-zinc-700/70 rounded transition-colors min-w-10 text-center shrink-0"
+            title="Reset zoom (⌘0)"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={() => setZoom(z => +Math.min(2.5, z + 0.1).toFixed(2))}
+            className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/70 rounded transition-colors text-base leading-none font-light shrink-0"
+            title="Zoom in (⌘+)"
+          >
+            +
           </button>
 
           {/* Preview toggle */}
