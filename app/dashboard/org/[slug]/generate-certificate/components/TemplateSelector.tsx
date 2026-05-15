@@ -192,7 +192,7 @@ export function TemplateSelector({
 
     if (!templateName.trim()) { setError('Template name is required'); return; }
     if (!categoryId) { setError('Please select a category'); return; }
-    if (!subcategoryId) {
+    if (!subcategoryId && subcategories.length > 0) {
       if (subcategoriesLoading) { setError('Please wait for subcategories to load'); return; }
       setError('Please select a subcategory');
       return;
@@ -501,7 +501,9 @@ export function TemplateSelector({
 
                       {categoryId && (
                         <div className="space-y-2">
-                          <Label htmlFor="subcategory">Subcategory <span className="text-destructive">*</span></Label>
+                          <Label htmlFor="subcategory">
+                            Subcategory{subcategories.length > 0 && <span className="text-destructive"> *</span>}
+                          </Label>
                           <Select value={subcategoryId} onValueChange={setSubcategoryId} disabled={isProcessing || subcategoriesLoading}>
                             <SelectTrigger>
                               <SelectValue placeholder={subcategoriesLoading ? 'Loading subcategories...' : subcategories.length === 0 ? 'No subcategories available' : 'Select subcategory'} />
@@ -552,7 +554,7 @@ export function TemplateSelector({
 
                       <Button
                         onClick={handleUpload}
-                        disabled={isProcessing || !templateName.trim() || !categoryId || !subcategoryId || categoriesLoading || subcategoriesLoading}
+                        disabled={isProcessing || !templateName.trim() || !categoryId || (!subcategoryId && subcategories.length > 0) || categoriesLoading || subcategoriesLoading}
                         className="w-full"
                         size="lg"
                       >

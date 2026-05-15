@@ -32,6 +32,7 @@ export type { TemplateField, RecentGeneratedTemplate, InProgressTemplate } from 
 export type { Certificate } from "./certificates";
 export type { ImportJob } from "./imports";
 export type { VerificationEvent } from "./verification";
+export type { ManagementCategory, ManagementSubcategory } from "./catalog";
 export type {
   DeliveryIntegration,
   DeliveryProviderType,

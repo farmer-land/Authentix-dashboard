@@ -1,10 +1,36 @@
 /**
  * CATALOG DOMAIN API
  *
- * Certificate category and subcategory retrieval.
+ * Certificate category and subcategory retrieval + management.
  */
 
 import { apiRequest } from "./core";
+
+// ── Management types ──────────────────────────────────────────────────────────
+
+export interface ManagementCategory {
+  category_id: string;
+  key: string;
+  name: string;
+  original_name: string;
+  group_key: string | null;
+  sort_order: number | null;
+  is_org_custom: boolean;
+  is_hidden: boolean;
+  has_name_override: boolean;
+}
+
+export interface ManagementSubcategory {
+  subcategory_id: string;
+  category_id: string;
+  key: string;
+  name: string;
+  original_name: string;
+  sort_order: number | null;
+  is_org_custom: boolean;
+  is_hidden: boolean;
+  has_name_override: boolean;
+}
 
 export const catalogApi = {
   /**
@@ -38,5 +64,62 @@ export const catalogApi = {
       }>;
     }>(`/catalog/categories/${categoryId}/subcategories`);
     return response.data!;
+  },
+
+  // ── Management methods (include hidden) ─────────────────────────────────────
+
+  manage: {
+    listCategories: async (): Promise<ManagementCategory[]> => {
+      const r = await apiRequest<{ categories: ManagementCategory[] }>("/catalog/manage/categories");
+      return r.data!.categories;
+    },
+
+    createCategory: async (data: { name: string; group_key?: "course_certificates" | "company_work" | null }): Promise<{ category_id: string }> => {
+      const r = await apiRequest<{ category_id: string }>("/catalog/manage/categories", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      return r.data!;
+    },
+
+    updateCategory: async (categoryId: string, data: { name?: string; is_hidden?: boolean; sort_order?: number | null }): Promise<void> => {
+      await apiRequest(`/catalog/manage/categories/${categoryId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteCategory: async (categoryId: string): Promise<void> => {
+      await apiRequest(`/catalog/manage/categories/${categoryId}`, { method: "DELETE" });
+    },
+
+    listSubcategories: async (categoryId: string): Promise<ManagementSubcategory[]> => {
+      const r = await apiRequest<{ subcategories: ManagementSubcategory[] }>(
+        `/catalog/manage/categories/${categoryId}/subcategories`
+      );
+      return r.data!.subcategories;
+    },
+
+    createSubcategory: async (categoryId: string, data: { name: string }): Promise<{ subcategory_id: string }> => {
+      const r = await apiRequest<{ subcategory_id: string }>(
+        `/catalog/manage/categories/${categoryId}/subcategories`,
+        { method: "POST", body: JSON.stringify(data) }
+      );
+      return r.data!;
+    },
+
+    updateSubcategory: async (categoryId: string, subcategoryId: string, data: { name?: string; is_hidden?: boolean; sort_order?: number | null }): Promise<void> => {
+      await apiRequest(`/catalog/manage/categories/${categoryId}/subcategories/${subcategoryId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteSubcategory: async (categoryId: string, subcategoryId: string): Promise<void> => {
+      await apiRequest(
+        `/catalog/manage/categories/${categoryId}/subcategories/${subcategoryId}`,
+        { method: "DELETE" }
+      );
+    },
   },
 };
