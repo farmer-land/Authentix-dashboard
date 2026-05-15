@@ -411,12 +411,15 @@ export default function OrganizationPage() {
                   id="verification_message"
                   value={organizationData.verification_message}
                   onChange={(e) => setOrganizationData({ ...organizationData, verification_message: e.target.value })}
-                  placeholder={`We are proud to certify that {{name}} has successfully completed the {{category}} program.`}
+                  placeholder="We are proud to certify that {{name}} has successfully completed the {{category}} program."
                   className="resize-none transition-all bg-card hover:bg-muted/20 min-h-20"
                   maxLength={300}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Shown on the public certificate verification page. Use <code className="font-mono bg-muted px-1 rounded text-[11px]">{"{{name}}"}</code> for the recipient&apos;s name and <code className="font-mono bg-muted px-1 rounded text-[11px]">{"{{category}}"}</code> for the category.
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Appears on the public certificate verification page below the recipient&apos;s name.
+                  Use <code className="font-mono bg-muted px-1 rounded text-[11px]">{"{{name}}"}</code> for the recipient name and{" "}
+                  <code className="font-mono bg-muted px-1 rounded text-[11px]">{"{{category}}"}</code> for the category.
+                  If left blank, an auto-generated achievement statement is shown.
                 </p>
               </div>
             </div>

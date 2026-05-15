@@ -299,14 +299,18 @@ export default function VerifyPage() {
                   )}
                 </div>
 
-                {/* Org verification message (from settings) */}
-                {org?.verification_message && (
-                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed border-l-2 pl-3" style={{ borderColor: cfg.accent }}>
-                    {org.verification_message
-                      .replace(/\{\{name\}\}/g, cert.recipient_name)
-                      .replace(/\{\{category\}\}/g, cert.subcategory_name || cert.category_name || '')}
-                  </p>
-                )}
+                {/* Achievement statement — custom from settings or auto-generated */}
+                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed border-l-2 pl-3" style={{ borderColor: cfg.accent }}>
+                  {org?.verification_message
+                    ? org.verification_message
+                        .replace(/\{\{name\}\}/g, cert.recipient_name)
+                        .replace(/\{\{category\}\}/g, cert.subcategory_name || cert.category_name || '')
+                    : cert.subcategory_name
+                      ? `${cert.recipient_name} has successfully completed the ${cert.subcategory_name} program under ${cert.category_name}.`
+                      : cert.category_name
+                        ? `${cert.recipient_name} has successfully completed the ${cert.category_name} program.`
+                        : `This certificate has been issued to ${cert.recipient_name} and is verified authentic.`}
+                </p>
 
                 {/* Issuing org */}
                 {org && (
