@@ -218,15 +218,23 @@ export default function VerifyPage() {
         :root { --verify-bg: #f5f6fa; }
         @media (prefers-color-scheme: dark) { :root { --verify-bg: #0a0a0c; } }
         .dark { --verify-bg: #0a0a0c; }
-        @keyframes stampIn { 0%{opacity:0;transform:scale(1.4) rotate(-8deg)} 60%{opacity:1;transform:scale(0.92) rotate(2deg)} 100%{transform:scale(1) rotate(0deg)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes ringPulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:0;transform:scale(1.6)} }
-        .stamp-animate { animation: stampIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+        @keyframes chipIn { 0%{opacity:0;transform:translateY(-6px) scale(0.94)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes logoPulse { 0%,100%{filter:drop-shadow(0 0 4px rgba(62,207,142,0.4))} 50%{filter:drop-shadow(0 0 10px rgba(62,207,142,0.8))} }
         .fade-up { animation: fadeUp 0.4s ease-out both; }
         .fade-up-1 { animation-delay: 0.05s; }
         .fade-up-2 { animation-delay: 0.1s; }
         .fade-up-3 { animation-delay: 0.15s; }
         .ring-pulse { animation: ringPulse 2s ease-in-out infinite; }
+        .chip-in { animation: chipIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .logo-pulse { animation: logoPulse 2.5s ease-in-out infinite; }
+        .chip-shimmer {
+          background: linear-gradient(90deg, transparent 0%, rgba(62,207,142,0.25) 50%, transparent 100%);
+          background-size: 200% 100%;
+          animation: shimmer 2.4s linear infinite;
+        }
       `}</style>
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
@@ -299,15 +307,41 @@ export default function VerifyPage() {
                     </div>
                   )}
 
-                  {/* Status stamp overlay */}
+                  {/* Authentix verified chip — top-left */}
                   {imageLoaded && result.preview_url && (
-                    <div className="absolute top-4 right-4 stamp-animate pointer-events-none" style={{ animationDelay: '0.25s' }}>
-                      <div className={cn(
-                        'flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 text-xs font-bold uppercase tracking-widest backdrop-blur-sm',
-                        cfg.stampBg,
-                      )}>
-                        <cfg.StampIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                        {cfg.stampLabel}
+                    <div className="absolute top-4 left-4 chip-in pointer-events-none" style={{ animationDelay: '0.3s' }}>
+                      <div className="relative flex items-center gap-2 px-3 py-2 rounded-2xl overflow-hidden"
+                        style={{
+                          background: 'rgba(0,0,0,0.55)',
+                          backdropFilter: 'blur(12px)',
+                          WebkitBackdropFilter: 'blur(12px)',
+                          border: '1px solid rgba(62,207,142,0.35)',
+                          boxShadow: '0 2px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(62,207,142,0.1) inset',
+                        }}
+                      >
+                        {/* Shimmer layer */}
+                        <div className="chip-shimmer absolute inset-0 rounded-2xl" />
+                        {/* Logo */}
+                        <img
+                          src="/brand/authentix-24-24.svg"
+                          alt="Authentix"
+                          className="w-5 h-5 shrink-0 logo-pulse relative z-10"
+                          style={{ animationDelay: '0.5s' }}
+                        />
+                        {/* Text */}
+                        <div className="relative z-10">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white leading-none">
+                            Authentix
+                          </p>
+                          <p className={cn(
+                            'text-[9px] font-semibold leading-none mt-0.5',
+                            status === 'valid' ? 'text-emerald-400' :
+                            status === 'expired' ? 'text-amber-400' :
+                            status === 'revoked' ? 'text-red-400' : 'text-gray-400',
+                          )}>
+                            {status === 'valid' ? '✓ Verified' : status === 'expired' ? 'Expired' : status === 'revoked' ? 'Revoked' : 'Not Found'}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
