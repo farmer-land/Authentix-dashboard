@@ -226,6 +226,21 @@ export function parseEmbedInput(raw: string): { url: string; height?: number; ti
   return { url: s };
 }
 
+// Domains that set X-Frame-Options DENY/SAMEORIGIN — can't be iframed
+const BLOCKS_EMBED = [
+  "linkedin.com", "instagram.com", "facebook.com", "twitter.com", "x.com",
+  "tiktok.com", "reddit.com", "pinterest.com",
+  // YouTube non-embed pages
+  "youtube.com/watch", "youtube.com/channel", "youtube.com/@", "youtube.com/shorts",
+  "youtu.be",
+];
+
+export function embedIsBlocked(url: string): boolean {
+  if (!url) return false;
+  try { new URL(url); } catch { return false; }
+  return BLOCKS_EMBED.some(p => url.includes(p));
+}
+
 // ── Default block configs ────────────────────────────────────────────────────
 
 export function defaultBlock(type: BlockType): EmailBlock {
@@ -1702,28 +1717,45 @@ function BlockLiveView({
 
     case "iframe": {
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
-      const isYt = block.iframeUrl?.includes("youtube.com/embed") || block.iframeUrl?.includes("youtu.be");
-      const isVimeo = block.iframeUrl?.includes("player.vimeo.com");
+      const url = block.iframeUrl || "";
+      const isYt = url.includes("youtube.com/embed");
+      const isVimeo = url.includes("player.vimeo.com");
+      const blocked = embedIsBlocked(url);
       const allowAttr = block.iframeAllow
         ?? (isYt ? "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           : isVimeo ? "autoplay; fullscreen; picture-in-picture"
           : undefined);
+      let hostname = "";
+      try { hostname = new URL(url).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
       return (
         <div style={{ padding: `${pV}px ${pH}px` }}>
-          {block.iframeUrl ? (
+          {!url ? (
+            <div style={{ border: "1px dashed #3f3f46", borderRadius: 8, padding: "32px 16px", textAlign: "center", color: "#6b7280", fontSize: 12, fontFamily: "sans-serif" }}>
+              <Globe size={20} style={{ display: "block", margin: "0 auto 6px", opacity: 0.4 }} />
+              Add an embed URL in the properties panel
+            </div>
+          ) : blocked ? (
+            /* Site blocks iframe embedding — show a preview card instead */
+            <div style={{ border: "1px solid #3f3f46", borderRadius: 8, padding: "24px 20px", textAlign: "center", background: "#1a1a1a", fontFamily: "sans-serif" }}>
+              <Globe size={18} style={{ display: "block", margin: "0 auto 8px", color: "#3ECF8E", opacity: 0.8 }} />
+              <p style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600, margin: "0 0 4px" }}>{block.iframeTitle || hostname}</p>
+              <p style={{ color: "#6b7280", fontSize: 11, margin: "0 0 12px" }}>
+                {hostname} prevents live preview — email recipients will see a link instead.
+              </p>
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-block", background: "#3ECF8E", color: "#000", fontSize: 11, fontWeight: 700, padding: "6px 14px", borderRadius: 6, textDecoration: "none" }}>
+                Open in new tab ↗
+              </a>
+            </div>
+          ) : (
             <iframe
-              src={block.iframeUrl}
+              src={url}
               title={block.iframeTitle || "Embedded content"}
               height={block.iframeHeight || 400}
               {...(allowAttr ? { allow: allowAttr } : {})}
               {...(allowAttr ? { allowFullScreen: true } : { sandbox: block.iframeSandbox || "allow-scripts allow-same-origin allow-forms" })}
               style={{ width: "100%", border: "none", borderRadius: 8, display: "block" }}
             />
-          ) : (
-            <div style={{ border: "1px dashed #3f3f46", borderRadius: 8, padding: "32px 16px", textAlign: "center", color: "#6b7280", fontSize: 12, fontFamily: "sans-serif" }}>
-              <Globe size={20} style={{ display: "block", margin: "0 auto 6px", opacity: 0.4 }} />
-              Add an embed URL in the properties panel
-            </div>
           )}
         </div>
       );
@@ -2713,41 +2745,53 @@ export function BlockPropertiesPanel({
       );
     }
 
-    if (type === "iframe") return (
-      <Section label="Embed">
-        <p className="text-[9px] text-muted-foreground/50 -mt-1">Paste a URL or the full embed code from YouTube, Calendly, Google Maps, etc.</p>
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">URL or embed code</label>
-          <textarea
-            rows={3}
-            value={block.iframeUrl || ""}
-            placeholder={"https://calendly.com/…\n— or paste YouTube/Vimeo <iframe> code —"}
-            className={`${INP} resize-none font-mono text-[10px] leading-relaxed`}
-            onChange={e => {
-              const parsed = parseEmbedInput(e.target.value);
-              u({
-                iframeUrl: parsed.url,
-                ...(parsed.height ? { iframeHeight: parsed.height } : {}),
-                ...(parsed.title ? { iframeTitle: parsed.title } : {}),
-                ...(parsed.allow !== undefined ? { iframeAllow: parsed.allow } : {}),
-              });
-            }}
-          />
-        </div>
-        {block.iframeUrl && block.iframeUrl.startsWith("http") && (
-          <p className="text-[9px] text-[#3ECF8E]/70 font-mono truncate">↳ {block.iframeUrl}</p>
-        )}
-        <NumBox label="Height" value={block.iframeHeight ?? 400} onChange={v => u({ iframeHeight: v })} unit="px" min={100} max={1200} />
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Title (accessibility)</label>
-          <input value={block.iframeTitle || ""} onChange={e => u({ iframeTitle: e.target.value })} placeholder="Embedded content" className={INP} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Fallback link text (shown in email)</label>
-          <input value={block.iframeFallbackText || ""} onChange={e => u({ iframeFallbackText: e.target.value })} placeholder="View this content online →" className={INP} />
-        </div>
-      </Section>
-    );
+    if (type === "iframe") {
+      const isBlocked = embedIsBlocked(block.iframeUrl || "");
+      return (
+        <Section label="Embed">
+          <p className="text-[9px] text-muted-foreground/50 -mt-1">Paste a URL or the full embed code from YouTube, Calendly, Google Maps, etc.</p>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">URL or embed code</label>
+            <textarea
+              rows={3}
+              value={block.iframeUrl || ""}
+              placeholder={"https://calendly.com/…\n— or paste YouTube/Vimeo <iframe> code —"}
+              className={`${INP} resize-none font-mono text-[10px] leading-relaxed`}
+              onChange={e => {
+                const parsed = parseEmbedInput(e.target.value);
+                u({
+                  iframeUrl: parsed.url,
+                  ...(parsed.height ? { iframeHeight: parsed.height } : {}),
+                  ...(parsed.title ? { iframeTitle: parsed.title } : {}),
+                  ...(parsed.allow !== undefined ? { iframeAllow: parsed.allow } : {}),
+                });
+              }}
+            />
+          </div>
+          {block.iframeUrl && block.iframeUrl.startsWith("http") && !isBlocked && (
+            <p className="text-[9px] text-[#3ECF8E]/70 font-mono truncate">↳ {block.iframeUrl}</p>
+          )}
+          {isBlocked && (
+            <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 space-y-1">
+              <p className="text-[10px] font-semibold text-yellow-500/80">Live preview not available</p>
+              <p className="text-[9px] text-muted-foreground/60 leading-relaxed">
+                LinkedIn, Instagram, Facebook, X, and Twitter block iframe embedding — it's their policy, not a bug.
+                Recipients will see the fallback link below instead. Use the Social block for profile links.
+              </p>
+            </div>
+          )}
+          <NumBox label="Height" value={block.iframeHeight ?? 400} onChange={v => u({ iframeHeight: v })} unit="px" min={100} max={1200} />
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">Title (accessibility)</label>
+            <input value={block.iframeTitle || ""} onChange={e => u({ iframeTitle: e.target.value })} placeholder="Embedded content" className={INP} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">Fallback link text (shown in email)</label>
+            <input value={block.iframeFallbackText || ""} onChange={e => u({ iframeFallbackText: e.target.value })} placeholder="View this content online →" className={INP} />
+          </div>
+        </Section>
+      );
+    }
 
     return null;
   })();
