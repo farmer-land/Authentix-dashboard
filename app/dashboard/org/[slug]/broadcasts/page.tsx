@@ -22,7 +22,7 @@ import {
 import {
   Megaphone, Plus, Loader2, Send, Trash2, MoreHorizontal, Clock,
   CheckCircle2, AlertCircle, Edit2, Users, Upload, FileSpreadsheet,
-  ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw,
+  ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw, Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
@@ -204,8 +204,19 @@ function CampaignWizard({
     }
   }, []);
 
+  // ── Template variables used in the composed HTML ──────────────────────────
+  const templateVarsFromHtml: string[] = w.html_body
+    ? [...new Set([...w.html_body.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]!))]
+        .filter(v => v.toLowerCase() !== "email")
+    : [];
+
+  // Structured manual mode: when the email uses variables, show a table instead of a textarea
+  const isStructuredManual = w.recipient_mode === "manual" && templateVarsFromHtml.length > 0;
+
   // ── Effective recipients list ──────────────────────────────────────────────
-  const effectiveRecipients = w.recipient_mode === "manual"
+  const effectiveRecipients = isStructuredManual
+    ? w.recipients.filter(r => r.email?.includes("@"))
+    : w.recipient_mode === "manual"
     ? parseManualEmails(w.manual_emails)
     : w.recipient_mode === "csv" ? w.recipients : [];
 
@@ -213,7 +224,7 @@ function CampaignWizard({
     ? (segments.find(s => s.id === w.segment_id)?.contact_count ?? 0)
     : effectiveRecipients.length;
 
-  // ── Detected variables ─────────────────────────────────────────────────────
+  // ── Detected variables (from CSV columns, for the editor hint) ─────────────
   const templateVars = w.recipient_mode === "csv"
     ? w.csv_columns.filter(c => c.toLowerCase() !== "email")
     : w.recipient_mode === "manual"
@@ -241,6 +252,23 @@ function CampaignWizard({
     setShowEditor(false);
     setStep(2); // advance to Recipients step after design is done
   }, []);
+
+  // ── Structured manual row helpers ─────────────────────────────────────────
+  const addManualRow = useCallback(() => {
+    const row: ParsedRecipient = { email: "" };
+    templateVarsFromHtml.forEach(v => { row[v] = ""; });
+    set("recipients", [...w.recipients, row]);
+  }, [w.recipients, templateVarsFromHtml]);
+
+  const updateManualRow = useCallback((idx: number, field: string, value: string) => {
+    const updated = [...w.recipients];
+    updated[idx] = { ...updated[idx]!, [field]: value };
+    set("recipients", updated);
+  }, [w.recipients]);
+
+  const removeManualRow = useCallback((idx: number) => {
+    set("recipients", w.recipients.filter((_, i) => i !== idx));
+  }, [w.recipients]);
 
   // ── Send ───────────────────────────────────────────────────────────────────
   const handleSend = async () => {
@@ -360,6 +388,24 @@ function CampaignWizard({
   // ── Step 1: Recipients ─────────────────────────────────────────────────────
   const renderStep1 = () => (
     <div className="space-y-4">
+      {/* Template variable hint — shown at top so user knows what columns to prepare */}
+      {templateVarsFromHtml.length > 0 && (
+        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-xs text-blue-800 dark:text-blue-200 ml-1">
+            <span className="font-medium">Your email uses these variables:</span>{" "}
+            {templateVarsFromHtml.map(v => (
+              <code key={v} className="bg-blue-100 dark:bg-blue-900/50 px-1 rounded mx-0.5 font-mono">
+                {`{{${v}}}`}
+              </code>
+            ))}
+            <span className="block mt-1 text-blue-600 dark:text-blue-300">
+              Make sure your data includes matching columns so each recipient gets a personalised email.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Mode tabs */}
       <div className="flex rounded-lg border overflow-hidden">
         {([
@@ -375,7 +421,14 @@ function CampaignWizard({
                 ? "bg-primary text-primary-foreground"
                 : "bg-background hover:bg-muted text-muted-foreground",
             )}
-            onClick={() => set("recipient_mode", mode)}
+            onClick={() => {
+              if (mode !== w.recipient_mode) {
+                set("recipients", []);
+                set("csv_columns", []);
+                set("manual_emails", "");
+              }
+              set("recipient_mode", mode);
+            }}
           >
             {icon} {label}
           </button>
@@ -404,7 +457,11 @@ function CampaignWizard({
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Required column: <code className="bg-muted px-1 rounded">email</code>
-              &nbsp;— any other columns become template variables
+              {templateVarsFromHtml.length > 0 && (
+                <> — also add columns: {templateVarsFromHtml.map((v, i) => (
+                  <span key={v}><code className="bg-muted px-1 rounded">{v}</code>{i < templateVarsFromHtml.length - 1 ? ", " : ""}</span>
+                ))}</>
+              )}
             </p>
             <input
               ref={fileInputRef}
@@ -416,7 +473,7 @@ function CampaignWizard({
           </div>
 
           {w.recipients.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-green-700 dark:text-green-400">
                   <CheckCircle2 className="inline h-4 w-4 mr-1" />
@@ -427,17 +484,47 @@ function CampaignWizard({
                 </Button>
               </div>
 
-              {w.csv_columns.filter(c => c.toLowerCase() !== "email").length > 0 && (
-                <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-                  <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                    <span className="font-medium">Detected columns you can use as variables:</span>{" "}
-                    {w.csv_columns.filter(c => c.toLowerCase() !== "email").map(c => (
-                      <code key={c} className="bg-blue-100 dark:bg-blue-900/50 px-1 rounded mx-0.5">
-                        {`{{${c}}}`}
-                      </code>
-                    ))}
-                  </AlertDescription>
-                </Alert>
+              {/* Template variable coverage — shows which vars are satisfied by CSV columns */}
+              {templateVarsFromHtml.length > 0 && (
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="px-3 py-2 bg-muted/50 border-b text-xs font-medium text-muted-foreground">
+                    Template variable coverage
+                  </div>
+                  <div className="divide-y">
+                    {templateVarsFromHtml.map(v => {
+                      const matchedCol = w.csv_columns.find(c => c.toLowerCase() === v.toLowerCase());
+                      return (
+                        <div key={v} className="flex items-center gap-3 px-3 py-2 text-xs">
+                          {matchedCol ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                          )}
+                          <code className="bg-muted px-1.5 py-0.5 rounded font-mono">{`{{${v}}}`}</code>
+                          {matchedCol ? (
+                            <span className="text-green-700 dark:text-green-400">
+                              matched by <span className="font-medium">"{matchedCol}"</span> column
+                            </span>
+                          ) : (
+                            <span className="text-amber-700 dark:text-amber-400">
+                              no matching column — will be blank for all recipients
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Available columns (non-template info) */}
+              {w.csv_columns.filter(c => c.toLowerCase() !== "email" && !templateVarsFromHtml.some(v => v.toLowerCase() === c.toLowerCase())).length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Extra columns in file (not used as variables):{" "}
+                  {w.csv_columns.filter(c => c.toLowerCase() !== "email" && !templateVarsFromHtml.some(v => v.toLowerCase() === c.toLowerCase())).map(c => (
+                    <code key={c} className="bg-muted px-1 rounded mx-0.5">{c}</code>
+                  ))}
+                </p>
               )}
 
               {/* Preview table */}
@@ -474,23 +561,110 @@ function CampaignWizard({
 
       {/* Manual entry */}
       {w.recipient_mode === "manual" && (
-        <div className="space-y-2">
-          <Label>Email addresses</Label>
-          <Textarea
-            placeholder={"ravi@example.com\npriya@example.com\nananya@example.com"}
-            value={w.manual_emails}
-            onChange={e => set("manual_emails", e.target.value)}
-            className="min-h-40 font-mono text-xs"
-          />
-          <p className="text-xs text-muted-foreground">
-            One per line, or comma/semicolon separated.
-            {parseManualEmails(w.manual_emails).length > 0 && (
-              <span className="text-green-600 ml-2 font-medium">
-                {parseManualEmails(w.manual_emails).length} valid emails detected
-              </span>
+        isStructuredManual ? (
+          /* Structured table when template has variables */
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Recipients <span className="text-red-500">*</span></Label>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addManualRow}>
+                <Plus className="h-3 w-3 mr-1" /> Add row
+              </Button>
+            </div>
+
+            {w.recipients.length === 0 ? (
+              <div
+                className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onClick={addManualRow}
+              >
+                <PenLine className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm font-medium">Add your first recipient</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fill in email + personalised values for each person
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50 border-b">
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-44">Email *</th>
+                      {templateVarsFromHtml.map(v => (
+                        <th key={v} className="text-left px-3 py-2 font-medium text-muted-foreground min-w-32">
+                          <code className="font-mono text-[11px] bg-muted px-1 rounded">{`{{${v}}}`}</code>
+                        </th>
+                      ))}
+                      <th className="w-8 px-2 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {w.recipients.map((row, i) => (
+                      <tr key={i} className="border-b last:border-0 hover:bg-muted/10">
+                        <td className="px-2 py-1.5">
+                          <Input
+                            value={row.email}
+                            onChange={e => updateManualRow(i, "email", e.target.value)}
+                            placeholder="email@example.com"
+                            className="h-7 text-xs font-mono"
+                          />
+                        </td>
+                        {templateVarsFromHtml.map(v => (
+                          <td key={v} className="px-2 py-1.5">
+                            <Input
+                              value={(row[v] as string) ?? ""}
+                              onChange={e => updateManualRow(i, v, e.target.value)}
+                              placeholder={v}
+                              className="h-7 text-xs"
+                            />
+                          </td>
+                        ))}
+                        <td className="px-2 py-1.5">
+                          <button
+                            onClick={() => removeManualRow(i)}
+                            className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </p>
-        </div>
+
+            {w.recipients.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                <span className="text-green-600 font-medium">
+                  {w.recipients.filter(r => r.email?.includes("@")).length} valid recipients
+                </span>
+                {w.recipients.some(r => !r.email?.includes("@")) && (
+                  <span className="text-amber-600 ml-2">
+                    ({w.recipients.filter(r => !r.email?.includes("@")).length} rows missing a valid email)
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
+        ) : (
+          /* Simple textarea when no template variables */
+          <div className="space-y-2">
+            <Label>Email addresses</Label>
+            <Textarea
+              placeholder={"ravi@example.com\npriya@example.com\nananya@example.com"}
+              value={w.manual_emails}
+              onChange={e => set("manual_emails", e.target.value)}
+              className="min-h-40 font-mono text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              One per line, or comma/semicolon separated.
+              {parseManualEmails(w.manual_emails).length > 0 && (
+                <span className="text-green-600 ml-2 font-medium">
+                  {parseManualEmails(w.manual_emails).length} valid emails detected
+                </span>
+              )}
+            </p>
+          </div>
+        )
       )}
 
       {/* Segment picker */}
