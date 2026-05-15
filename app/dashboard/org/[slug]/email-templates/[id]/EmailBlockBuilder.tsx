@@ -2887,10 +2887,42 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isNew, setIsNew] = useState(true);
+  const [resizing, setResizing] = useState(false);
+  const [resizeLabel, setResizeLabel] = useState<string | null>(null);
+  const resizeRef = useRef<{ startY: number; startVal: number; prop: "paddingV" | "height" } | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => setIsNew(false), 220);
     return () => clearTimeout(t);
   }, []);
+
+  // Global mouse move/up for resize drag
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const { startY, startVal, prop } = resizeRef.current;
+      const delta = Math.round((e.clientY - startY) / 2);
+      const next = Math.max(0, Math.min(200, startVal + delta));
+      onChange({ ...block, [prop]: next });
+      setResizeLabel(`${prop === "height" ? "Height" : "Padding"}: ${next}px`);
+    };
+    const onUp = () => { setResizing(false); setResizeLabel(null); resizeRef.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resizing]);
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const isSpacer = block.type === "spacer";
+    const prop = isSpacer ? "height" : "paddingV";
+    const startVal = isSpacer ? (block.height ?? 24) : (block.paddingV ?? (block.type === "header" ? 44 : 16));
+    resizeRef.current = { startY: e.clientY, startVal, prop };
+    setResizing(true);
+  };
 
   const contextItems: ContextMenuItem[] = [
     ...(!isFirst ? [{ label: "Move up", icon: <ArrowUp className="w-3 h-3" />, action: onMoveUp }] : []),
@@ -2964,6 +2996,30 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
           onChange={onChange}
           availableVars={availableVars}
         />
+
+        {/* Resize handle — bottom edge, drag to change paddingV (or height for spacer) */}
+        {block.type !== "cert_image" && (
+          <div
+            onMouseDown={startResize}
+            className={cn(
+              "absolute bottom-0 left-0 right-0 h-2.5 flex items-end justify-center pb-0.5 cursor-ns-resize z-20 transition-opacity select-none",
+              resizing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}
+            title="Drag to resize block"
+          >
+            <div className={cn(
+              "w-10 h-1 rounded-full transition-colors",
+              resizing ? "bg-[#3ECF8E]" : "bg-zinc-500/50 hover:bg-[#3ECF8E]/70"
+            )} />
+          </div>
+        )}
+
+        {/* Resize tooltip */}
+        {resizing && resizeLabel && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 bg-zinc-900 border border-zinc-700 rounded px-2 py-0.5 text-[10px] font-mono text-zinc-200 pointer-events-none whitespace-nowrap shadow-lg">
+            {resizeLabel}
+          </div>
+        )}
       </div>
 
       {contextMenu && (
