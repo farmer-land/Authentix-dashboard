@@ -144,7 +144,7 @@ export function EmailEditor({
     return [];
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [emailBg, setEmailBg] = useState<EmailBackground>({ type: "solid", color: "#18181b" });
+  const [emailBg, setEmailBg] = useState<EmailBackground>({ type: "solid", color: "#ffffff" });
 
   // Undo/redo history (stored in refs — mutations don't trigger re-renders)
   const historyRef = useRef<{ past: EmailBlock[][], future: EmailBlock[][] }>({ past: [], future: [] });

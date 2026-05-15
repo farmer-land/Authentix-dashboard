@@ -717,7 +717,7 @@ export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground): s
   const inner = blocks.map(blockToHtml).join("\n");
   const wrapperBg = (() => {
     if (!emailBg || !emailBg.type || emailBg.type === "solid")
-      return `background:${emailBg?.color || "#18181b"};`;
+      return `background:${emailBg?.color || "#ffffff"};`;
     if (emailBg.type === "image" && emailBg.imageUrl) {
       const pos = emailBg.imagePosition || "center";
       const size = emailBg.imageSize || "cover";
@@ -726,9 +726,9 @@ export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground): s
     }
     if (emailBg.type === "gradient") {
       const angle = emailBg.gradientAngle ?? 135;
-      return `background:linear-gradient(${angle}deg,${emailBg.color||"#18181b"} 0%,${emailBg.gradientEnd||"#111111"} 100%);`;
+      return `background:linear-gradient(${angle}deg,${emailBg.color||"#ffffff"} 0%,${emailBg.gradientEnd||"#f0f0f0"} 100%);`;
     }
-    return "background:#18181b;";
+    return "background:#ffffff;";
   })();
   // Embed blocks as a JSON comment so the editor can restore them on next open
   const jsonComment = `<!-- ${BLOCKS_JSON_MARKER}:${JSON.stringify(blocks)} -->`;

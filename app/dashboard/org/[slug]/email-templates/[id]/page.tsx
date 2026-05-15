@@ -123,7 +123,7 @@ export default function EmailTemplateEditorPage() {
   const dragStartWidthRight = useRef(0);
 
   // Email background
-  const [emailBg, setEmailBg] = useState<EmailBackground>({ type: "solid", color: "#18181b" });
+  const [emailBg, setEmailBg] = useState<EmailBackground>({ type: "solid", color: "#ffffff" });
 
   // Canvas zoom (Ctrl+scroll or +/- controls)
   const [zoom, setZoom] = useState(1.0);

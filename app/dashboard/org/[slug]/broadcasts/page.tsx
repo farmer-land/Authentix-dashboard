@@ -610,57 +610,139 @@ function CampaignWizard({
   );
 
   // ── Step 3: Review & Send ──────────────────────────────────────────────────
-  const renderStep3 = () => (
-    <div className="space-y-4">
-      <div className="rounded-xl border divide-y overflow-hidden">
-        <ReviewRow label="Campaign" value={w.name} />
-        <ReviewRow label="Email type" value={EMAIL_TYPES.find(t => t.value === w.email_type)?.label ?? w.email_type} />
-        <ReviewRow label="From" value={`${w.from_name} <${w.from_email}>`} />
-        <ReviewRow label="Subject" value={w.subject} />
-        <ReviewRow
-          label="Recipients"
-          value={
-            w.recipient_mode === "segment"
-              ? `${recipientCount} contacts in "${segments.find(s => s.id === w.segment_id)?.name ?? "segment"}"`
-              : w.recipient_mode === "csv"
-              ? `${recipientCount} recipients from CSV`
-              : `${recipientCount} emails entered manually`
-          }
-        />
-        {templateVars.length > 0 && (
-          <ReviewRow label="Variables" value={templateVars.map(v => `{{${v}}}`).join(", ")} />
-        )}
-      </div>
+  const renderStep3 = () => {
+    // Detect {{variables}} actually used in the composed HTML body
+    const htmlVars = [...new Set(
+      [...(w.html_body.matchAll(/\{\{(\w+)\}\}/g))].map(m => m[1]!)
+    )];
 
-      {/* Body preview */}
-      <div className="space-y-1.5">
-        <p className="text-sm font-medium">Email preview</p>
-        <div className="rounded-lg border p-4 bg-white dark:bg-gray-950 text-sm max-h-64 overflow-y-auto">
-          <div
-            className="prose prose-sm dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{
-              __html: w.html_body.replace(
-                /\{\{(\w+)\}\}/g,
-                (_, key) => {
-                  const sample = effectiveRecipients[0];
-                  return sample?.[key] ?? `<span class="text-blue-500">{{${key}}}</span>`;
-                },
-              ),
-            }}
+    // Case-insensitive set of column names available from the recipient data
+    const availableCols = new Set(
+      w.csv_columns.map(c => c.toLowerCase()).filter(c => c !== "email")
+    );
+
+    // Variables in the HTML that have no corresponding data column
+    const missingVars = htmlVars.filter(v => !availableCols.has(v.toLowerCase()));
+
+    // Show warning when variables can't be filled
+    const showVarWarning =
+      htmlVars.length > 0 &&
+      (w.recipient_mode === "manual" ||
+        (w.recipient_mode === "csv" && missingVars.length > 0));
+
+    const sample = effectiveRecipients[0];
+    // Build a case-insensitive lookup from the first recipient row
+    const sampleLower: Record<string, string> = {};
+    if (sample) {
+      for (const [k, v] of Object.entries(sample)) {
+        sampleLower[k.toLowerCase()] = String(v);
+      }
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border divide-y overflow-hidden">
+          <ReviewRow label="Campaign" value={w.name} />
+          <ReviewRow label="Email type" value={EMAIL_TYPES.find(t => t.value === w.email_type)?.label ?? w.email_type} />
+          <ReviewRow label="From" value={`${w.from_name} <${w.from_email}>`} />
+
+          {/* Editable subject — user can tweak it right before sending */}
+          <div className="flex items-center gap-4 px-4 py-2">
+            <span className="text-xs font-medium text-muted-foreground w-28 shrink-0">Subject</span>
+            <input
+              type="text"
+              value={w.subject}
+              onChange={e => set("subject", e.target.value)}
+              className="flex-1 text-sm bg-transparent outline-none border-b border-transparent focus:border-border transition-colors py-1 min-w-0"
+              placeholder="Enter subject line…"
+            />
+          </div>
+
+          <ReviewRow
+            label="Recipients"
+            value={
+              w.recipient_mode === "segment"
+                ? `${recipientCount} contacts in "${segments.find(s => s.id === w.segment_id)?.name ?? "segment"}"`
+                : w.recipient_mode === "csv"
+                ? `${recipientCount} recipients from CSV`
+                : `${recipientCount} emails entered manually`
+            }
           />
+          {htmlVars.length > 0 && (
+            <ReviewRow label="Variables" value={htmlVars.map(v => `{{${v}}}`).join(", ")} />
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Preview uses first recipient's data to fill variables.
-        </p>
-      </div>
 
-      <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-        <AlertDescription className="text-amber-800 dark:text-amber-200 text-xs">
-          <span className="font-medium">Ready to send to {recipientCount} recipients.</span> This cannot be undone once sent.
-        </AlertDescription>
-      </Alert>
-    </div>
-  );
+        {/* Variable mismatch warning */}
+        {showVarWarning && (
+          <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+            <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <AlertDescription className="text-orange-800 dark:text-orange-200 text-xs">
+              {w.recipient_mode === "manual" ? (
+                <>
+                  <span className="font-medium">No data columns for variables.</span>{" "}
+                  Your email uses{" "}
+                  {htmlVars.map(v => (
+                    <code key={v} className="bg-orange-100 dark:bg-orange-900/40 px-1 rounded mx-0.5">{`{{${v}}}`}</code>
+                  ))}{" "}
+                  but manual entry has no named columns — these will be left blank in each email.
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{missingVars.length} variable{missingVars.length !== 1 ? "s" : ""} not in CSV.</span>{" "}
+                  {missingVars.map(v => (
+                    <code key={v} className="bg-orange-100 dark:bg-orange-900/40 px-1 rounded mx-0.5">{`{{${v}}}`}</code>
+                  ))}{" "}
+                  {missingVars.length === 1 ? "is" : "are"} used in the email but not found as a column in your CSV — {missingVars.length === 1 ? "it" : "they"} will be sent blank.
+                  {availableCols.size > 0 && (
+                    <span className="block mt-1">
+                      Available columns:{" "}
+                      {[...availableCols].map(c => (
+                        <code key={c} className="bg-orange-100 dark:bg-orange-900/40 px-1 rounded mx-0.5">{`{{${c}}}`}</code>
+                      ))}
+                    </span>
+                  )}
+                </>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Body preview with first-recipient substitution */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Email preview</p>
+          <div className="rounded-lg border p-4 bg-white dark:bg-gray-950 text-sm max-h-64 overflow-y-auto">
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: w.html_body.replace(
+                  /\{\{(\w+)\}\}/g,
+                  (_, key: string) => {
+                    // Try exact match first, then case-insensitive
+                    const val = sample?.[key] ?? sampleLower[key.toLowerCase()];
+                    return val !== undefined
+                      ? val
+                      : `<span style="background:#fef3c7;color:#92400e;padding:0 3px;border-radius:3px;font-size:0.8em">{{${key}}}</span>`;
+                  },
+                ),
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {sample
+              ? "Preview shows first recipient's data. Highlighted variables have no matching column."
+              : "No recipient data to preview — variables will appear blank in sent emails."}
+          </p>
+        </div>
+
+        <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+          <AlertDescription className="text-amber-800 dark:text-amber-200 text-xs">
+            <span className="font-medium">Ready to send to {recipientCount} recipients.</span> This cannot be undone once sent.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  };
 
   // Order: Campaign info → Design email → Recipients → Review & Send
   const steps = [renderStep0, renderStep2, renderStep1, renderStep3];
