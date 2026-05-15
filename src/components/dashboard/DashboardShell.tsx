@@ -89,7 +89,6 @@ const NAVIGATION_ITEMS: readonly NavItem[] = [
   { name: "Broadcasts", href: "/broadcasts", icon: Megaphone },
   { name: "Delivery Events", href: "/delivery-events", icon: Activity },
   { name: "Billing", href: "/billing", icon: CreditCard },
-  { name: "Users", href: "/users", icon: Users },
   { name: "Settings", href: "/settings", icon: Settings },
 ] as const;
 
@@ -192,6 +191,7 @@ interface UserMenuProps {
   readonly onLogout: () => void;
   readonly mounted: boolean;
   readonly expanded: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 function UserMenu({
@@ -203,9 +203,10 @@ function UserMenu({
   onLogout,
   mounted,
   expanded,
+  onOpenChange,
 }: UserMenuProps) {
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
@@ -277,6 +278,7 @@ export function DashboardShell({
   // State
   const [mounted, setMounted] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [pendingJobsCount, setPendingJobsCount] = useState(0);
 
@@ -353,6 +355,8 @@ export function DashboardShell({
     router.refresh();
   }, [router, queryClient]);
 
+  const isExpanded = sidebarExpanded || dropdownOpen;
+
   return (
     <OrgProvider slug={slug}>
     <JobNotificationProvider>
@@ -363,7 +367,7 @@ export function DashboardShell({
         <aside
           className={cn(
             "fixed top-0 left-0 z-60 h-screen bg-card border-r rounded-tr-2xl rounded-br-2xl transition-all duration-300",
-            sidebarExpanded ? "w-52" : "w-14"
+            isExpanded ? "w-52" : "w-14"
           )}
           onMouseEnter={() => setSidebarExpanded(true)}
           onMouseLeave={() => setSidebarExpanded(false)}
@@ -384,7 +388,7 @@ export function DashboardShell({
                     priority
                   />
                 </div>
-                {sidebarExpanded && (
+                {isExpanded && (
                   <span className="font-bold text-base whitespace-nowrap">
                     Authentix
                   </span>
@@ -396,14 +400,14 @@ export function DashboardShell({
             <SidebarNav
               slug={slug}
               pathname={pathname}
-              expanded={sidebarExpanded}
+              expanded={isExpanded}
               pendingJobsCount={pendingJobsCount}
             />
 
             {/* Bottom actions */}
             <div className="p-2 border-t space-y-0.5">
               {/* Notifications */}
-              <NotificationPanel expanded={sidebarExpanded} />
+              <NotificationPanel expanded={isExpanded} />
 
               {/* User profile */}
               <UserMenu
@@ -414,24 +418,25 @@ export function DashboardShell({
                 slug={slug}
                 onLogout={handleLogout}
                 mounted={mounted}
-                expanded={sidebarExpanded}
+                expanded={isExpanded}
+                onOpenChange={setDropdownOpen}
               />
 
               <ThemeButton
                 theme={theme}
                 onCycle={handleCycleTheme}
-                expanded={sidebarExpanded}
+                expanded={isExpanded}
               />
               <button
                 onClick={handleLogout}
                 className={cn(
                   "flex items-center gap-3 py-2.5 rounded-lg text-sm font-medium w-full",
-                  sidebarExpanded ? "px-3" : "justify-center",
+                  isExpanded ? "px-3" : "justify-center",
                   "text-muted-foreground hover:text-destructive"
                 )}
               >
                 <LogOut className="h-4.5 w-4.5" />
-                {sidebarExpanded && <span>Logout</span>}
+                {isExpanded && <span>Logout</span>}
               </button>
             </div>
           </div>
@@ -441,7 +446,7 @@ export function DashboardShell({
         <div className="pl-14">
           <BillingStatusBanner />
           <main className="p-6">
-            <div className="max-w-[1400px] mx-auto">{children}</div>
+            <div className="max-w-350 mx-auto">{children}</div>
           </main>
         </div>
       </div>
