@@ -246,21 +246,17 @@ function CampaignWizard({
   const handleSend = async () => {
     setSending(true);
     try {
-      const dto: CreateBroadcastDto & { email_type?: string; inline_recipients?: ParsedRecipient[] } = {
+      const dto: CreateBroadcastDto = {
         name: w.name,
         subject: w.subject,
         from_name: w.from_name,
         from_email: w.from_email,
-        html_body: w.html_body,
-        segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
+        html: w.html_body,                               // map internal state name → API field
         email_type: w.email_type,
-        // Pass inline recipients to the backend for direct sends
-        ...(w.recipient_mode !== "segment" && {
-          inline_recipients: effectiveRecipients,
-        }),
+        segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
+        inline_recipients: w.recipient_mode !== "segment" ? effectiveRecipients : undefined,
       };
-      const broadcast = await createMutation.mutateAsync(dto as CreateBroadcastDto);
-      // Immediately send — if this fails the broadcast is saved as draft
+      const broadcast = await createMutation.mutateAsync(dto);
       try {
         await api.delivery.sendBroadcast(broadcast.id);
         toast.success(`Campaign sent to ${recipientCount} recipients!`);
@@ -282,8 +278,10 @@ function CampaignWizard({
         subject: w.subject || "(draft)",
         from_name: w.from_name,
         from_email: w.from_email,
-        html_body: w.html_body || "",
+        html: w.html_body || "",
+        email_type: w.email_type,
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
+        inline_recipients: w.recipient_mode !== "segment" ? effectiveRecipients : undefined,
       });
       toast.success("Saved as draft");
       onCreated(broadcast.id);

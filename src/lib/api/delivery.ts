@@ -194,13 +194,15 @@ export interface EmailBroadcast {
   subject: string;
   from_email: string;
   from_name: string;
-  html_body: string;
-  text_body: string | null;
+  html: string;
+  text: string | null;
+  email_type: string;
   segment_id: string | null;
   status: BroadcastStatus;
   scheduled_at: string | null;
   sent_at: string | null;
   total_recipients: number;
+  sent_count: number;
   delivered_count: number;
   failed_count: number;
   created_at: string;
@@ -212,9 +214,11 @@ export interface CreateBroadcastDto {
   subject: string;
   from_email: string;
   from_name: string;
-  html_body: string;
-  text_body?: string;
+  html: string;
+  text?: string;
+  email_type?: string;
   segment_id?: string | null;
+  inline_recipients?: Array<{ email: string; [key: string]: string }>;
 }
 
 export type EmailEventType =
