@@ -111,6 +111,26 @@ function fmtShort(dateStr: string | null | undefined): string {
   return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// ── Achievement text builder ──────────────────────────────────────────────────
+
+function buildAchievementText(
+  recipientName: string,
+  subcategoryName: string,
+  categoryName: string,
+  orgName: string | undefined,
+): string {
+  const program = subcategoryName || categoryName;
+  const issuer = orgName || 'the issuing organization';
+
+  const sentence1 = program
+    ? `This is to certify that ${recipientName} has successfully completed the ${program} program, demonstrating the knowledge, skills, and dedication required to earn this credential.`
+    : `This is to certify that ${recipientName} has met all the requirements and demonstrated the skills necessary to earn this credential.`;
+
+  const sentence2 = `${issuer} proudly recognizes this achievement as a reflection of ${recipientName}'s commitment to professional growth and continuous learning.`;
+
+  return `${sentence1}\n${sentence2}`;
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function VerifyPage() {
@@ -299,18 +319,17 @@ export default function VerifyPage() {
                   )}
                 </div>
 
-                {/* Achievement statement — custom from settings or auto-generated */}
-                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed border-l-2 pl-3" style={{ borderColor: cfg.accent }}>
-                  {org?.verification_message
+                {/* Achievement statement — custom from settings or auto-generated default */}
+                <div className="border-l-2 pl-3 space-y-1.5" style={{ borderColor: cfg.accent }}>
+                  {(org?.verification_message
                     ? org.verification_message
                         .replace(/\{\{name\}\}/g, cert.recipient_name)
                         .replace(/\{\{category\}\}/g, cert.subcategory_name || cert.category_name || '')
-                    : cert.subcategory_name
-                      ? `${cert.recipient_name} has successfully completed the ${cert.subcategory_name} program under ${cert.category_name}.`
-                      : cert.category_name
-                        ? `${cert.recipient_name} has successfully completed the ${cert.category_name} program.`
-                        : `This certificate has been issued to ${cert.recipient_name} and is verified authentic.`}
-                </p>
+                    : buildAchievementText(cert.recipient_name, cert.subcategory_name, cert.category_name, org?.name)
+                  ).split('\n').map((line, i) => (
+                    <p key={i} className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{line}</p>
+                  ))}
+                </div>
 
                 {/* Issuing org */}
                 {org && (

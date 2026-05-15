@@ -411,7 +411,7 @@ export default function OrganizationPage() {
                   id="verification_message"
                   value={organizationData.verification_message}
                   onChange={(e) => setOrganizationData({ ...organizationData, verification_message: e.target.value })}
-                  placeholder="We are proud to certify that {{name}} has successfully completed the {{category}} program."
+                  placeholder="This is to certify that {{name}} has successfully completed the {{category}} program, demonstrating the knowledge, skills, and dedication required to earn this credential.&#10;&#10;We proudly recognize this achievement as a reflection of {{name}}'s commitment to professional growth and continuous learning."
                   className="resize-none transition-all bg-card hover:bg-muted/20 min-h-20"
                   maxLength={300}
                 />
