@@ -21,6 +21,8 @@ export interface DatePickerWithRangeProps {
   className?: string
   id?: string
   label?: string
+  /** Popover alignment relative to trigger. Use "end" when trigger is on the right side of the screen. */
+  align?: "start" | "center" | "end"
 }
 
 export function DatePickerWithRange({
@@ -29,10 +31,11 @@ export function DatePickerWithRange({
   className = "mx-auto w-60",
   id = "date-picker-range",
   label = "Date Picker Range",
+  align = "start",
 }: DatePickerWithRangeProps) {
   return (
     <Field className={className}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      {label && <FieldLabel htmlFor={id}>{label}</FieldLabel>}
       <Popover>
         <PopoverTrigger asChild>
           <Button
@@ -55,7 +58,7 @@ export function DatePickerWithRange({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent className="w-auto p-0" align={align}>
           <Calendar
             mode="range"
             defaultMonth={date?.from}

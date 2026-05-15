@@ -16,14 +16,13 @@ import {
 import type { DateRange } from "react-day-picker"
 import {
   CartesianGrid,
-  Line,
-  LineChart,
   Area,
   AreaChart,
   XAxis,
   YAxis,
-  Bar,
-  BarChart,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts"
 import {
   Award,
@@ -42,11 +41,19 @@ import {
   CalendarClock,
   Mail,
   Loader2,
+  Maximize2,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   ChartContainer,
   ChartTooltip,
@@ -163,12 +170,14 @@ function filterCertificatesDailyByInterval(
 
 // ── Heatmap ──────────────────────────────────────────────────────────────────
 
+const GRID_STROKE = "rgba(128,128,128,0.12)"
+
 const HEAT_LEVELS = [
-  { min: 0, max: 0, bg: "bg-[#1a1a1a] dark:bg-[#161b22]", label: "No activity" },
-  { min: 1, max: 2, bg: "bg-[#0e4429]", label: "1–2" },
-  { min: 3, max: 5, bg: "bg-[#006d32]", label: "3–5" },
-  { min: 6, max: 10, bg: "bg-[#26a641]", label: "6–10" },
-  { min: 11, max: Infinity, bg: "bg-[#3ECF8E]", label: "11+" },
+  { min: 0, max: 0, bg: "bg-[#ebedf0] dark:bg-[#161b22]", label: "No activity" },
+  { min: 1, max: 2, bg: "bg-[#9be9a8] dark:bg-[#0e4429]", label: "1–2" },
+  { min: 3, max: 5, bg: "bg-[#40c463] dark:bg-[#006d32]", label: "3–5" },
+  { min: 6, max: 10, bg: "bg-[#30a14e] dark:bg-[#26a641]", label: "6–10" },
+  { min: 11, max: Infinity, bg: "bg-[#216e39] dark:bg-[#39d353]", label: "11+" },
 ]
 
 function heatLevel(count: number): string {
@@ -176,6 +185,30 @@ function heatLevel(count: number): string {
     if (count >= l.min && count <= l.max) return l.bg
   }
   return HEAT_LEVELS[0]!.bg
+}
+
+// ── Chart expand modal ────────────────────────────────────────────────────────
+
+function ChartExpandModal({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          title="Expand chart"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">{title}</DialogTitle>
+        </DialogHeader>
+        <div className="mt-2">{children}</div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
@@ -230,13 +263,14 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
         </div>
       </div>
 
-      <div className="relative overflow-x-auto">
+      <div className="overflow-x-auto flex justify-center">
+        <div>
         {/* Month labels */}
-        <div className="flex mb-1" style={{ paddingLeft: 28 }}>
+        <div className="flex mb-1" style={{ paddingLeft: 30 }}>
           {weeks.map((_, wi) => {
             const label = monthLabels.find((m) => m.col === wi)
             return (
-              <div key={wi} className="text-[9px] text-muted-foreground/50 leading-none" style={{ width: 14, flexShrink: 0  }}>
+              <div key={wi} className="text-[9px] text-muted-foreground/50 leading-none" style={{ width: 18, flexShrink: 0 }}>
                 {label?.label ?? ""}
               </div>
             )
@@ -245,9 +279,9 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
 
         <div className="flex gap-0">
           {/* Day-of-week labels */}
-          <div className="flex flex-col gap-0.5 mr-1">
+          <div className="flex flex-col gap-1 mr-1">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
-              <div key={d} className="text-[9px] text-muted-foreground/40 leading-none flex items-center" style={{ height: 12, width: 24 }}>
+              <div key={d} className="text-[9px] text-muted-foreground/40 leading-none flex items-center" style={{ height: 14, width: 26 }}>
                 {i % 2 === 1 ? d.slice(0, 1) : ""}
               </div>
             ))}
@@ -258,9 +292,9 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
             className="relative"
             onMouseLeave={() => setTooltip(null)}
           >
-            <div className="flex gap-0.5">
+            <div className="flex gap-1">
               {weeks.map((week, wi) => (
-                <div key={wi} className="flex flex-col gap-0.5">
+                <div key={wi} className="flex flex-col gap-1">
                   {week.map((day) => {
                     const key = format(day, "yyyy-MM-dd")
                     const count = countByDate[key] ?? 0
@@ -269,17 +303,17 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
                       <div
                         key={key}
                         className={cn(
-                          "w-3 h-3 rounded-sm transition-opacity cursor-default",
+                          "w-3.5 h-3.5 rounded-sm transition-opacity cursor-default",
                           isFuture ? "opacity-0 pointer-events-none" : heatLevel(count),
-                          count > 0 && !isFuture && "hover:ring-1 hover:ring-white/20"
+                          count > 0 && !isFuture && "hover:ring-1 hover:ring-black/20 dark:hover:ring-white/20"
                         )}
                         onMouseEnter={(e) => {
                           const rect = (e.target as HTMLElement).getBoundingClientRect()
                           const parent = (e.target as HTMLElement).closest(".relative")?.getBoundingClientRect()
                           setTooltip({
                             text: count > 0 ? `${count} certificate${count === 1 ? "" : "s"} on ${format(day, "MMM d, yyyy")}` : `No certificates on ${format(day, "MMM d, yyyy")}`,
-                            x: rect.left - (parent?.left ?? 0) + 6,
-                            y: rect.top - (parent?.top ?? 0) - 28,
+                            x: rect.left - (parent?.left ?? 0) + 7,
+                            y: rect.top - (parent?.top ?? 0) - 30,
                           })
                         }}
                       />
@@ -298,6 +332,7 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -413,7 +448,7 @@ function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]
                   <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+              <CartesianGrid vertical={false} stroke={GRID_STROKE} />
               <XAxis
                 dataKey="date"
                 tickLine={false}
@@ -457,6 +492,36 @@ function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]
 
 const CAT_COLORS = ["#3ECF8E", "#60a5fa", "#f59e0b", "#f472b6", "#a78bfa", "#34d399"]
 
+function DonutChart({ data, total, size }: { data: { name: string; value: number; color: string }[]; total: number; size: number }) {
+  const ir = size * 0.34
+  const or = size * 0.47
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <PieChart width={size} height={size}>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="50%"
+          innerRadius={ir}
+          outerRadius={or}
+          dataKey="value"
+          strokeWidth={2}
+          stroke="transparent"
+          paddingAngle={2}
+        >
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} />
+          ))}
+        </Pie>
+      </PieChart>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <p className="text-lg font-bold tabular-nums leading-none">{total.toLocaleString()}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">total</p>
+      </div>
+    </div>
+  )
+}
+
 function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
   const data = React.useMemo(
     () => mix.slice(0, 6).map((r, i) => ({
@@ -467,6 +532,22 @@ function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
     [mix]
   )
   const total = data.reduce((a, r) => a + r.value, 0)
+
+  const Legend = () => (
+    <div className="w-full space-y-2">
+      {data.map((d) => {
+        const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
+        return (
+          <div key={d.name} className="flex items-center gap-2 text-xs">
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+            <span className="flex-1 truncate text-foreground/80">{d.name}</span>
+            <span className="tabular-nums text-muted-foreground w-7 text-right">{pct}%</span>
+            <span className="tabular-nums font-medium w-10 text-right">{d.value.toLocaleString()}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
 
   if (data.length === 0) {
     return (
@@ -480,34 +561,38 @@ function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
 
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-6 flex flex-col h-full">
-      <p className="text-sm font-semibold mb-0.5">Category mix</p>
-      <p className="text-xs text-muted-foreground mb-4">All-time distribution</p>
-      {/* Simple CSS donut */}
-      <div className="flex flex-col gap-2.5 flex-1">
-        {data.map((d) => {
-          const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
-          return (
-            <div key={d.name} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-                  <span className="text-foreground/80 truncate max-w-35">{d.name}</span>
-                </div>
-                <span className="tabular-nums text-muted-foreground">{d.value.toLocaleString()}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: d.color }} />
-              </div>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="text-sm font-semibold">Category mix</p>
+          <p className="text-xs text-muted-foreground">All-time distribution</p>
+        </div>
+        <ChartExpandModal title="Category mix">
+          <div className="flex flex-col items-center gap-6 py-4">
+            <DonutChart data={data} total={total} size={220} />
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2.5 w-full max-w-md px-4">
+              {data.map((d) => {
+                const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
+                return (
+                  <div key={d.name} className="flex items-center gap-2 text-sm">
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                    <span className="truncate text-foreground/80">{d.name}</span>
+                    <span className="ml-auto tabular-nums text-muted-foreground text-xs">{pct}%</span>
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
-        <p className="text-[10px] text-muted-foreground/50 pt-1 text-right">{total.toLocaleString()} total</p>
+          </div>
+        </ChartExpandModal>
+      </div>
+      <div className="flex flex-col items-center gap-4 flex-1">
+        <DonutChart data={data} total={total} size={150} />
+        <Legend />
       </div>
     </div>
   )
 }
 
-// ── Imports bar chart ─────────────────────────────────────────────────────────
+// ── Imports area chart ────────────────────────────────────────────────────────
 
 function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
   const buckets = React.useMemo(() => {
@@ -532,12 +617,59 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
   const completed = imports.filter((i) => i.status === "completed").length
   const failed = imports.filter((i) => i.status === "failed").length
   const successRate = total > 0 ? Math.round((completed / total) * 100) : 0
+  const successColor = successRate >= 90 ? "#3ECF8E" : successRate >= 70 ? "#f59e0b" : "#f87171"
 
   const chartConfig: ChartConfig = {
     completed: { label: "Completed", color: "#3ECF8E" },
     failed: { label: "Failed", color: "#f87171" },
     processing: { label: "Processing", color: "#60a5fa" },
   }
+
+  const ChartBody = ({ height }: { height: string }) =>
+    buckets.length === 0 ? (
+      <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No imports in this range</div>
+    ) : (
+      <ChartContainer config={chartConfig} className={`${height} w-full`}>
+        <AreaChart data={buckets} margin={{ left: 0, right: 0, top: 4 }}>
+          <defs>
+            <linearGradient id="igCompleted" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#3ECF8E" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="#3ECF8E" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="igFailed" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f87171" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="igProcessing" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke={GRID_STROKE} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} />
+          <YAxis hide allowDecimals={false} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Area dataKey="completed" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#igCompleted)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+          <Area dataKey="processing" type="monotone" stroke="#60a5fa" strokeWidth={1.5} fill="url(#igProcessing)" dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
+          <Area dataKey="failed" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#igFailed)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+        </AreaChart>
+      </ChartContainer>
+    )
+
+  const LegendRow = () => (
+    <div className="flex items-center gap-4 flex-wrap">
+      {[
+        { label: "Completed", value: completed, color: "#3ECF8E" },
+        { label: "Failed", value: failed, color: "#f87171" },
+        { label: "Processing", value: total - completed - failed, color: "#60a5fa" },
+      ].map((s) => (
+        <div key={s.label} className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+          <span className="text-[10px] text-muted-foreground">{s.label}: <strong className="text-foreground">{s.value}</strong></span>
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-6">
@@ -546,44 +678,26 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
           <p className="text-sm font-semibold">Import jobs</p>
           <p className="text-xs text-muted-foreground">Completion status over period</p>
         </div>
-        <div className="text-right">
-          <p className="text-xl font-bold tabular-nums" style={{ color: successRate >= 90 ? "#3ECF8E" : successRate >= 70 ? "#f59e0b" : "#f87171" }}>
-            {successRate}%
-          </p>
-          <p className="text-[10px] text-muted-foreground">success rate</p>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <p className="text-xl font-bold tabular-nums" style={{ color: successColor }}>{successRate}%</p>
+            <p className="text-[10px] text-muted-foreground">success rate</p>
+          </div>
+          <ChartExpandModal title="Import jobs">
+            <div className="space-y-4 pt-2">
+              <ChartBody height="h-64" />
+              <LegendRow />
+            </div>
+          </ChartExpandModal>
         </div>
       </div>
-      {buckets.length === 0 ? (
-        <div className="h-36 flex items-center justify-center text-sm text-muted-foreground">No imports in this range</div>
-      ) : (
-        <ChartContainer config={chartConfig} className="h-36 w-full">
-          <BarChart data={buckets} barSize={12} margin={{ left: 0, right: 0 }}>
-            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
-            <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.6)" }} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="completed" stackId="a" fill="#3ECF8E" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="processing" stackId="a" fill="#60a5fa" />
-            <Bar dataKey="failed" stackId="a" fill="#f87171" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ChartContainer>
-      )}
-      <div className="flex items-center gap-4 mt-3 flex-wrap">
-        {[
-          { label: "Completed", value: completed, color: "#3ECF8E" },
-          { label: "Failed", value: failed, color: "#f87171" },
-          { label: "Processing", value: total - completed - failed, color: "#60a5fa" },
-        ].map((s) => (
-          <div key={s.label} className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-            <span className="text-[10px] text-muted-foreground">{s.label}: <strong className="text-foreground">{s.value}</strong></span>
-          </div>
-        ))}
-      </div>
+      <ChartBody height="h-36" />
+      <div className="mt-3"><LegendRow /></div>
     </div>
   )
 }
 
-// ── Verification trend line ───────────────────────────────────────────────────
+// ── Verification trend chart ──────────────────────────────────────────────────
 
 function VerificationTrendChart({ verifications }: { verifications: RecentVerification[] }) {
   const data = React.useMemo(() => {
@@ -611,6 +725,32 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
     invalid: { label: "Invalid", color: "#f87171" },
   }
 
+  const ChartBody = ({ height }: { height: string }) =>
+    data.length === 0 ? (
+      <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No verifications in this range</div>
+    ) : (
+      <ChartContainer config={chartConfig} className={`${height} w-full`}>
+        <AreaChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+          <defs>
+            <linearGradient id="vgValid" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#3ECF8E" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#3ECF8E" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="vgInvalid" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f87171" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke={GRID_STROKE} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} />
+          <YAxis hide allowDecimals={false} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Area dataKey="valid" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#vgValid)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+          <Area dataKey="invalid" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#vgInvalid)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+        </AreaChart>
+      </ChartContainer>
+    )
+
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-6">
       <div className="flex items-start justify-between mb-4">
@@ -618,24 +758,29 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
           <p className="text-sm font-semibold">Verification results</p>
           <p className="text-xs text-muted-foreground">Valid vs invalid scans</p>
         </div>
-        <div className="text-right">
-          <p className="text-xl font-bold tabular-nums text-[#3ECF8E]">{validPct}%</p>
-          <p className="text-[10px] text-muted-foreground">valid rate</p>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <p className="text-xl font-bold tabular-nums text-[#3ECF8E]">{validPct}%</p>
+            <p className="text-[10px] text-muted-foreground">valid rate</p>
+          </div>
+          <ChartExpandModal title="Verification results">
+            <div className="space-y-4 pt-2">
+              <ChartBody height="h-64" />
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-[#3ECF8E]" />
+                  <span className="text-[10px] text-muted-foreground">Valid: <strong className="text-foreground">{valid}</strong></span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-[#f87171]" />
+                  <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{total - valid}</strong></span>
+                </div>
+              </div>
+            </div>
+          </ChartExpandModal>
         </div>
       </div>
-      {data.length === 0 ? (
-        <div className="h-36 flex items-center justify-center text-sm text-muted-foreground">No verifications in this range</div>
-      ) : (
-        <ChartContainer config={chartConfig} className="h-36 w-full">
-          <LineChart data={data} margin={{ left: 0, right: 0 }}>
-            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
-            <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.6)" }} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Line dataKey="valid" stroke="#3ECF8E" strokeWidth={2} dot={false} />
-            <Line dataKey="invalid" stroke="#f87171" strokeWidth={2} dot={false} strokeDasharray="4 2" />
-          </LineChart>
-        </ChartContainer>
-      )}
+      <ChartBody height="h-36" />
       <div className="flex items-center gap-4 mt-3">
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-[#3ECF8E]" />
@@ -1040,7 +1185,7 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
             </TabsList>
           </Tabs>
           {preset === "custom" && (
-            <DatePickerWithRange date={customRange} onDateChange={setCustomRange} className="w-52" />
+            <DatePickerWithRange date={customRange} onDateChange={setCustomRange} className="w-52" label="" align="end" />
           )}
           <Button
             variant="outline"
@@ -1069,7 +1214,7 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
           <Loader2 className="w-4 h-4 animate-spin text-amber-500 shrink-0" />
           <p className="text-sm text-amber-600 dark:text-amber-400">
-            <strong>{stats.pendingJobs}</strong> import job{stats.pendingJobs === 1 ? "" : "s"} processing — stats will auto-refresh every 30 seconds.
+            <strong>{stats.pendingJobs}</strong> import job{stats.pendingJobs === 1 ? "" : "s"} {stats.pendingJobs === 1 ? "is" : "are"} currently processing — stats auto-refresh every 30s.
           </p>
         </div>
       )}
