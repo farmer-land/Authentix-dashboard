@@ -96,8 +96,8 @@ export default function VerificationLogsPage() {
       });
       setEvents(res.events);
       setPagination({ total: res.pagination.total, total_pages: res.pagination.total_pages });
-    } catch {
-      setError("Failed to load verification logs.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load verification logs.");
     } finally {
       setLoading(false);
     }
