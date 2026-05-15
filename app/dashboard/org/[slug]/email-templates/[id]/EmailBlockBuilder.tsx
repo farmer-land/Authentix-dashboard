@@ -655,9 +655,7 @@ ${cells}
       const color = block.dividerColor || "#333333";
       const thickness = block.dividerThickness || 1;
       const width = block.dividerWidth || 100;
-      const margin = `${16 + Math.round((100 - width) * 3)}px`;
       return `<div style="padding:8px 0;text-align:center;"><hr style="border:none;border-top:${thickness}px ${style} ${color};width:${width}%;margin:0 auto;" /></div>`;
-      void margin;
     }
 
     case "spacer":
