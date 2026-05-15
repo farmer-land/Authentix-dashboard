@@ -107,9 +107,10 @@ interface SidebarNavProps {
   readonly slug: string;
   readonly pathname: string;
   readonly expanded: boolean;
+  readonly pendingJobsCount: number;
 }
 
-function SidebarNav({ slug, pathname, expanded }: SidebarNavProps) {
+function SidebarNav({ slug, pathname, expanded, pendingJobsCount }: SidebarNavProps) {
   const basePath = `/dashboard/org/${slug}`;
 
   return (
@@ -121,6 +122,7 @@ function SidebarNav({ slug, pathname, expanded }: SidebarNavProps) {
             ? pathname === basePath
             : pathname.startsWith(fullHref);
         const Icon = item.icon;
+        const showBadge = item.name === "Imports" && pendingJobsCount > 0;
 
         return (
           <Link
@@ -135,8 +137,18 @@ function SidebarNav({ slug, pathname, expanded }: SidebarNavProps) {
             )}
             title={!expanded ? item.name : undefined}
           >
-            <Icon className="h-4.5 w-4.5 shrink-0" />
-            {expanded && <span className="whitespace-nowrap">{item.name}</span>}
+            <div className="relative shrink-0">
+              <Icon className="h-4.5 w-4.5" />
+              {showBadge && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-background" />
+              )}
+            </div>
+            {expanded && <span className="whitespace-nowrap flex-1">{item.name}</span>}
+            {expanded && showBadge && (
+              <span className="ml-auto text-[10px] font-bold bg-amber-400/15 text-amber-500 rounded-full px-1.5 py-0.5 leading-none">
+                {pendingJobsCount > 99 ? "99+" : pendingJobsCount}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -266,6 +278,7 @@ export function DashboardShell({
   const [mounted, setMounted] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
+  const [pendingJobsCount, setPendingJobsCount] = useState(0);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -280,6 +293,20 @@ export function DashboardShell({
   // Mounted effect for hydration safety
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Fetch pending jobs count for sidebar badge — poll every 30s while any are running
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = async () => {
+      try {
+        const data = await api.dashboard.getStats();
+        if (!cancelled) setPendingJobsCount(data.stats.pendingJobs ?? 0);
+      } catch { /* silent */ }
+    };
+    fetch();
+    const id = setInterval(fetch, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   // Theme initialization (client-only)
@@ -370,6 +397,7 @@ export function DashboardShell({
               slug={slug}
               pathname={pathname}
               expanded={sidebarExpanded}
+              pendingJobsCount={pendingJobsCount}
             />
 
             {/* Bottom actions */}

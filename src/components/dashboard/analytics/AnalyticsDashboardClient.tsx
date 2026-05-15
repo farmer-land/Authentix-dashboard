@@ -44,6 +44,11 @@ import {
   BarChart3,
   ScanLine,
   AlertTriangle,
+  Download,
+  RefreshCw,
+  CalendarClock,
+  Mail,
+  Loader2,
 } from "lucide-react"
 
 import {
@@ -63,6 +68,9 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
+import { api } from "@/lib/api/client"
+import type { EmailBroadcast } from "@/lib/api/client"
+import type { Certificate } from "@/lib/api/client"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -748,6 +756,163 @@ function RecentVerificationsCard({ slug, verifications }: { slug: string; verifi
   )
 }
 
+// ── Broadcast delivery analytics ─────────────────────────────────────────────
+
+function BroadcastAnalyticsCard({ slug }: { slug: string }) {
+  const [broadcasts, setBroadcasts] = React.useState<EmailBroadcast[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    api.delivery.listBroadcasts()
+      .then((r) => setBroadcasts(r.broadcasts.slice(0, 6)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const sent = broadcasts.filter((b) => b.status === "sent")
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <Mail className="w-4 h-4 text-muted-foreground" />
+          <p className="text-sm font-semibold">Broadcast delivery</p>
+        </div>
+        <Link href={orgPath(slug, "/broadcasts")}>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">View all <ArrowUpRight className="w-3 h-3" /></Button>
+        </Link>
+      </div>
+      <div className="divide-y divide-border/30">
+        {loading ? (
+          <div className="py-8 flex items-center justify-center">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : sent.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No sent broadcasts yet</div>
+        ) : (
+          sent.map((b) => {
+            const deliveryRate = b.total_recipients > 0 ? Math.round((b.delivered_count / b.total_recipients) * 100) : 0
+            const failRate = b.total_recipients > 0 ? Math.round((b.failed_count / b.total_recipients) * 100) : 0
+            return (
+              <div key={b.id} className="px-5 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate max-w-48">{b.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{b.total_recipients.toLocaleString()} recipients · {b.sent_at ? format(new Date(b.sent_at), "MMM d") : "—"}</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <p className="text-sm font-bold tabular-nums" style={{ color: deliveryRate >= 90 ? "#3ECF8E" : deliveryRate >= 70 ? "#f59e0b" : "#f87171" }}>{deliveryRate}%</p>
+                    <p className="text-[9px] text-muted-foreground">delivered</p>
+                  </div>
+                </div>
+                <div className="flex gap-1 h-1.5 rounded-full overflow-hidden bg-muted">
+                  <div className="h-full bg-[#3ECF8E] transition-all" style={{ width: `${deliveryRate}%` }} />
+                  <div className="h-full bg-[#f87171] transition-all" style={{ width: `${failRate}%` }} />
+                </div>
+                <div className="flex gap-3 text-[10px] text-muted-foreground">
+                  <span><strong className="text-foreground">{b.delivered_count.toLocaleString()}</strong> delivered</span>
+                  <span><strong className="text-red-400">{b.failed_count.toLocaleString()}</strong> failed</span>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Expiring certificates ─────────────────────────────────────────────────────
+
+type ExpiringCert = Pick<Certificate, "id" | "recipient_name" | "expires_at" | "certificate_number"> & {
+  template?: { title: string } | null
+}
+
+function ExpiringCertificatesCard({ slug }: { slug: string }) {
+  const [certs, setCerts] = React.useState<ExpiringCert[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    api.certificates.list({ status: "active", sort_by: "expires_at", sort_order: "asc", limit: 20 })
+      .then((r) => {
+        const now = new Date()
+        const in90 = new Date(now.getTime() + 90 * 24 * 3600 * 1000)
+        const expiring = r.items
+          .filter((c: Certificate) => c.expires_at && new Date(c.expires_at) <= in90)
+          .slice(0, 8)
+        setCerts(expiring)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  function urgencyColor(expiresAt: string) {
+    const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000)
+    if (days <= 14) return { color: "#f87171", label: `${days}d` }
+    if (days <= 30) return { color: "#f59e0b", label: `${days}d` }
+    return { color: "#60a5fa", label: `${days}d` }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-muted-foreground" />
+          <p className="text-sm font-semibold">Expiring soon</p>
+          <span className="text-[10px] text-muted-foreground">within 90 days</span>
+        </div>
+        <Link href={orgPath(slug, "/certificates")}>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">View all <ArrowUpRight className="w-3 h-3" /></Button>
+        </Link>
+      </div>
+      <div className="divide-y divide-border/30">
+        {loading ? (
+          <div className="py-8 flex items-center justify-center">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : certs.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No certificates expiring in the next 90 days</div>
+        ) : (
+          certs.map((c) => {
+            const { color, label } = urgencyColor(c.expires_at!)
+            return (
+              <div key={c.id} className="flex items-center gap-3 px-5 py-3">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}18` }}>
+                  <CalendarClock className="w-3.5 h-3.5" style={{ color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{c.recipient_name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{c.template?.title ?? c.certificate_number}</p>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: `${color}18`, color }}>
+                  {label}
+                </span>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+
+function exportDailyCSV(series: CertificateDailyPoint[], rangeLabel: string) {
+  const rows = [
+    ["Date", "Certificates Issued", "Revoked", "Verification Scans"],
+    ...series.map((r) => [r.date, String(r.issued), String(r.revoked), String(r.verificationScans)]),
+  ]
+  const csv = rows.map((r) => r.join(",")).join("\n")
+  const blob = new Blob([csv], { type: "text/csv" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `analytics-${rangeLabel.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ slug }: { slug: string }) {
@@ -779,13 +944,52 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
 
   const [preset, setPreset] = React.useState<RangePreset>("week")
   const [customRange, setCustomRange] = React.useState<DateRange | undefined>(undefined)
+  const [liveStats, setLiveStats] = React.useState(initialData?.stats ?? null)
+  const [refreshing, setRefreshing] = React.useState(false)
 
-  const stats = initialData?.stats ?? {
+  const stats = liveStats ?? {
     totalCertificates: 0,
     pendingJobs: 0,
     verificationsToday: 0,
     revokedCertificates: 0,
     verificationEventsTotal: 0,
+  }
+
+  // Auto-refresh stats every 30s while pending jobs are processing
+  React.useEffect(() => {
+    if (!initialData) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const data = await api.dashboard.getStats()
+        if (!cancelled && data.stats) setLiveStats({
+          totalCertificates: data.stats.totalCertificates ?? 0,
+          pendingJobs: data.stats.pendingJobs ?? 0,
+          verificationsToday: data.stats.verificationsToday ?? 0,
+          revokedCertificates: data.stats.revokedCertificates ?? 0,
+          verificationEventsTotal: data.stats.verificationEventsTotal ?? 0,
+        })
+      } catch { /* silent */ }
+    }
+    const id = setInterval(() => {
+      if (stats.pendingJobs > 0) refresh()
+    }, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [initialData, stats.pendingJobs])
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true)
+    try {
+      const data = await api.dashboard.getStats()
+      if (data.stats) setLiveStats({
+        totalCertificates: data.stats.totalCertificates ?? 0,
+        pendingJobs: data.stats.pendingJobs ?? 0,
+        verificationsToday: data.stats.verificationsToday ?? 0,
+        revokedCertificates: data.stats.revokedCertificates ?? 0,
+        verificationEventsTotal: data.stats.verificationEventsTotal ?? 0,
+      })
+    } catch { /* silent */ }
+    finally { setRefreshing(false) }
   }
 
   const rangeLabel = formatRangeLabel(preset, customRange)
@@ -852,8 +1056,37 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
           {preset === "custom" && (
             <DatePickerWithRange date={customRange} onDateChange={setCustomRange} className="w-52" />
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 text-xs"
+            onClick={() => exportDailyCSV(filteredDaily, rangeLabel)}
+            disabled={filteredDaily.length === 0}
+          >
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            title="Refresh stats"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+          </Button>
         </div>
       </div>
+
+      {/* Pending jobs banner */}
+      {stats.pendingJobs > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <Loader2 className="w-4 h-4 animate-spin text-amber-500 shrink-0" />
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            <strong>{stats.pendingJobs}</strong> import job{stats.pendingJobs === 1 ? "" : "s"} processing — stats will auto-refresh every 30 seconds.
+          </p>
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -907,6 +1140,12 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
       <div className="grid gap-4 lg:grid-cols-2">
         <ImportsBarChart imports={filteredImports} />
         <VerificationTrendChart verifications={filteredVerifications} />
+      </div>
+
+      {/* Broadcast delivery + Expiring certs */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BroadcastAnalyticsCard slug={slug} />
+        <ExpiringCertificatesCard slug={slug} />
       </div>
 
       {/* Empty state */}
