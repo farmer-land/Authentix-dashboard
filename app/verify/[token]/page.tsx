@@ -35,6 +35,7 @@ interface VerificationResult {
     slug: string;
     logo_url: string | null;
     website_url: string | null;
+    verification_message: string | null;
   };
   preview_url?: string | null;
 }
@@ -270,27 +271,40 @@ export default function VerifyPage() {
 
               <div className="p-6 space-y-5">
 
-                {/* Status + recipient */}
-                <div className="space-y-3">
-                  <div className={cn('inline-flex items-center gap-2 text-sm font-semibold', cfg.textColor)}>
-                    <div className={cn('p-1.5 rounded-lg', cfg.iconBg)}>
-                      <StatusIcon className={cn('w-4 h-4', cfg.iconColor)} />
+                {/* Top row: Authentix badge + status label */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-200/70 dark:border-white/8 shrink-0">
+                    <img src="/brand/authentix-24-24.svg" alt="Authentix" className="w-3.5 h-3.5 logo-glow opacity-80" />
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">Authentix</span>
+                  </div>
+                  <div className={cn('flex items-center gap-1.5 text-xs font-semibold shrink-0', cfg.textColor)}>
+                    <div className={cn('p-1 rounded-md', cfg.iconBg)}>
+                      <StatusIcon className={cn('w-3.5 h-3.5', cfg.iconColor)} />
                     </div>
                     {cfg.label}
                   </div>
-                  <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white leading-tight wrap-break-word">
-                      {cert.recipient_name}
-                    </h1>
-                    {(cert.category_name || cert.subcategory_name) && (
-                      <p className="text-base text-gray-500 dark:text-gray-400 mt-1">
-                        {cert.subcategory_name
-                          ? `${cert.category_name} · ${cert.subcategory_name}`
-                          : cert.category_name}
-                      </p>
-                    )}
-                  </div>
                 </div>
+
+                {/* Recipient name + category */}
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white leading-tight wrap-break-word">
+                    {cert.recipient_name}
+                  </h1>
+                  {(cert.category_name || cert.subcategory_name) && (
+                    <p className="text-base text-gray-500 dark:text-gray-400 mt-1">
+                      {cert.subcategory_name
+                        ? `${cert.category_name} · ${cert.subcategory_name}`
+                        : cert.category_name}
+                    </p>
+                  )}
+                </div>
+
+                {/* Org verification message (from settings) */}
+                {org?.verification_message && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed border-l-2 pl-3" style={{ borderColor: cfg.accent }}>
+                    {org.verification_message}
+                  </p>
+                )}
 
                 {/* Issuing org */}
                 {org && (
@@ -406,19 +420,17 @@ export default function VerifyPage() {
             )}
 
             {/* ── Authentix trust mark ─────────────────────────────────── */}
-            <div className="anim-up anim-up-3 flex items-center justify-center gap-3 py-4">
+            <div className="anim-up anim-up-3 flex flex-col items-center gap-1.5 py-4">
               <img
                 src="/brand/authentix-24-24.svg"
                 alt="Authentix"
-                className="w-5 h-5 logo-glow opacity-70"
+                className="w-7 h-7 logo-glow"
               />
-              <div className="h-3.5 w-px bg-gray-300 dark:bg-gray-700" />
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+              <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 tracking-wide text-center">
                 Verified against the live issuer database
               </p>
-              <div className="h-3.5 w-px bg-gray-300 dark:bg-gray-700" />
-              <p className="text-[11px] font-mono text-gray-300 dark:text-gray-600 truncate max-w-20">
-                {token.slice(0, 8)}…
+              <p className="text-[10px] font-mono text-gray-300 dark:text-gray-600 text-center">
+                {token}
               </p>
             </div>
           </>

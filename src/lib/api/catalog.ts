@@ -18,6 +18,7 @@ export interface ManagementCategory {
   is_org_custom: boolean;
   is_hidden: boolean;
   has_name_override: boolean;
+  color: string | null;
 }
 
 export interface ManagementSubcategory {
@@ -30,6 +31,7 @@ export interface ManagementSubcategory {
   is_org_custom: boolean;
   is_hidden: boolean;
   has_name_override: boolean;
+  color: string | null;
 }
 
 export const catalogApi = {
@@ -74,7 +76,7 @@ export const catalogApi = {
       return r.data!.categories;
     },
 
-    createCategory: async (data: { name: string; group_key?: "course_certificates" | "company_work" | null }): Promise<{ category_id: string }> => {
+    createCategory: async (data: { name: string; group_key?: string | null }): Promise<{ category_id: string }> => {
       const r = await apiRequest<{ category_id: string }>("/catalog/manage/categories", {
         method: "POST",
         body: JSON.stringify(data),
@@ -82,7 +84,7 @@ export const catalogApi = {
       return r.data!;
     },
 
-    updateCategory: async (categoryId: string, data: { name?: string; is_hidden?: boolean; sort_order?: number | null }): Promise<void> => {
+    updateCategory: async (categoryId: string, data: { name?: string; is_hidden?: boolean; sort_order?: number | null; color?: string | null }): Promise<void> => {
       await apiRequest(`/catalog/manage/categories/${categoryId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -108,7 +110,7 @@ export const catalogApi = {
       return r.data!;
     },
 
-    updateSubcategory: async (categoryId: string, subcategoryId: string, data: { name?: string; is_hidden?: boolean; sort_order?: number | null }): Promise<void> => {
+    updateSubcategory: async (categoryId: string, subcategoryId: string, data: { name?: string; is_hidden?: boolean; sort_order?: number | null; color?: string | null }): Promise<void> => {
       await apiRequest(`/catalog/manage/categories/${categoryId}/subcategories/${subcategoryId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
