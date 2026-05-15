@@ -302,7 +302,9 @@ export default function VerifyPage() {
                 {/* Org verification message (from settings) */}
                 {org?.verification_message && (
                   <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed border-l-2 pl-3" style={{ borderColor: cfg.accent }}>
-                    {org.verification_message}
+                    {org.verification_message
+                      .replace(/\{\{name\}\}/g, cert.recipient_name)
+                      .replace(/\{\{category\}\}/g, cert.subcategory_name || cert.category_name || '')}
                   </p>
                 )}
 

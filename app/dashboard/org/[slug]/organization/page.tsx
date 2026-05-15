@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Building2, Upload, Loader2, CheckCircle2, Globe, MapPin, Phone, Mail, UserCircle, Receipt } from "lucide-react";
+import { Building2, Upload, Loader2, CheckCircle2, Globe, MapPin, Phone, Mail, UserCircle, Receipt, MessageSquare } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { getOrganizationLogoUrl } from "@/lib/utils/organization-logo";
 import { useOrganization, useUpdateOrganization } from "@/lib/hooks/queries/organizations";
@@ -20,6 +21,7 @@ export default function OrganizationPage() {
     phone: "",
     website: "",
     industry: "",
+    verification_message: "",
     address: "",
     city: "",
     state: "",
@@ -67,6 +69,7 @@ export default function OrganizationPage() {
       phone: org.phone || "",
       website: org.website || "",
       industry: org.industry || "",
+      verification_message: org.verification_message || "",
       address: org.address || "",
       city: org.city || "",
       state: org.state || "",
@@ -396,6 +399,25 @@ export default function OrganizationPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Verification page message */}
+              <div className="space-y-2">
+                <Label htmlFor="verification_message" className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Verification Page Message
+                </Label>
+                <Textarea
+                  id="verification_message"
+                  value={organizationData.verification_message}
+                  onChange={(e) => setOrganizationData({ ...organizationData, verification_message: e.target.value })}
+                  placeholder={`We are proud to certify that {{name}} has successfully completed the {{category}} program.`}
+                  className="resize-none transition-all bg-card hover:bg-muted/20 min-h-20"
+                  maxLength={300}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown on the public certificate verification page. Use <code className="font-mono bg-muted px-1 rounded text-[11px]">{"{{name}}"}</code> for the recipient&apos;s name and <code className="font-mono bg-muted px-1 rounded text-[11px]">{"{{category}}"}</code> for the category.
+                </p>
               </div>
             </div>
           </CardContent>

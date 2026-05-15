@@ -116,19 +116,19 @@ function ColorPicker({
         style={{ background: color ?? "transparent" }}
       />
       {open && (
-        <div className="absolute left-0 top-5 z-50 p-3 rounded-xl border border-border bg-popover shadow-xl min-w-38">
+        <div className="absolute left-0 top-5 z-50 p-3 rounded-xl border border-border bg-popover shadow-xl w-44">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
             Pill color
           </p>
-          <div className="grid grid-cols-7 gap-1.5 mb-2.5">
+          <div className="grid grid-cols-7 gap-2 mb-2.5">
             {PRESET_COLORS.map(c => (
               <button
                 key={c.hex}
                 onClick={() => select(c.hex)}
                 title={c.name}
                 className={cn(
-                  "w-5 h-5 rounded-full border-2 transition-all hover:scale-110",
-                  color === c.hex ? "border-foreground/60 scale-110" : "border-transparent",
+                  "w-4 h-4 rounded-full border-2 transition-all hover:scale-125",
+                  color === c.hex ? "border-foreground/60 scale-125" : "border-transparent",
                 )}
                 style={{ background: c.hex }}
               />
@@ -464,7 +464,7 @@ function CategoryRow({
 
   return (
     <div className={cn(
-      "rounded-xl border border-border overflow-hidden transition-all",
+      "rounded-xl border border-border transition-all",
       cat.is_hidden && "opacity-60",
     )}>
       {/* Category header */}
@@ -817,7 +817,7 @@ export default function CategoriesSettingsPage() {
   const hiddenCount = categories.filter(c => c.is_hidden).length;
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-8 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
