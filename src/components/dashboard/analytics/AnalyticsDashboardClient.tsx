@@ -10,6 +10,9 @@ import {
   isWithinInterval,
   startOfDay,
   subDays,
+  eachDayOfInterval,
+  startOfWeek,
+  endOfWeek,
 } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import {
@@ -22,31 +25,30 @@ import {
   YAxis,
   Bar,
   BarChart,
-  Pie,
-  PieChart,
-  Label,
-  RadialBar,
-  RadialBarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  Radar,
-  RadarChart,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  Legend,
 } from "recharts"
 import {
   Award,
   FileText,
   Shield,
   ArrowUpRight,
+  ArrowDownRight,
   Activity,
   TrendingUp,
-  Layers,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  BarChart3,
+  ScanLine,
+  AlertTriangle,
 } from "lucide-react"
 
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -62,12 +64,13 @@ import {
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 type DashboardStats = {
   totalCertificates: number
   pendingJobs: number
   verificationsToday: number
   revokedCertificates: number
-  /** All-time public verification scans */
   verificationEventsTotal: number
 }
 
@@ -120,10 +123,10 @@ export interface AnalyticsDashboardClientProps {
 
 type RangePreset = "today" | "week" | "month" | "custom"
 
+// ── Utilities ────────────────────────────────────────────────────────────────
+
 function getTimeAgo(date: string): string {
-  const seconds = Math.floor(
-    (Date.now() - new Date(date).getTime()) / 1000
-  )
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
   if (seconds < 60) return `${seconds}s ago`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
@@ -138,960 +141,644 @@ function formatRangeLabel(preset: RangePreset, custom?: DateRange): string {
   if (preset === "today") return "Today"
   if (preset === "week") return "Last 7 days"
   if (preset === "month") return "Last 30 days"
-  if (preset === "custom" && custom?.from && custom?.to) {
-    return `${format(custom.from, "MMM d, yyyy")} - ${format(custom.to, "MMM d, yyyy")}`
-  }
-  if (preset === "custom" && custom?.from && !custom?.to) {
-    return `${format(custom.from, "MMM d, yyyy")} - …`
-  }
+  if (preset === "custom" && custom?.from && custom?.to)
+    return `${format(custom.from, "MMM d")} – ${format(custom.to, "MMM d, yyyy")}`
+  if (preset === "custom" && custom?.from && !custom?.to)
+    return `${format(custom.from, "MMM d, yyyy")} – …`
   return "Custom range"
 }
 
-function toInterval(preset: RangePreset, custom?: DateRange): {
-  start: Date
-  end: Date
-} {
+function toInterval(preset: RangePreset, custom?: DateRange): { start: Date; end: Date } {
   const today = new Date()
   const end = endOfDay(today)
-
-  if (preset === "today") {
-    return { start: startOfDay(today), end }
-  }
-  if (preset === "week") {
-    const from = startOfDay(subDays(today, 6))
-    return { start: from, end }
-  }
-  if (preset === "month") {
-    const from = startOfDay(subDays(today, 29))
-    return { start: from, end }
-  }
-  if (custom?.from) {
-    return {
-      start: startOfDay(custom.from),
-      end: custom.to ? endOfDay(custom.to) : end,
-    }
-  }
-
-  // Fallback
+  if (preset === "today") return { start: startOfDay(today), end }
+  if (preset === "week") return { start: startOfDay(subDays(today, 6)), end }
+  if (preset === "month") return { start: startOfDay(subDays(today, 29)), end }
+  if (custom?.from) return { start: startOfDay(custom.from), end: custom.to ? endOfDay(custom.to) : end }
   return { start: startOfDay(subDays(today, 6)), end }
 }
 
-function normalizeImportStatus(status: string): "completed" | "failed" | "in_progress" {
-  if (status === "completed") return "completed"
-  if (status === "failed") return "failed"
-  return "in_progress"
-}
-
-/**
- * Scales preview/fallback chart values by filter: day < week < month < custom span.
- */
-function chartFallbackMultiplier(
-  preset: RangePreset,
-  customRange: DateRange | undefined
-): number {
-  switch (preset) {
-    case "today":
-      return 1
-    case "week":
-      return 2.2
-    case "month":
-      return 4.2
-    case "custom": {
-      if (customRange?.from && customRange?.to) {
-        const days =
-          differenceInCalendarDays(
-            endOfDay(customRange.to),
-            startOfDay(customRange.from)
-          ) + 1
-        return Math.min(8, Math.max(1, days / 4))
-      }
-      return 2
-    }
-    default:
-      return 1
-  }
-}
-
-/** When all KPIs are zero, show visible preview rings scaled by range. */
-function buildRadialChartRows(
-  stats: DashboardStats,
-  m: number
-): {
-  rows: { browser: string; visitors: number; fill: string }[]
-  isPreview: boolean
-} {
-  const total =
-    stats.totalCertificates +
-    stats.pendingJobs +
-    stats.verificationsToday +
-    stats.revokedCertificates
-
-  const template = [
-    { browser: "chrome", fill: "var(--color-chrome)" },
-    { browser: "safari", fill: "var(--color-safari)" },
-    { browser: "firefox", fill: "var(--color-firefox)" },
-    { browser: "edge", fill: "var(--color-edge)" },
-  ] as const
-
-  if (total === 0) {
-    const preview = [
-      Math.round(42 * m),
-      Math.round(6 * m),
-      Math.round(28 * m),
-      Math.round(4 * m),
-    ]
-    return {
-      isPreview: true,
-      rows: template.map((t, i) => ({
-        ...t,
-        visitors: Math.max(1, preview[i]!),
-      })),
-    }
-  }
-
-  return {
-    isPreview: false,
-    rows: [
-      {
-        browser: "chrome",
-        visitors: Math.max(0, stats.totalCertificates),
-        fill: "var(--color-chrome)",
-      },
-      {
-        browser: "safari",
-        visitors: Math.max(0, stats.pendingJobs),
-        fill: "var(--color-safari)",
-      },
-      {
-        browser: "firefox",
-        visitors: Math.max(0, stats.verificationsToday),
-        fill: "var(--color-firefox)",
-      },
-      {
-        browser: "edge",
-        visitors: Math.max(0, stats.revokedCertificates),
-        fill: "var(--color-edge)",
-      },
-    ],
-  }
-}
-
-/** When filtered activity sum is zero, show visible radar shape scaled by range. */
-function buildRadarDotsRows(
-  importCompleted: number,
-  importFailed: number,
-  importInProgress: number,
-  verificationValid: number,
-  verificationInvalid: number,
-  m: number
-): { month: string; desktop: number }[] {
-  const real = [
-    { month: "Imp. done", desktop: importCompleted },
-    { month: "Imp. fail", desktop: importFailed },
-    { month: "Imp. queue", desktop: importInProgress },
-    { month: "Verify OK", desktop: verificationValid },
-    { month: "Verify no", desktop: verificationInvalid },
-  ]
-  const sum = real.reduce((a, d) => a + d.desktop, 0)
-  if (sum > 0) return real
-
-  const preview = [12, 4, 7, 18, 3].map((v) => Math.max(1, Math.round(v * m)))
-  return real.map((d, i) => ({ ...d, desktop: preview[i]! }))
-}
-
-/** When bucket totals are zero, add range-scaled preview so both lines are visible. */
-function mergeLineBucketsWithFallback(
-  buckets: { month: string; desktop: number; mobile: number }[],
-  m: number
-): { month: string; desktop: number; mobile: number }[] {
-  const importSum = buckets.reduce((a, b) => a + b.desktop, 0)
-  const verifySum = buckets.reduce((a, b) => a + b.mobile, 0)
-  if (importSum + verifySum > 0) return buckets
-
-  return buckets.map((b, i) => ({
-    ...b,
-    desktop: Math.max(1, Math.round((6 + i * 2) * m)),
-    mobile: Math.max(1, Math.round((10 - i) * m)),
-  }))
-}
-
-/** Buckets selected range into 6 segments for radar “lines only” (Imports vs Verifications). */
-function buildImportVerificationBuckets(
-  interval: { start: Date; end: Date },
-  imports: RecentImport[],
-  verifications: RecentVerification[]
-): { month: string; desktop: number; mobile: number }[] {
-  const start = interval.start.getTime()
-  const end = interval.end.getTime()
-  const span = Math.max(end - start, 1)
-  const bucketMs = span / 6
-  const buckets = Array.from({ length: 6 }, (_, i) => {
-    const mid = start + bucketMs * (i + 0.5)
-    return {
-      month: format(new Date(mid), "MMM d"),
-      desktop: 0,
-      mobile: 0,
-    }
-  })
-
-  for (const imp of imports) {
-    const t = new Date(imp.created_at).getTime()
-    if (t < start || t > end) continue
-    const idx = Math.min(5, Math.floor((t - start) / bucketMs))
-    const b = buckets[idx]
-    if (b) b.desktop += 1
-  }
-  for (const v of verifications) {
-    const t = new Date(v.verified_at).getTime()
-    if (t < start || t > end) continue
-    const idx = Math.min(5, Math.floor((t - start) / bucketMs))
-    const b = buckets[idx]
-    if (b) b.mobile += 1
-  }
-  return buckets
-}
-
-/** Backend sends last 90 UTC days; slice to the analytics date filter (UTC day `yyyy-MM-dd`). */
 function filterCertificatesDailyByInterval(
   series: CertificateDailyPoint[],
   interval: { start: Date; end: Date }
 ): CertificateDailyPoint[] {
-  // Use UTC date boundaries so the filter matches the backend's UTC `YYYY-MM-DD` strings.
   const fromStr = interval.start.toISOString().slice(0, 10)
   const toStr = interval.end.toISOString().slice(0, 10)
   return series.filter((r) => r.date >= fromStr && r.date <= toStr)
 }
 
-function RecentImportsCard({
-  slug,
-  imports,
-}: {
-  slug: string
-  imports: RecentImport[]
-}) {
+// ── Heatmap ──────────────────────────────────────────────────────────────────
+
+const HEAT_LEVELS = [
+  { min: 0, max: 0, bg: "bg-[#1a1a1a] dark:bg-[#161b22]", label: "No activity" },
+  { min: 1, max: 2, bg: "bg-[#0e4429]", label: "1–2" },
+  { min: 3, max: 5, bg: "bg-[#006d32]", label: "3–5" },
+  { min: 6, max: 10, bg: "bg-[#26a641]", label: "6–10" },
+  { min: 11, max: Infinity, bg: "bg-[#3ECF8E]", label: "11+" },
+]
+
+function heatLevel(count: number): string {
+  for (const l of HEAT_LEVELS) {
+    if (count >= l.min && count <= l.max) return l.bg
+  }
+  return HEAT_LEVELS[0]!.bg
+}
+
+function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
+  const today = new Date()
+  const start = subDays(today, 364)
+  const calStart = startOfWeek(start, { weekStartsOn: 0 })
+  const calEnd = endOfWeek(today, { weekStartsOn: 0 })
+
+  const days = eachDayOfInterval({ start: calStart, end: calEnd })
+
+  const countByDate: Record<string, number> = {}
+  for (const pt of series) {
+    countByDate[pt.date] = (countByDate[pt.date] ?? 0) + pt.issued
+  }
+
+  // Group into weeks (columns)
+  const weeks: Date[][] = []
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7))
+  }
+
+  const monthLabels: { label: string; col: number }[] = []
+  let lastMonth = -1
+  weeks.forEach((week, wi) => {
+    const m = week[0]!.getMonth()
+    if (m !== lastMonth) {
+      monthLabels.push({ label: format(week[0]!, "MMM"), col: wi })
+      lastMonth = m
+    }
+  })
+
+  const totalInYear = Object.values(countByDate).reduce((a, b) => a + b, 0)
+  const activeDays = Object.values(countByDate).filter((v) => v > 0).length
+
+  const [tooltip, setTooltip] = React.useState<{ text: string; x: number; y: number } | null>(null)
+
   return (
-    <Card>
-      <CardHeader className="border-b bg-muted/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-lg">Recent Imports</CardTitle>
-          </div>
-          <Link href={orgPath(slug, "/imports")}>
-            <Button variant="ghost" size="sm" className="gap-1">
-              View all
-              <ArrowUpRight className="h-3 w-3" />
-            </Button>
-          </Link>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Certificate Activity</p>
+          <p className="text-xs text-muted-foreground">
+            {totalInYear.toLocaleString()} certificates across {activeDays} active days in the last year
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="p-6">
-        {imports.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-sm text-muted-foreground">No imports in this range</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {imports.map((item, i) => (
-              <div key={item.id} className="relative flex items-start gap-4">
-                {i !== imports.length - 1 && (
-                  <div className="absolute left-4 top-10 bottom-0 w-px bg-border" />
-                )}
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center ring-4 ring-background">
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 pt-1">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="text-sm font-medium truncate">
-                      {item.file_name || "Unknown file"}
-                    </p>
-                    <Badge
-                      variant={
-                        item.status === "completed"
-                          ? "default"
-                          : item.status === "failed"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
-                      {item.status}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {item.total_rows ?? 0} rows • {getTimeAgo(item.created_at)}
-                  </p>
-                </div>
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span>Less</span>
+          {HEAT_LEVELS.map((l, i) => (
+            <div key={i} className={cn("w-3 h-3 rounded-sm", l.bg)} />
+          ))}
+          <span>More</span>
+        </div>
+      </div>
+
+      <div className="relative overflow-x-auto">
+        {/* Month labels */}
+        <div className="flex mb-1" style={{ paddingLeft: 28 }}>
+          {weeks.map((_, wi) => {
+            const label = monthLabels.find((m) => m.col === wi)
+            return (
+              <div key={wi} className="text-[9px] text-muted-foreground/50 leading-none" style={{ width: 14, flexShrink: 0  }}>
+                {label?.label ?? ""}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="flex gap-0">
+          {/* Day-of-week labels */}
+          <div className="flex flex-col gap-0.5 mr-1">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
+              <div key={d} className="text-[9px] text-muted-foreground/40 leading-none flex items-center" style={{ height: 12, width: 24 }}>
+                {i % 2 === 1 ? d.slice(0, 1) : ""}
               </div>
             ))}
           </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
 
-function RecentVerificationsCard({
-  slug,
-  verifications,
-}: {
-  slug: string
-  verifications: RecentVerification[]
-}) {
-  return (
-    <Card>
-      <CardHeader className="border-b bg-muted/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-lg">Recent Verifications</CardTitle>
-          </div>
-          <Link href={orgPath(slug, "/verification-logs")}>
-            <Button variant="ghost" size="sm" className="gap-1">
-              View all
-              <ArrowUpRight className="h-3 w-3" />
-            </Button>
-          </Link>
-        </div>
-      </CardHeader>
-      <CardContent className="p-6">
-        {verifications.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-sm text-muted-foreground">
-              No verifications in this range
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {verifications.map((item, i) => (
-              <div key={item.id} className="relative flex items-start gap-4">
-                {i !== verifications.length - 1 && (
-                  <div className="absolute left-4 top-10 bottom-0 w-px bg-border" />
-                )}
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center ring-4 ring-background">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
+          {/* Calendar grid */}
+          <div
+            className="relative"
+            onMouseLeave={() => setTooltip(null)}
+          >
+            <div className="flex gap-0.5">
+              {weeks.map((week, wi) => (
+                <div key={wi} className="flex flex-col gap-0.5">
+                  {week.map((day) => {
+                    const key = format(day, "yyyy-MM-dd")
+                    const count = countByDate[key] ?? 0
+                    const isFuture = day > today
+                    return (
+                      <div
+                        key={key}
+                        className={cn(
+                          "w-3 h-3 rounded-sm transition-opacity cursor-default",
+                          isFuture ? "opacity-0 pointer-events-none" : heatLevel(count),
+                          count > 0 && !isFuture && "hover:ring-1 hover:ring-white/20"
+                        )}
+                        onMouseEnter={(e) => {
+                          const rect = (e.target as HTMLElement).getBoundingClientRect()
+                          const parent = (e.target as HTMLElement).closest(".relative")?.getBoundingClientRect()
+                          setTooltip({
+                            text: count > 0 ? `${count} certificate${count === 1 ? "" : "s"} on ${format(day, "MMM d, yyyy")}` : `No certificates on ${format(day, "MMM d, yyyy")}`,
+                            x: rect.left - (parent?.left ?? 0) + 6,
+                            y: rect.top - (parent?.top ?? 0) - 28,
+                          })
+                        }}
+                      />
+                    )
+                  })}
                 </div>
-                <div className="flex-1 pt-1">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="text-sm font-medium truncate">
-                      {item.certificate?.recipient_name || "Unknown"}
-                    </p>
-                    <Badge
-                      variant={item.result === "valid" ? "default" : "destructive"}
-                    >
-                      {item.result || "unknown"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {item.certificate?.course_name || "N/A"} •{" "}
-                    {getTimeAgo(item.verified_at)}
-                  </p>
-                </div>
+              ))}
+            </div>
+
+            {tooltip && (
+              <div
+                className="absolute z-10 pointer-events-none bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded-md shadow-lg border border-border/60 whitespace-nowrap"
+                style={{ left: tooltip.x, top: tooltip.y, transform: "translateX(-50%)" }}
+              >
+                {tooltip.text}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function EmptyState({ slug }: { slug: string }) {
-  return (
-    <Card className="border-2 border-dashed bg-card/40">
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center mb-6">
-          <Award className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-2xl font-bold mb-2">No certificates yet</h3>
-        <p className="text-muted-foreground text-center mb-8 max-w-md">
-          Get started by creating a template, then import data to generate certificates.
-        </p>
-        <div className="flex gap-3">
-          <Link href={orgPath(slug, "/templates")}>
-            <Button>Create Template</Button>
-          </Link>
-          <Link href={orgPath(slug, "/imports")}>
-            <Button variant="outline">Import Data</Button>
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function AnalyticsKPICards({ stats }: { stats: DashboardStats }) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 w-full">
-      <Card className="bg-card/60 backdrop-blur-sm border-border/50 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Certificates</CardTitle>
-          <Award className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.totalCertificates.toLocaleString()}</div>
-          <p className="text-xs text-muted-foreground">Generated all-time</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-card/60 backdrop-blur-sm border-border/50 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Pending Jobs</CardTitle>
-          <Activity className="h-4 w-4 text-primary" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.pendingJobs.toLocaleString()}</div>
-          <p className="text-xs text-muted-foreground">Currently processing</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-card/60 backdrop-blur-sm border-border/50 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Verifications Today</CardTitle>
-          <Shield className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.verificationsToday.toLocaleString()}</div>
-          <p className="text-xs text-muted-foreground">Recent scanning activity</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-card/60 backdrop-blur-sm border-border/50 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Revoked</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.revokedCertificates.toLocaleString()}</div>
-          <p className="text-xs text-muted-foreground">Certificates invalidated</p>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   )
 }
 
-function ChartRadialGridKpis({
-  stats,
-  preset,
-  customRange,
-}: {
-  stats: DashboardStats
-  preset: RangePreset
-  customRange: DateRange | undefined
-}) {
-  const m = chartFallbackMultiplier(preset, customRange)
-  const { rows: chartData, isPreview } = buildRadialChartRows(stats, m)
+// ── KPI Cards ─────────────────────────────────────────────────────────────────
 
-  const chartConfig = {
-    visitors: {
-      label: "Count",
-    },
-    chrome: {
-      label: "Total certificates",
-      color: "var(--chart-1)",
-    },
-    safari: {
-      label: "Pending jobs",
-      color: "var(--chart-2)",
-    },
-    firefox: {
-      label: "Verifications today",
-      color: "var(--chart-3)",
-    },
-    edge: {
-      label: "Revoked",
-      color: "var(--chart-4)",
-    },
-  } satisfies ChartConfig
+type KpiCardProps = {
+  label: string
+  value: string | number
+  sub?: string
+  icon: React.ReactNode
+  accent?: string
+  trend?: "up" | "down" | "neutral"
+  trendLabel?: string
+}
 
-  const totalReal =
-    stats.totalCertificates +
-    stats.pendingJobs +
-    stats.verificationsToday +
-    stats.revokedCertificates
-
+function KpiCard({ label, value, sub, icon, accent = "#3ECF8E", trend, trendLabel }: KpiCardProps) {
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="items-center pb-0">
-        <CardTitle className="text-lg">Key metrics</CardTitle>
-        <CardDescription>
-          Certificates, pending jobs, verifications today, and revoked — scaled
-          preview when there is no live data yet
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 pb-0">
-        <ChartContainer
-          config={chartConfig}
-          className="mx-auto w-full max-w-[320px]"
-        >
-          <RadialBarChart data={chartData} innerRadius={30} outerRadius={100}>
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent hideLabel nameKey="browser" />}
-            />
-            <PolarGrid gridType="circle" />
-            <RadialBar dataKey="visitors" />
-          </RadialBarChart>
-        </ChartContainer>
-      </CardContent>
-      <CardFooter className="flex-col gap-2 text-sm">
-        <div className="flex items-center gap-2 leading-none font-medium">
-          {isPreview ? (
-            <>
-              Preview for {preset === "custom" ? "custom range" : preset} filter
-              <TrendingUp className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              {totalReal.toLocaleString()} total across segments{" "}
-              <TrendingUp className="h-4 w-4" />
-            </>
-          )}
+    <div className="rounded-2xl border border-border/50 bg-card p-5 flex flex-col gap-3 relative overflow-hidden">
+      <div
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{ background: `radial-gradient(ellipse at top left, ${accent}, transparent 70%)` }}
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${accent}18` }}>
+          <div style={{ color: accent }}>{icon}</div>
         </div>
-        <div className="leading-none text-muted-foreground">
-          {isPreview
-            ? "Sample distribution so charts stay visible — real totals replace this when you have data."
-            : "Live totals from your workspace API."}
-        </div>
-      </CardFooter>
-    </Card>
+      </div>
+      <div>
+        <p className="text-2xl font-bold tracking-tight tabular-nums">{typeof value === "number" ? value.toLocaleString() : value}</p>
+        {(sub || trendLabel) && (
+          <div className="flex items-center gap-1.5 mt-1">
+            {trend === "up" && <ArrowUpRight className="w-3 h-3 text-emerald-500" />}
+            {trend === "down" && <ArrowDownRight className="w-3 h-3 text-red-400" />}
+            {trendLabel && <span className={cn("text-xs", trend === "up" ? "text-emerald-500" : trend === "down" ? "text-red-400" : "text-muted-foreground")}>{trendLabel}</span>}
+            {sub && !trendLabel && <span className="text-xs text-muted-foreground">{sub}</span>}
+          </div>
+        )}
+        {sub && !trendLabel && !trend && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+      </div>
+    </div>
   )
 }
 
-function ChartRadarDotsActivity({
-  imports,
-  verifications,
-  rangeLabel,
-  preset,
-  customRange,
-}: {
-  imports: RecentImport[]
-  verifications: RecentVerification[]
-  rangeLabel: string
-  preset: RangePreset
-  customRange: DateRange | undefined
-}) {
-  const m = chartFallbackMultiplier(preset, customRange)
-  const importCompleted = imports.filter((i) => normalizeImportStatus(i.status) === "completed").length
-  const importFailed = imports.filter((i) => normalizeImportStatus(i.status) === "failed").length
-  const importInProgress = imports.filter((i) => normalizeImportStatus(i.status) === "in_progress").length
-  const verificationValid = verifications.filter((v) => v.result === "valid").length
-  const verificationInvalid = verifications.length - verificationValid
-
-  const rawSum =
-    importCompleted +
-    importFailed +
-    importInProgress +
-    verificationValid +
-    verificationInvalid
-  const chartData = buildRadarDotsRows(
-    importCompleted,
-    importFailed,
-    importInProgress,
-    verificationValid,
-    verificationInvalid,
-    m
-  )
-  const isPreview = rawSum === 0
-
-  const chartConfig = {
-    desktop: {
-      label: "Count",
-      color: "var(--chart-1)",
-    },
-  } satisfies ChartConfig
-
-  const sum = chartData.reduce((a, d) => a + d.desktop, 0)
-
-  return (
-    <Card>
-      <CardHeader className="items-center">
-        <CardTitle className="text-lg">Activity mix</CardTitle>
-        <CardDescription>
-          Import and verification counts for {rangeLabel}
-          {isPreview ? " (preview curve when no events in range)" : ""}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pb-0">
-        <ChartContainer
-          config={chartConfig}
-          className="mx-auto w-full max-w-[320px]"
-        >
-          <RadarChart data={chartData}>
-            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-            <PolarAngleAxis dataKey="month" />
-            <PolarGrid />
-            <Radar
-              dataKey="desktop"
-              fill="var(--color-desktop)"
-              fillOpacity={0.6}
-              dot={{
-                r: 4,
-                fillOpacity: 1,
-              }}
-            />
-          </RadarChart>
-        </ChartContainer>
-      </CardContent>
-      <CardFooter className="flex-col gap-2 text-sm">
-        <div className="flex items-center gap-2 leading-none font-medium">
-          {isPreview ? (
-            <>
-              Range-scaled preview ({sum} display units){" "}
-              <TrendingUp className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              {sum} events in range <TrendingUp className="h-4 w-4" />
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2 leading-none text-muted-foreground">
-          {isPreview
-            ? "Shows a visible shape until imports/verifications appear for this filter."
-            : "From recent import and verification rows in your selected period."}
-        </div>
-      </CardFooter>
-    </Card>
-  )
-}
-
-function ChartRadarLinesImportsVsVerifications({
-  interval,
-  imports,
-  verifications,
-  rangeLabel,
-  preset,
-  customRange,
-}: {
-  interval: { start: Date; end: Date }
-  imports: RecentImport[]
-  verifications: RecentVerification[]
-  rangeLabel: string
-  preset: RangePreset
-  customRange: DateRange | undefined
-}) {
-  const m = chartFallbackMultiplier(preset, customRange)
-  const buckets = buildImportVerificationBuckets(interval, imports, verifications)
-  const importSumBefore = buckets.reduce((a, b) => a + b.desktop, 0)
-  const verifySumBefore = buckets.reduce((a, b) => a + b.mobile, 0)
-  const hadActivity = importSumBefore + verifySumBefore > 0
-  const chartData = mergeLineBucketsWithFallback(buckets, m)
-
-  const chartConfig = {
-    desktop: {
-      label: "Imports",
-      color: "var(--chart-1)",
-    },
-    mobile: {
-      label: "Verifications",
-      color: "var(--chart-2)",
-    },
-  } satisfies ChartConfig
-
-  return (
-    <Card>
-      <CardHeader className="items-center pb-4">
-        <CardTitle className="text-lg">Imports vs verifications</CardTitle>
-        <CardDescription>
-          Six time slices over {rangeLabel}
-          {!hadActivity ? " — preview trend until events land in range" : ""}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pb-0">
-        <ChartContainer
-          config={chartConfig}
-          className="mx-auto w-full max-w-[320px]"
-        >
-          <RadarChart data={chartData}>
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent indicator="line" />}
-            />
-            <PolarAngleAxis dataKey="month" />
-            <PolarGrid radialLines={false} />
-            <Radar
-              dataKey="desktop"
-              fill="var(--color-desktop)"
-              fillOpacity={0}
-              stroke="var(--color-desktop)"
-              strokeWidth={2}
-            />
-            <Radar
-              dataKey="mobile"
-              fill="var(--color-mobile)"
-              fillOpacity={0}
-              stroke="var(--color-mobile)"
-              strokeWidth={2}
-            />
-          </RadarChart>
-        </ChartContainer>
-      </CardContent>
-      <CardFooter className="flex-col gap-2 text-sm">
-        <div className="flex items-center gap-2 leading-none font-medium">
-          {hadActivity ? (
-            <>
-              {importSumBefore} imports · {verifySumBefore} verifications{" "}
-              <TrendingUp className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              Preview imports vs verifications (range-scaled){" "}
-              <TrendingUp className="h-4 w-4" />
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2 leading-none text-muted-foreground">
-          Equal-width buckets across your filter window
-        </div>
-      </CardFooter>
-    </Card>
-  )
-}
+// ── Main area chart ───────────────────────────────────────────────────────────
 
 type CertLineMetric = "issued" | "verificationScans"
 
-function ChartCertificatesDailyInteractive({
-  series,
-  rangeLabel,
-}: {
-  series: CertificateDailyPoint[]
-  rangeLabel: string
-}) {
-  const [activeChart, setActiveChart] = React.useState<CertLineMetric>("issued")
+const CHART_COLORS = {
+  issued: "#3ECF8E",
+  verificationScans: "#60a5fa",
+}
 
-  const chartConfig = {
-    certificates: {
-      label: "Certificates",
-    },
-    issued: {
-      label: "Generated",
-      color: "var(--chart-1)",
-    },
-    verificationScans: {
-      label: "Verification scans",
-      color: "var(--chart-3)",
-    },
-  } satisfies ChartConfig
+function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]; rangeLabel: string }) {
+  const [active, setActive] = React.useState<CertLineMetric>("issued")
 
-  const total = React.useMemo(
+  const totals = React.useMemo(
     () => ({
-      issued: series.reduce((acc, curr) => acc + curr.issued, 0),
-      verificationScans: series.reduce((acc, curr) => acc + curr.verificationScans, 0),
+      issued: series.reduce((a, r) => a + r.issued, 0),
+      verificationScans: series.reduce((a, r) => a + r.verificationScans, 0),
     }),
     [series]
   )
 
-  const hasActivity = total.issued + total.verificationScans > 0
+  const chartConfig: ChartConfig = {
+    issued: { label: "Certificates generated", color: CHART_COLORS.issued },
+    verificationScans: { label: "Verification scans", color: CHART_COLORS.verificationScans },
+  }
+
+  const color = CHART_COLORS[active]
 
   return (
-    <Card className="py-4 sm:py-0">
-      <CardHeader className="flex flex-col items-stretch border-b p-0! sm:flex-row">
-        <div className="flex flex-1 flex-col justify-center gap-1 px-6 pb-3 sm:pb-0">
-          <CardTitle className="text-lg">Certificates: generated vs verification</CardTitle>
-          <CardDescription>
-            Daily counts for {rangeLabel}. “Generated” uses `certificates.created_at`;
-            “Verification scans” uses `certificate_verification_events.scanned_at`.
-          </CardDescription>
+    <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+      {/* Metric toggle tabs */}
+      <div className="flex border-b border-border/40">
+        <div className="flex-1 px-6 py-4">
+          <p className="text-xs text-muted-foreground mb-0.5">Trend over {rangeLabel}</p>
+          <p className="text-sm font-semibold">Certificates & Verifications</p>
         </div>
-        <div className="flex">
-          {(["issued", "verificationScans"] as const).map((key) => {
-            const chart = key
-            return (
-              <button
-                key={chart}
-                type="button"
-                data-active={activeChart === chart}
-                className="flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l data-[active=true]:bg-muted/50 sm:border-t-0 sm:border-l sm:px-8 sm:py-6"
-                onClick={() => setActiveChart(chart)}
-              >
-                <span className="text-xs text-muted-foreground">
-                  {chartConfig[chart].label}
-                </span>
-                <span className="text-lg leading-none font-bold sm:text-3xl">
-                  {total[chart].toLocaleString()}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </CardHeader>
-      <CardContent className="px-2 sm:p-6">
+        {(["issued", "verificationScans"] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActive(key)}
+            className={cn(
+              "px-6 py-4 border-l border-border/40 text-left transition-colors",
+              active === key ? "bg-muted/50" : "hover:bg-muted/20"
+            )}
+          >
+            <p className="text-xs text-muted-foreground mb-0.5">{chartConfig[key]?.label as string}</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: active === key ? color : undefined }}>
+              {totals[key].toLocaleString()}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="p-6 pt-4">
         {series.length === 0 ? (
-          <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
-            No days in this range overlap the loaded history (last 90 days).
+          <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
+            No data in this range
           </div>
         ) : (
-          <ChartContainer
-            config={chartConfig}
-            className="aspect-auto h-[280px] w-full sm:h-[300px]"
-          >
-            <AreaChart
-              accessibilityLayer
-              data={series}
-              margin={{
-                left: 12,
-                right: 12,
-              }}
-            >
+          <ChartContainer config={chartConfig} className="h-64 w-full">
+            <AreaChart data={series} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
               <defs>
-                <linearGradient id="fillArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor={`var(--color-${activeChart})`}
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor={`var(--color-${activeChart})`}
-                    stopOpacity={0.0}
-                  />
+                <linearGradient id="areaGlow" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} opacity={0.3} />
+              <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
               <XAxis
                 dataKey="date"
                 tickLine={false}
                 axisLine={false}
+                tick={{ fontSize: 10, fill: "rgba(156,163,175,0.7)" }}
                 tickMargin={8}
-                minTickGap={32}
-                tickFormatter={(value) => {
-                  const date = new Date(String(value))
-                  return date.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })
+                minTickGap={28}
+                tickFormatter={(v) => {
+                  const d = new Date(String(v))
+                  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
                 }}
               />
+              <YAxis hide allowDecimals={false} />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    labelFormatter={(value: unknown) => {
-                      return new Date(String(value)).toLocaleDateString(
-                        "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        }
-                      )
-                    }}
+                    labelFormatter={(v) =>
+                      new Date(String(v)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    }
                   />
                 }
               />
               <Area
-                dataKey={activeChart}
+                dataKey={active}
                 type="monotone"
-                fill="url(#fillArea)"
-                fillOpacity={1}
-                stroke={`var(--color-${activeChart})`}
+                stroke={color}
                 strokeWidth={2}
+                fill="url(#areaGlow)"
+                dot={false}
+                activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
               />
             </AreaChart>
           </ChartContainer>
         )}
-      </CardContent>
-      {!hasActivity && series.length > 0 && (
-        <CardFooter className="text-xs text-muted-foreground">
-          Flat line at zero — no certificate generated or verification scans in this range yet.
-        </CardFooter>
-      )}
-    </Card>
+      </div>
+    </div>
   )
 }
 
-function ChartCertificateCategoryMixTop({
-  mix,
-}: {
-  mix: CertificateCategoryMixRow[]
-}) {
-  const chartData = React.useMemo(() => {
-    return mix.map((row, index) => ({
-      name: `${row.categoryName} / ${row.subcategoryName}`,
-      count: row.count,
-      fill: `var(--chart-${(index % 5) + 1})`,
-    }))
-  }, [mix])
+// ── Category donut ────────────────────────────────────────────────────────────
 
-  const totalCertificates = React.useMemo(() => {
-    return chartData.reduce((acc, curr) => acc + curr.count, 0)
-  }, [chartData])
+const CAT_COLORS = ["#3ECF8E", "#60a5fa", "#f59e0b", "#f472b6", "#a78bfa", "#34d399"]
 
-  const chartConfig = {
-    count: { label: "Count" },
-  } satisfies ChartConfig
+function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
+  const data = React.useMemo(
+    () => mix.slice(0, 6).map((r, i) => ({
+      name: r.categoryName !== "Uncategorised" ? r.categoryName : r.subcategoryName,
+      value: r.count,
+      color: CAT_COLORS[i % CAT_COLORS.length]!,
+    })),
+    [mix]
+  )
+  const total = data.reduce((a, r) => a + r.value, 0)
+
+  if (data.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border/50 bg-card p-6 flex flex-col h-full">
+        <p className="text-sm font-semibold mb-1">Category mix</p>
+        <p className="text-xs text-muted-foreground mb-4">All-time by template category</p>
+        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">No templates yet</div>
+      </div>
+    )
+  }
 
   return (
-    <Card className="flex flex-col h-full border-border/50 shadow-sm">
-      <CardHeader className="items-center pb-4 text-center">
-        <CardTitle className="text-lg">Category Mix</CardTitle>
-        <CardDescription>All-time distribution by template category.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 pb-0 flex flex-col justify-center">
-        {chartData.length === 0 ? (
-          <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-            No category breakdown available.
-          </div>
-        ) : (
-          <ChartContainer
-            config={chartConfig}
-            className="mx-auto aspect-square max-h-[300px]"
-          >
-            <PieChart>
-              <ChartTooltip
-                cursor={false}
-                content={<ChartTooltipContent hideLabel />}
-              />
-              <Pie
-                data={chartData}
-                dataKey="count"
-                nameKey="name"
-                innerRadius={60}
-                strokeWidth={5}
-                paddingAngle={2}
-              >
-                <Label
-                  content={({ viewBox }) => {
-                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                      return (
-                        <text
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                        >
-                          <tspan
-                            x={viewBox.cx}
-                            y={viewBox.cy}
-                            className="fill-foreground text-3xl font-bold"
-                          >
-                            {totalCertificates.toLocaleString()}
-                          </tspan>
-                          <tspan
-                            x={viewBox.cx}
-                            y={(viewBox.cy || 0) + 24}
-                            className="fill-muted-foreground text-xs"
-                          >
-                            Certificates
-                          </tspan>
-                        </text>
-                      )
-                    }
-                  }}
-                />
-              </Pie>
-            </PieChart>
-          </ChartContainer>
-        )}
-      </CardContent>
-    </Card>
+    <div className="rounded-2xl border border-border/50 bg-card p-6 flex flex-col h-full">
+      <p className="text-sm font-semibold mb-0.5">Category mix</p>
+      <p className="text-xs text-muted-foreground mb-4">All-time distribution</p>
+      {/* Simple CSS donut */}
+      <div className="flex flex-col gap-2.5 flex-1">
+        {data.map((d) => {
+          const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
+          return (
+            <div key={d.name} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                  <span className="text-foreground/80 truncate max-w-35">{d.name}</span>
+                </div>
+                <span className="tabular-nums text-muted-foreground">{d.value.toLocaleString()}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: d.color }} />
+              </div>
+            </div>
+          )
+        })}
+        <p className="text-[10px] text-muted-foreground/50 pt-1 text-right">{total.toLocaleString()} total</p>
+      </div>
+    </div>
   )
 }
 
-export function AnalyticsDashboardClient({
-  slug,
-  initialData,
-}: AnalyticsDashboardClientProps) {
+// ── Imports bar chart ─────────────────────────────────────────────────────────
+
+function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
+  const buckets = React.useMemo(() => {
+    const byDay: Record<string, { completed: number; failed: number; processing: number }> = {}
+    for (const imp of imports) {
+      const day = imp.created_at.slice(0, 10)
+      if (!byDay[day]) byDay[day] = { completed: 0, failed: 0, processing: 0 }
+      const b = byDay[day]!
+      if (imp.status === "completed") b.completed++
+      else if (imp.status === "failed") b.failed++
+      else b.processing++
+    }
+    return Object.entries(byDay)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({
+        date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        ...v,
+      }))
+  }, [imports])
+
+  const total = imports.length
+  const completed = imports.filter((i) => i.status === "completed").length
+  const failed = imports.filter((i) => i.status === "failed").length
+  const successRate = total > 0 ? Math.round((completed / total) * 100) : 0
+
+  const chartConfig: ChartConfig = {
+    completed: { label: "Completed", color: "#3ECF8E" },
+    failed: { label: "Failed", color: "#f87171" },
+    processing: { label: "Processing", color: "#60a5fa" },
+  }
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="text-sm font-semibold">Import jobs</p>
+          <p className="text-xs text-muted-foreground">Completion status over period</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xl font-bold tabular-nums" style={{ color: successRate >= 90 ? "#3ECF8E" : successRate >= 70 ? "#f59e0b" : "#f87171" }}>
+            {successRate}%
+          </p>
+          <p className="text-[10px] text-muted-foreground">success rate</p>
+        </div>
+      </div>
+      {buckets.length === 0 ? (
+        <div className="h-36 flex items-center justify-center text-sm text-muted-foreground">No imports in this range</div>
+      ) : (
+        <ChartContainer config={chartConfig} className="h-36 w-full">
+          <BarChart data={buckets} barSize={12} margin={{ left: 0, right: 0 }}>
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+            <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.6)" }} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Bar dataKey="completed" stackId="a" fill="#3ECF8E" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="processing" stackId="a" fill="#60a5fa" />
+            <Bar dataKey="failed" stackId="a" fill="#f87171" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ChartContainer>
+      )}
+      <div className="flex items-center gap-4 mt-3 flex-wrap">
+        {[
+          { label: "Completed", value: completed, color: "#3ECF8E" },
+          { label: "Failed", value: failed, color: "#f87171" },
+          { label: "Processing", value: total - completed - failed, color: "#60a5fa" },
+        ].map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+            <span className="text-[10px] text-muted-foreground">{s.label}: <strong className="text-foreground">{s.value}</strong></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Verification trend line ───────────────────────────────────────────────────
+
+function VerificationTrendChart({ verifications }: { verifications: RecentVerification[] }) {
+  const data = React.useMemo(() => {
+    const byDay: Record<string, { valid: number; invalid: number }> = {}
+    for (const v of verifications) {
+      const day = v.verified_at.slice(0, 10)
+      if (!byDay[day]) byDay[day] = { valid: 0, invalid: 0 }
+      if (v.result === "valid") byDay[day]!.valid++
+      else byDay[day]!.invalid++
+    }
+    return Object.entries(byDay)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({
+        date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        ...v,
+      }))
+  }, [verifications])
+
+  const total = verifications.length
+  const valid = verifications.filter((v) => v.result === "valid").length
+  const validPct = total > 0 ? Math.round((valid / total) * 100) : 0
+
+  const chartConfig: ChartConfig = {
+    valid: { label: "Valid", color: "#3ECF8E" },
+    invalid: { label: "Invalid", color: "#f87171" },
+  }
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="text-sm font-semibold">Verification results</p>
+          <p className="text-xs text-muted-foreground">Valid vs invalid scans</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xl font-bold tabular-nums text-[#3ECF8E]">{validPct}%</p>
+          <p className="text-[10px] text-muted-foreground">valid rate</p>
+        </div>
+      </div>
+      {data.length === 0 ? (
+        <div className="h-36 flex items-center justify-center text-sm text-muted-foreground">No verifications in this range</div>
+      ) : (
+        <ChartContainer config={chartConfig} className="h-36 w-full">
+          <LineChart data={data} margin={{ left: 0, right: 0 }}>
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+            <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.6)" }} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Line dataKey="valid" stroke="#3ECF8E" strokeWidth={2} dot={false} />
+            <Line dataKey="invalid" stroke="#f87171" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+          </LineChart>
+        </ChartContainer>
+      )}
+      <div className="flex items-center gap-4 mt-3">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#3ECF8E]" />
+          <span className="text-[10px] text-muted-foreground">Valid: <strong className="text-foreground">{valid}</strong></span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#f87171]" />
+          <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{total - valid}</strong></span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Activity feeds ────────────────────────────────────────────────────────────
+
+function RecentImportsCard({ slug, imports }: { slug: string; imports: RecentImport[] }) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-muted-foreground" />
+          <p className="text-sm font-semibold">Recent imports</p>
+        </div>
+        <Link href={orgPath(slug, "/imports")}>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">View all <ArrowUpRight className="w-3 h-3" /></Button>
+        </Link>
+      </div>
+      <div className="divide-y divide-border/30">
+        {imports.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">No imports in this range</div>
+        ) : (
+          imports.slice(0, 5).map((item) => (
+            <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+              <div className={cn(
+                "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                item.status === "completed" ? "bg-emerald-500/10" : item.status === "failed" ? "bg-red-500/10" : "bg-blue-500/10"
+              )}>
+                {item.status === "completed" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> :
+                 item.status === "failed" ? <XCircle className="w-3.5 h-3.5 text-red-400" /> :
+                 <Clock className="w-3.5 h-3.5 text-blue-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{item.file_name || "Unknown file"}</p>
+                <p className="text-[10px] text-muted-foreground">{item.total_rows ?? 0} rows · {getTimeAgo(item.created_at)}</p>
+              </div>
+              <span className={cn(
+                "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                item.status === "completed" ? "bg-emerald-500/10 text-emerald-500" :
+                item.status === "failed" ? "bg-red-500/10 text-red-400" :
+                "bg-blue-500/10 text-blue-400"
+              )}>
+                {item.status}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RecentVerificationsCard({ slug, verifications }: { slug: string; verifications: RecentVerification[] }) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <ScanLine className="w-4 h-4 text-muted-foreground" />
+          <p className="text-sm font-semibold">Recent verifications</p>
+        </div>
+        <Link href={orgPath(slug, "/verification-logs")}>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">View all <ArrowUpRight className="w-3 h-3" /></Button>
+        </Link>
+      </div>
+      <div className="divide-y divide-border/30">
+        {verifications.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">No verifications in this range</div>
+        ) : (
+          verifications.slice(0, 5).map((item) => (
+            <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+              <div className={cn(
+                "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                item.result === "valid" ? "bg-emerald-500/10" : "bg-red-500/10"
+              )}>
+                {item.result === "valid"
+                  ? <Shield className="w-3.5 h-3.5 text-emerald-500" />
+                  : <AlertTriangle className="w-3.5 h-3.5 text-red-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{item.certificate?.recipient_name || "Unknown"}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{item.certificate?.course_name || "N/A"} · {getTimeAgo(item.verified_at)}</p>
+              </div>
+              <span className={cn(
+                "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                item.result === "valid" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-400"
+              )}>
+                {item.result ?? "unknown"}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState({ slug }: { slug: string }) {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-border/40 bg-card/30 p-16 flex flex-col items-center text-center">
+      <div className="w-16 h-16 rounded-2xl bg-[#3ECF8E]/10 flex items-center justify-center mb-5">
+        <Award className="w-8 h-8 text-[#3ECF8E]" />
+      </div>
+      <h3 className="text-xl font-bold mb-2">No data yet</h3>
+      <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+        Create a template and import recipient data to start generating certificates and unlocking analytics.
+      </p>
+      <div className="flex gap-3">
+        <Link href={orgPath(slug, "/templates")}>
+          <Button className="bg-[#3ECF8E] hover:bg-[#34b87a] text-black font-semibold">Create Template</Button>
+        </Link>
+        <Link href={orgPath(slug, "/imports")}>
+          <Button variant="outline">Import Data</Button>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
+
+export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboardClientProps) {
   const router = useRouter()
 
   const [preset, setPreset] = React.useState<RangePreset>("week")
-  const [customRange, setCustomRange] = React.useState<DateRange | undefined>(() => undefined)
+  const [customRange, setCustomRange] = React.useState<DateRange | undefined>(undefined)
 
   const stats = initialData?.stats ?? {
     totalCertificates: 0,
@@ -1104,169 +791,134 @@ export function AnalyticsDashboardClient({
   const rangeLabel = formatRangeLabel(preset, customRange)
   const interval = React.useMemo(() => toInterval(preset, customRange), [preset, customRange])
 
-  const allImports = React.useMemo(
-    () => initialData?.recentImports ?? [],
-    [initialData]
-  )
-  const allVerifications = React.useMemo(
-    () => initialData?.recentVerifications ?? [],
-    [initialData]
-  )
+  const allImports = initialData?.recentImports ?? []
+  const allVerifications = initialData?.recentVerifications ?? []
+  const allCertificatesDaily = initialData?.certificatesDaily ?? []
+  const allCategoryMix = initialData?.certificateCategoryMix ?? []
 
-  const allCertificatesDaily = React.useMemo(
-    () => initialData?.certificatesDaily ?? [],
-    [initialData]
-  )
-
-  const allCertificateCategoryMix = React.useMemo(
-    () => initialData?.certificateCategoryMix ?? [],
-    [initialData]
-  )
-
-  const filteredCertificatesDaily = React.useMemo(
+  const filteredDaily = React.useMemo(
     () => filterCertificatesDailyByInterval(allCertificatesDaily, interval),
     [allCertificatesDaily, interval]
   )
 
   const filteredImports = React.useMemo(
-    () =>
-      allImports.filter((i) => {
-        const dt = new Date(i.created_at)
-        return isWithinInterval(dt, interval)
-      }),
+    () => allImports.filter((i) => isWithinInterval(new Date(i.created_at), interval)),
     [allImports, interval]
   )
 
   const filteredVerifications = React.useMemo(
-    () =>
-      allVerifications.filter((v) => {
-        const dt = new Date(v.verified_at)
-        return isWithinInterval(dt, interval)
-      }),
+    () => allVerifications.filter((v) => isWithinInterval(new Date(v.verified_at), interval)),
     [allVerifications, interval]
   )
 
-  const hasAnyKpi =
+  const hasAnyData =
     stats.totalCertificates > 0 ||
     stats.pendingJobs > 0 ||
     stats.verificationsToday > 0 ||
-    stats.revokedCertificates > 0
-
-  const hasAnyActivity = filteredImports.length > 0 || filteredVerifications.length > 0
+    stats.revokedCertificates > 0 ||
+    filteredImports.length > 0 ||
+    filteredVerifications.length > 0
 
   if (!initialData) {
     return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Failed to load analytics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Please refresh the page to retry.
-            </p>
-            <Button className="mt-4" onClick={() => router.refresh()}>
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="rounded-2xl border border-border/50 bg-card p-8">
+        <p className="font-semibold mb-2">Failed to load analytics</p>
+        <p className="text-sm text-muted-foreground mb-4">Please refresh the page to retry.</p>
+        <Button onClick={() => router.refresh()}>Retry</Button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground">
-            {hasAnyKpi || hasAnyActivity
-              ? "Monitor your certificate operations with charts and filtered activity."
-              : "Get started with your first template to unlock analytics."}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Certificate operations, verifications, and delivery performance
           </p>
         </div>
 
-        <div className="w-full lg:max-w-[420px]">
+        <div className="flex items-center gap-3 flex-wrap">
           <Tabs value={preset} onValueChange={(v) => setPreset(v as RangePreset)}>
-            <TabsList className="w-full grid grid-cols-4">
-              <TabsTrigger value="today">Today</TabsTrigger>
-              <TabsTrigger value="week">Week</TabsTrigger>
-              <TabsTrigger value="month">Month</TabsTrigger>
-              <TabsTrigger value="custom">Custom</TabsTrigger>
+            <TabsList className="h-9">
+              <TabsTrigger value="today" className="text-xs px-3">Today</TabsTrigger>
+              <TabsTrigger value="week" className="text-xs px-3">7 days</TabsTrigger>
+              <TabsTrigger value="month" className="text-xs px-3">30 days</TabsTrigger>
+              <TabsTrigger value="custom" className="text-xs px-3">Custom</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="custom">
-              <div className="mt-3">
-                <DatePickerWithRange
-                  date={customRange}
-                  onDateChange={setCustomRange}
-                  className="w-full max-w-60"
-                />
-              </div>
-            </TabsContent>
           </Tabs>
-          <div className="mt-3 text-sm text-muted-foreground">
-            Filtering recent activity by: <span className={cn("font-medium text-foreground")}>{rangeLabel}</span>
-          </div>
+          {preset === "custom" && (
+            <DatePickerWithRange date={customRange} onDateChange={setCustomRange} className="w-52" />
+          )}
         </div>
       </div>
 
-      {/* Premium KPI Cards */}
-      <AnalyticsKPICards stats={stats} />
-
-      {/* Main Charts */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <ChartCertificatesDailyInteractive
-            series={filteredCertificatesDaily}
-            rangeLabel={rangeLabel}
-          />
-        </div>
-        <div className="lg:col-span-1">
-          <ChartCertificateCategoryMixTop mix={allCertificateCategoryMix} />
-        </div>
-      </div>
-
-      {/* Legacy Radar/Radial Charts */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="lg:col-span-2">
-          <ChartRadialGridKpis
-            stats={stats}
-            preset={preset}
-            customRange={customRange}
-          />
-        </div>
-        <ChartRadarDotsActivity
-          imports={filteredImports}
-          verifications={filteredVerifications}
-          rangeLabel={rangeLabel}
-          preset={preset}
-          customRange={customRange}
+      {/* KPI row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="Total certificates"
+          value={stats.totalCertificates}
+          sub="All-time"
+          icon={<Award className="w-4 h-4" />}
+          accent="#3ECF8E"
         />
-        <ChartRadarLinesImportsVsVerifications
-          interval={interval}
-          imports={filteredImports}
-          verifications={filteredVerifications}
-          rangeLabel={rangeLabel}
-          preset={preset}
-          customRange={customRange}
+        <KpiCard
+          label="Verification scans"
+          value={stats.verificationEventsTotal}
+          sub="All-time public scans"
+          icon={<ScanLine className="w-4 h-4" />}
+          accent="#60a5fa"
+        />
+        <KpiCard
+          label="Scanned today"
+          value={stats.verificationsToday}
+          sub="Today's activity"
+          icon={<Activity className="w-4 h-4" />}
+          accent="#f59e0b"
+          trend={stats.verificationsToday > 0 ? "up" : "neutral"}
+          trendLabel={stats.verificationsToday > 0 ? "Active" : undefined}
+        />
+        <KpiCard
+          label="Revoked"
+          value={stats.revokedCertificates}
+          sub={stats.totalCertificates > 0 ? `${Math.round((stats.revokedCertificates / stats.totalCertificates) * 100)}% of total` : "Invalidated"}
+          icon={<AlertTriangle className="w-4 h-4" />}
+          accent="#f87171"
+          trend={stats.revokedCertificates > 0 ? "down" : "neutral"}
         />
       </div>
 
-      {/* Empty State */}
-      {!hasAnyKpi && !hasAnyActivity && <EmptyState slug={slug} />}
+      {/* Main chart + Category mix */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <MainAreaChart series={filteredDaily} rangeLabel={rangeLabel} />
+        </div>
+        <CategoryDonut mix={allCategoryMix} />
+      </div>
 
-      {/* Activity */}
-      {(hasAnyKpi || hasAnyActivity) && (
-        <div className="grid gap-6 lg:grid-cols-2">
+      {/* Activity heatmap */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <ActivityHeatmap series={allCertificatesDaily} />
+      </div>
+
+      {/* Imports + Verifications charts */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ImportsBarChart imports={filteredImports} />
+        <VerificationTrendChart verifications={filteredVerifications} />
+      </div>
+
+      {/* Empty state */}
+      {!hasAnyData && <EmptyState slug={slug} />}
+
+      {/* Activity feeds */}
+      {hasAnyData && (
+        <div className="grid gap-4 lg:grid-cols-2">
           <RecentImportsCard slug={slug} imports={filteredImports} />
-          <RecentVerificationsCard
-            slug={slug}
-            verifications={filteredVerifications}
-          />
+          <RecentVerificationsCard slug={slug} verifications={filteredVerifications} />
         </div>
       )}
     </div>
   )
 }
-
