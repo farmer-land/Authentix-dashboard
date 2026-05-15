@@ -29,6 +29,7 @@ import {
   applyPreviewMocks,
   type EmailBlock,
   type BlockType,
+  type EmailBackground,
 } from "./EmailBlockBuilder";
 import { nanoid } from "nanoid";
 import { cn } from "@/lib/utils";
@@ -112,6 +113,9 @@ export default function EmailTemplateEditorPage() {
 
   // Right panel for block properties
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
+
+  // Email background
+  const [emailBg, setEmailBg] = useState<EmailBackground>({ type: "solid", color: "#18181b" });
 
   // Canvas zoom (Ctrl+scroll or +/- controls)
   const [zoom, setZoom] = useState(1.0);
@@ -292,11 +296,11 @@ export default function EmailTemplateEditorPage() {
     updateHistoryFlags();
 
     setBlocks(newBlocks);
-    const html = blocksToHtml(newBlocks);
+    const html = blocksToHtml(newBlocks, emailBg);
     setBody(html);
     syncVariables(html, subject);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, syncVariables]);
+  }, [subject, syncVariables, emailBg]);
 
   const undo = useCallback(() => {
     const h = historyRef.current;
@@ -304,12 +308,12 @@ export default function EmailTemplateEditorPage() {
     const prev = h.past.pop()!;
     h.future.unshift([...blocksRef.current]);
     updateHistoryFlags();
-    const html = blocksToHtml(prev);
+    const html = blocksToHtml(prev, emailBg);
     setBlocks(prev);
     setBody(html);
     syncVariables(html, subject);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, syncVariables]);
+  }, [subject, syncVariables, emailBg]);
 
   const redo = useCallback(() => {
     const h = historyRef.current;
@@ -317,7 +321,7 @@ export default function EmailTemplateEditorPage() {
     const next = h.future.shift()!;
     h.past.push([...blocksRef.current]);
     updateHistoryFlags();
-    const html = blocksToHtml(next);
+    const html = blocksToHtml(next, emailBg);
     setBlocks(next);
     setBody(html);
     syncVariables(html, subject);
@@ -336,7 +340,7 @@ export default function EmailTemplateEditorPage() {
       if (h.past.length > 60) h.past.shift();
       h.future = [];
       updateHistoryFlags();
-      const html = blocksToHtml(newBlocks);
+      const html = blocksToHtml(newBlocks, emailBg);
       setBody(html);
       syncVariables(html, subject);
       return newBlocks;
@@ -350,7 +354,7 @@ export default function EmailTemplateEditorPage() {
 
   const handleStartFresh = () => {
     const starters = STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
-    const html = blocksToHtml(starters);
+    const html = blocksToHtml(starters, emailBg);
     const h = historyRef.current;
     h.past.push([...blocksRef.current]);
     h.future = [];
@@ -721,6 +725,8 @@ export default function EmailTemplateEditorPage() {
                 senderName={senderName}
                 availableVars={allVars}
                 context="cert"
+                emailBg={emailBg}
+                onEmailBgChange={setEmailBg}
                 onChange={handleBlocksChange}
                 onSelect={setSelectedId}
                 onStartFresh={handleStartFresh}
@@ -751,6 +757,8 @@ export default function EmailTemplateEditorPage() {
                 <BlockPropertiesPanel
                   block={blocks.find(b => b.id === selectedId) ?? null}
                   onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
+                  emailBg={emailBg}
+                  onEmailBgChange={setEmailBg}
                 />
               </div>
             </div>

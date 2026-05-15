@@ -24,6 +24,7 @@ import {
   applyPreviewMocks,
   type EmailBlock,
   type BlockType,
+  type EmailBackground,
 } from "../email-templates/[id]/EmailBlockBuilder";
 
 // ── Types ───────────────────────────────────────────────────────────────────────
@@ -143,6 +144,7 @@ export function EmailEditor({
     return [];
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [emailBg, setEmailBg] = useState<EmailBackground>({ type: "solid", color: "#18181b" });
 
   // Undo/redo history (stored in refs — mutations don't trigger re-renders)
   const historyRef = useRef<{ past: EmailBlock[][], future: EmailBlock[][] }>({ past: [], future: [] });
@@ -185,7 +187,7 @@ export function EmailEditor({
     };
   }, []);
 
-  const bodyHtml = blocksToHtml(blocks);
+  const bodyHtml = blocksToHtml(blocks, emailBg);
 
   // ── Undo / Redo ─────────────────────────────────────────────────────────────
 
@@ -527,6 +529,8 @@ export function EmailEditor({
                 <BlockPropertiesPanel
                   block={blocks.find(b => b.id === selectedId) ?? null}
                   onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
+                  emailBg={emailBg}
+                  onEmailBgChange={setEmailBg}
                 />
               </div>
             </div>
@@ -562,6 +566,8 @@ export function EmailEditor({
               senderName={fromName}
               availableVars={availableVars}
               context="broadcast"
+              emailBg={emailBg}
+              onEmailBgChange={setEmailBg}
               onChange={handleBlocksChange}
               onSelect={setSelectedId}
               onStartFresh={handleStartFresh}

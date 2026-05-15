@@ -41,6 +41,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
+import { api } from "@/lib/api/client";
+import { Upload, Video } from "lucide-react";
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
@@ -59,7 +61,9 @@ export type BlockType =
   | "social"
   | "divider"
   | "spacer"
-  | "footer";
+  | "footer"
+  | "video"
+  | "table";
 
 export interface EmailBlock {
   id: string;
@@ -68,6 +72,9 @@ export interface EmailBlock {
   bgColor?: string;
   bgType?: "solid" | "gradient" | "image";
   bgImage?: string;
+  bgImagePosition?: string;
+  bgImageSize?: "cover" | "contain" | "auto";
+  bgImageRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
   gradientEnd?: string;
   gradientAngle?: number;
   // Header-specific
@@ -128,6 +135,29 @@ export interface EmailBlock {
   imageBorderRadius?: number;
   // Social block
   socialLinks?: Array<{ platform: string; url: string }>;
+  // Video block
+  videoUrl?: string;
+  videoType?: "youtube" | "vimeo" | "gif" | "direct";
+  videoThumb?: string;
+  videoCaptionText?: string;
+  // Table block
+  tableHeaders?: string[];
+  tableRows?: string[][];
+  tableBgColor?: string;
+  tableHeaderBgColor?: string;
+  tableHeaderTextColor?: string;
+  tableBorderColor?: string;
+}
+
+export interface EmailBackground {
+  type?: "solid" | "gradient" | "image";
+  color?: string;
+  gradientEnd?: string;
+  gradientAngle?: number;
+  imageUrl?: string;
+  imagePosition?: string; // CSS background-position, e.g. "center", "top left", "50% 20%"
+  imageSize?: "cover" | "contain" | "auto";
+  imageRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
 }
 
 // ── Palette catalog (exported for use in left panel) ─────────────────────────
@@ -143,6 +173,8 @@ export const EMAIL_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNod
   { type: "cta_button",  icon: <MousePointerClick className="w-3.5 h-3.5" />, label: "CTA Button",   desc: "Action link" },
   { type: "linkedin",    icon: <Type className="w-3.5 h-3.5" />,              label: "LinkedIn",     desc: "Share prompt" },
   { type: "social",      icon: <Type className="w-3.5 h-3.5" />,              label: "Social Links", desc: "Follow buttons" },
+  { type: "video",  icon: <Video className="w-3.5 h-3.5" />,        label: "Video / GIF", desc: "Embed video or GIF" },
+  { type: "table",  icon: <TableProperties className="w-3.5 h-3.5" />, label: "Table",     desc: "Data table" },
   { type: "divider",     icon: <Minus className="w-3.5 h-3.5" />,             label: "Divider",      desc: "Separator" },
   { type: "spacer",      icon: <ArrowUpDown className="w-3.5 h-3.5" />,       label: "Spacer",       desc: "Empty space" },
   { type: "footer",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Footer",       desc: "Footer text" },
@@ -178,6 +210,8 @@ export function defaultBlock(type: BlockType): EmailBlock {
     case "divider":     return { id, type, dividerStyle: "solid", dividerColor: "#333333", dividerThickness: 1, dividerWidth: 100 };
     case "spacer":      return { id, type, height: 24 };
     case "footer":      return { id, type, content: "© {{organization_name}} · Powered by Authentix", textColor: "#6b7280", fontSize: 12, lineHeight: 1.6 };
+    case "video": return { id, type, videoUrl: "", videoType: "youtube", videoCaptionText: "" };
+    case "table": return { id, type, tableHeaders: ["Column 1", "Column 2", "Column 3"], tableRows: [["", "", ""], ["", "", ""]], tableBgColor: "#1e1e1e", tableHeaderBgColor: "transparent", tableHeaderTextColor: "#3ECF8E", tableBorderColor: "#3f3f46" };
   }
 }
 
@@ -408,8 +442,12 @@ function blockToHtml(block: EmailBlock): string {
       const pV = block.paddingV ?? 44;
       const pH = block.paddingH ?? 32;
       const bgStyle = (() => {
-        if (block.bgType === "image" && block.bgImage)
-          return `background-image:url('${block.bgImage}');background-size:cover;background-position:center;`;
+        if (block.bgType === "image" && block.bgImage) {
+          const pos = block.bgImagePosition || "center";
+          const size = block.bgImageSize || "cover";
+          const repeat = block.bgImageRepeat || "no-repeat";
+          return `background-image:url('${block.bgImage}');background-size:${size};background-position:${pos};background-repeat:${repeat};`;
+        }
         if (block.bgType === "solid")
           return `background:${block.bgColor || "#3ECF8E"};`;
         // gradient (default)
@@ -543,6 +581,35 @@ ${cells}
 </div>`;
     }
 
+    case "video": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      if (!block.videoUrl) return `<div style="padding:${pV}px ${pH}px;text-align:center;background:#1a1a1a;border:1px dashed #3f3f46;border-radius:8px;margin:0 32px;"><p style="color:#6b7280;font-size:12px;font-family:sans-serif;margin:0;">Add a video URL in the properties panel</p></div>`;
+      if (block.videoType === "gif") {
+        return `<div style="padding:${pV}px ${pH}px;text-align:center;"><img src="${block.videoUrl}" alt="${block.videoCaptionText || "Animation"}" style="max-width:100%;border-radius:8px;display:block;margin:0 auto;"/>${block.videoCaptionText ? `<p style="color:#9ca3af;font-size:12px;margin:8px 0 0;font-family:sans-serif;">${block.videoCaptionText}</p>` : ""}</div>`;
+      }
+      let thumbUrl = block.videoThumb || "";
+      if (!thumbUrl && block.videoType === "youtube") {
+        const ytId = block.videoUrl?.match(/(?:v=|youtu\.be\/)([^&?]+)/)?.[1];
+        if (ytId) thumbUrl = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+      }
+      const thumbnail = thumbUrl
+        ? `<img src="${thumbUrl}" alt="Video" style="max-width:100%;border-radius:8px;display:block;"/>`
+        : `<div style="background:#1a1a1a;border-radius:8px;height:180px;display:flex;align-items:center;justify-content:center;"><span style="color:#6b7280;font-size:12px;font-family:sans-serif;">Video preview</span></div>`;
+      return `<div style="padding:${pV}px ${pH}px;text-align:center;"><a href="${block.videoUrl}" style="display:inline-block;position:relative;max-width:100%;text-decoration:none;">${thumbnail}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;"><div style="width:52px;height:52px;background:rgba(0,0,0,0.70);border-radius:50%;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 18 18" fill="white"><polygon points="5,2 16,9 5,16"/></svg></div></div></a>${block.videoCaptionText ? `<p style="color:#9ca3af;font-size:12px;margin:8px 0 0;font-family:sans-serif;">${block.videoCaptionText}</p>` : ""}</div>`;
+    }
+
+    case "table": {
+      const headers = block.tableHeaders ?? ["Col 1", "Col 2"];
+      const rows = block.tableRows ?? [];
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const headerCells = headers.map(h => `<th style="padding:8px 12px;text-align:left;color:${block.tableHeaderTextColor || "#3ECF8E"};font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;border-bottom:2px solid ${block.tableBorderColor || "#3f3f46"};background:${block.tableHeaderBgColor || "transparent"};">${h}</th>`).join("");
+      const rowHtml = rows.map((row, ri) => {
+        const cells = headers.map((_, ci) => `<td style="padding:8px 12px;font-size:13px;color:${block.textColor || "#d1d5db"};border-bottom:1px solid ${block.tableBorderColor || "#3f3f46"};">${row[ci] || ""}</td>`).join("");
+        return `<tr style="background:${ri % 2 === 1 ? "rgba(255,255,255,0.03)" : "transparent"};">${cells}</tr>`;
+      }).join("");
+      return `<div style="padding:${pV}px ${pH}px;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:${block.tableBgColor || "#1e1e1e"};border-radius:8px;overflow:hidden;font-family:-apple-system,sans-serif;"><thead><tr>${headerCells}</tr></thead><tbody>${rowHtml}</tbody></table></div>`;
+    }
+
     default:
       return "";
   }
@@ -550,12 +617,27 @@ ${cells}
 
 const BLOCKS_JSON_MARKER = "__blocks_v1__";
 
-export function blocksToHtml(blocks: EmailBlock[]): string {
+export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground): string {
   if (!blocks.length) return "";
   const inner = blocks.map(blockToHtml).join("\n");
+  const wrapperBg = (() => {
+    if (!emailBg || !emailBg.type || emailBg.type === "solid")
+      return `background:${emailBg?.color || "#18181b"};`;
+    if (emailBg.type === "image" && emailBg.imageUrl) {
+      const pos = emailBg.imagePosition || "center";
+      const size = emailBg.imageSize || "cover";
+      const repeat = emailBg.imageRepeat || "no-repeat";
+      return `background-image:url('${emailBg.imageUrl}');background-size:${size};background-position:${pos};background-repeat:${repeat};`;
+    }
+    if (emailBg.type === "gradient") {
+      const angle = emailBg.gradientAngle ?? 135;
+      return `background:linear-gradient(${angle}deg,${emailBg.color||"#18181b"} 0%,${emailBg.gradientEnd||"#111111"} 100%);`;
+    }
+    return "background:#18181b;";
+  })();
   // Embed blocks as a JSON comment so the editor can restore them on next open
   const jsonComment = `<!-- ${BLOCKS_JSON_MARKER}:${JSON.stringify(blocks)} -->`;
-  return `${jsonComment}\n<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #2d2d2d;">
+  return `${jsonComment}\n<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; ${wrapperBg} border-radius: 10px; overflow: hidden; border: 1px solid #2d2d2d;">
 ${inner}
 </div>`;
 }
@@ -853,6 +935,8 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   divider: "Divider",
   spacer: "Spacer",
   footer: "Footer",
+  video: "Video / GIF",
+  table: "Table",
 };
 
 // ── Shared variable dropdown portal (autocomplete + swap) ────────────────────
@@ -1210,7 +1294,7 @@ function BlockLiveView({
       const pV = block.paddingV ?? 44; const pH = block.paddingH ?? 32;
       const bgCss = (() => {
         if (block.bgType === "image" && block.bgImage)
-          return { backgroundImage: `url('${block.bgImage}')`, backgroundSize: "cover", backgroundPosition: "center" };
+          return { backgroundImage: `url('${block.bgImage}')`, backgroundSize: block.bgImageSize || "cover", backgroundPosition: block.bgImagePosition || "center", backgroundRepeat: block.bgImageRepeat || "no-repeat" };
         if (block.bgType === "solid")
           return { background: block.bgColor || "#3ECF8E" };
         const angle = block.gradientAngle ?? 135;
@@ -1493,6 +1577,82 @@ function BlockLiveView({
         </div>
       );
 
+    case "video": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      if (!block.videoUrl) return (
+        <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center" }}>
+          <div style={{ border: "1px dashed #3f3f46", borderRadius: 8, padding: "24px 16px", color: "#6b7280", fontSize: 12, fontFamily: "sans-serif" }}>
+            <Video size={20} style={{ display: "block", margin: "0 auto 6px", opacity: 0.4 }} />
+            Add a video URL in the properties panel
+          </div>
+        </div>
+      );
+      if (block.videoType === "gif") return (
+        <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center" }}>
+          <img src={block.videoUrl} alt={block.videoCaptionText || "GIF"} style={{ maxWidth: "100%", borderRadius: 8, display: "block", margin: "0 auto" }} />
+          {block.videoCaptionText && <p style={{ color: "#9ca3af", fontSize: 12, marginTop: 8 }}>{block.videoCaptionText}</p>}
+        </div>
+      );
+      // YouTube/Vimeo: show iframe embed
+      const embedUrl = (() => {
+        if (block.videoType === "youtube" || !block.videoType) {
+          const id = block.videoUrl?.match(/(?:v=|youtu\.be\/)([^&?]+)/)?.[1];
+          return id ? `https://www.youtube.com/embed/${id}` : null;
+        }
+        if (block.videoType === "vimeo") {
+          const id = block.videoUrl?.match(/vimeo\.com\/(\d+)/)?.[1];
+          return id ? `https://player.vimeo.com/video/${id}` : null;
+        }
+        return null;
+      })();
+      return (
+        <div style={{ padding: `${pV}px ${pH}px` }}>
+          {embedUrl ? (
+            <div style={{ position: "relative", paddingBottom: "56.25%", borderRadius: 8, overflow: "hidden", background: "#000" }}>
+              <iframe src={embedUrl} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
+            </div>
+          ) : (
+            <div style={{ textAlign: "center" }}>
+              {block.videoThumb
+                ? <img src={block.videoThumb} alt="" style={{ maxWidth: "100%", borderRadius: 8 }} />
+                : <div style={{ background: "#1a1a1a", borderRadius: 8, padding: "32px 16px", color: "#6b7280", fontSize: 12, fontFamily: "sans-serif" }}>▶ {block.videoUrl}</div>
+              }
+            </div>
+          )}
+          {block.videoCaptionText && <p style={{ color: "#9ca3af", fontSize: 12, textAlign: "center", marginTop: 8 }}>{block.videoCaptionText}</p>}
+        </div>
+      );
+    }
+
+    case "table": {
+      const headers = block.tableHeaders ?? ["Col 1", "Col 2"];
+      const rows = block.tableRows ?? [];
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      return (
+        <div style={{ padding: `${pV}px ${pH}px` }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: block.tableBgColor || "#1e1e1e", borderRadius: 8, overflow: "hidden", fontFamily: "-apple-system,sans-serif" }}>
+            <thead>
+              <tr>
+                {headers.map((h, i) => (
+                  <th key={i} style={{ padding: "8px 12px", textAlign: "left", color: block.tableHeaderTextColor || "#3ECF8E", fontSize: 11, fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase", borderBottom: `2px solid ${block.tableBorderColor || "#3f3f46"}`, background: block.tableHeaderBgColor || "transparent" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, ri) => (
+                <tr key={ri} style={{ background: ri % 2 === 1 ? "rgba(255,255,255,0.03)" : "transparent" }}>
+                  {headers.map((_, ci) => (
+                    <td key={ci} style={{ padding: "8px 12px", fontSize: 13, color: block.textColor || "#d1d5db", borderBottom: `1px solid ${block.tableBorderColor || "#3f3f46"}` }}>{row[ci] || ""}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
     default:
       return null;
   }
@@ -1529,6 +1689,187 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
         <ChevronRight className={cn("w-3 h-3 text-muted-foreground/30 transition-transform duration-150", open && "rotate-90")} />
       </button>
       {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+    </div>
+  );
+}
+
+// ── NumBox: compact labelled number input ─────────────────────────────────────
+
+function NumBox({ label, value, onChange, unit, min, max, step = 1, className = "" }: {
+  label: string; value: number; onChange: (v: number) => void;
+  unit?: string; min?: number; max?: number; step?: number; className?: string;
+}) {
+  return (
+    <div className={cn("flex items-center bg-card border border-border/60 rounded-md h-8 px-2.5 gap-1.5", className)}>
+      <span className="text-[10px] text-muted-foreground/60 shrink-0 select-none">{label}</span>
+      <input
+        type="number" value={value} min={min} max={max} step={step}
+        onChange={e => onChange(parseFloat(e.target.value) || 0)}
+        className="flex-1 min-w-0 bg-transparent text-xs outline-none text-foreground"
+      />
+      {unit && <span className="text-[9px] text-muted-foreground/50 shrink-0 select-none">{unit}</span>}
+    </div>
+  );
+}
+
+// ── Background image position + size controls ────────────────────────────────
+
+const BG_POSITIONS = [
+  ["top left",    "top center",    "top right"],
+  ["center left", "center",        "center right"],
+  ["bottom left", "bottom center", "bottom right"],
+] as const;
+
+function BgPositionPicker({ position, onPositionChange }: { position?: string; onPositionChange: (p: string) => void }) {
+  const cur = position || "center";
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] text-muted-foreground/70 select-none">Position</label>
+      <div className="grid gap-0.5" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+        {BG_POSITIONS.flat().map(p => (
+          <button key={p} type="button" title={p}
+            onClick={() => onPositionChange(p)}
+            className={cn(
+              "h-6 rounded flex items-center justify-center transition-colors border",
+              cur === p
+                ? "bg-[#3ECF8E] border-transparent text-zinc-900"
+                : "border-border/60 text-muted-foreground hover:bg-muted"
+            )}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] text-muted-foreground/50 shrink-0 select-none">Custom</span>
+        <input
+          type="text"
+          value={cur}
+          onChange={e => onPositionChange(e.target.value)}
+          placeholder="50% 20%"
+          className="flex-1 text-[10px] bg-card border border-border/60 rounded-md px-2 py-0.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 font-mono"
+        />
+      </div>
+    </div>
+  );
+}
+
+function BgSizeRow({ size, repeat, onSizeChange, onRepeatChange }: {
+  size?: string; repeat?: string;
+  onSizeChange: (s: string) => void;
+  onRepeatChange: (r: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <label className="text-[10px] text-muted-foreground/70 select-none">Size</label>
+        <div className="flex border border-border/60 rounded-md overflow-hidden text-[10px] font-semibold">
+          {(["cover", "contain", "auto"] as const).map(s => (
+            <button key={s} type="button"
+              onClick={() => onSizeChange(s)}
+              className={cn("flex-1 h-6 capitalize transition-colors",
+                (size || "cover") === s ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+            >{s}</button>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-[10px] text-muted-foreground/70 select-none">Repeat</label>
+        <div className="flex border border-border/60 rounded-md overflow-hidden text-[10px] font-semibold">
+          {([["no-repeat","None"],["repeat","Tile"],["repeat-x","X"],["repeat-y","Y"]] as const).map(([v, label]) => (
+            <button key={v} type="button"
+              onClick={() => onRepeatChange(v)}
+              className={cn("flex-1 h-6 transition-colors",
+                (repeat || "no-repeat") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+            >{label}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MediaUploader: URL tab + file upload tab ──────────────────────────────────
+
+function MediaUploader({
+  url, onUrlChange, accept = "image/*",
+  placeholder = "https://example.com/image.png",
+}: {
+  url: string; onUrlChange: (url: string) => void;
+  accept?: string; placeholder?: string;
+}) {
+  const [tab, setTab] = useState<"url" | "upload">("url");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file: File) => {
+    const blobUrl = URL.createObjectURL(file);
+    onUrlChange(blobUrl);
+    setUploading(true);
+    try {
+      const permanentUrl = await api.templates.uploadAsset(file);
+      URL.revokeObjectURL(blobUrl);
+      onUrlChange(permanentUrl);
+    } catch {
+      // keep blob url as fallback
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex border border-border/60 rounded-md overflow-hidden text-[10px] font-semibold">
+        {(["url", "upload"] as const).map(t => (
+          <button key={t} type="button"
+            onClick={() => setTab(t)}
+            className={cn("flex-1 h-6 capitalize transition-colors",
+              tab === t ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+          >{t === "url" ? "URL" : "Upload"}</button>
+        ))}
+      </div>
+      {tab === "url" ? (
+        <input value={url} onChange={e => onUrlChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full text-[10px] font-mono bg-card border border-border/60 rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40" />
+      ) : (
+        <>
+          <input ref={fileRef} type="file" accept={accept} className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+          {url ? (
+            <div className="flex items-center gap-2.5">
+              <div className="relative w-14 h-12 rounded border border-border/50 overflow-hidden bg-muted/30 shrink-0">
+                <img src={url} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                {uploading && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()}
+                  className="p-1.5 rounded border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50" title="Replace">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => onUrlChange("")}
+                  className="p-1.5 rounded border border-border/50 text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors" title="Remove">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="border border-dashed border-border/50 rounded-lg p-3 text-center cursor-pointer hover:border-[#3ECF8E]/50 hover:bg-[#3ECF8E]/5 transition-all"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
+            >
+              <Upload className="w-4 h-4 text-muted-foreground/50 mx-auto mb-1" />
+              <p className="text-[10px] text-muted-foreground/60">Click or drag to upload</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1729,6 +2070,18 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [googleFonts, setGoogleFonts] = useState<Array<{ value: string; label: string; category?: string }>>([]);
+
+  useEffect(() => {
+    fetch('/api/fonts')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { fonts: Array<{ family: string; category?: string }> } | null) => {
+        if (data?.fonts?.length) {
+          setGoogleFonts(data.fonts.map(f => ({ value: f.family, label: f.family, category: f.category })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -1744,12 +2097,31 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
     else setSearch("");
   }, [open]);
 
+  const allFonts = useMemo(() => {
+    const seen = new Set<string>();
+    return [...EMAIL_FONT_LIST, ...googleFonts].filter(f => {
+      if (seen.has(f.value)) return false;
+      seen.add(f.value);
+      return true;
+    });
+  }, [googleFonts]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? EMAIL_FONT_LIST.filter(f => f.label.toLowerCase().includes(q)) : EMAIL_FONT_LIST;
-  }, [search]);
+    return q ? allFonts.filter(f => f.label.toLowerCase().includes(q)) : allFonts;
+  }, [search, allFonts]);
 
-  const currentLabel = EMAIL_FONT_LIST.find(f => f.value === value)?.label ?? (value ? value.split(",")[0] : "System");
+  const currentLabel = allFonts.find(f => f.value === value)?.label ?? (value ? value.split(",")[0] : "System");
+
+  const loadGoogleFont = (family: string) => {
+    const id = `gf-${family.replace(/\s+/g, '-')}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;600;700&display=swap`;
+    document.head.appendChild(link);
+  };
 
   return (
     <div className="relative" ref={ref}>
@@ -1801,7 +2173,7 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
               <button
                 key={f.value}
                 type="button"
-                onClick={() => { onChange(f.value); setOpen(false); }}
+                onClick={() => { loadGoogleFont(f.value); onChange(f.value); setOpen(false); }}
                 className={cn("w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors truncate", value === f.value ? "bg-[#3ECF8E]/10 text-[#3ECF8E]" : "text-foreground")}
                 style={{ fontFamily: f.value }}
               >
@@ -1818,14 +2190,67 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
 
 // ── Unified Block Properties Panel ───────────────────────────────────────────
 
-export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | null; onChange: (b: EmailBlock) => void }) {
+export function BlockPropertiesPanel({
+  block, onChange, emailBg, onEmailBgChange,
+}: {
+  block: EmailBlock | null;
+  onChange: (b: EmailBlock) => void;
+  emailBg?: EmailBackground;
+  onEmailBgChange?: (bg: EmailBackground) => void;
+}) {
   if (!block) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center">
-        <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
-          <SlidersHorizontal className="w-4 h-4 text-muted-foreground/50" />
+      <div className="flex flex-col min-h-0">
+        <div className="px-4 py-3 border-b border-border/20 bg-muted/20 shrink-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Canvas</p>
         </div>
-        <p className="text-xs text-muted-foreground/60 leading-relaxed">Select a block to edit its properties</p>
+        <Section label="Email Background">
+          <div className="space-y-2">
+            <div className="flex border border-border/60 rounded-md overflow-hidden text-xs">
+              {(["solid", "gradient", "image"] as const).map(v => (
+                <button key={v} type="button"
+                  onClick={() => onEmailBgChange?.({ ...emailBg, type: v })}
+                  className={cn("flex-1 h-7 capitalize transition-colors",
+                    (emailBg?.type || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+                >{v}</button>
+              ))}
+            </div>
+            {(!emailBg?.type || emailBg.type === "solid") && (
+              <ColorRow label="Background" value={emailBg?.color || "#18181b"} onChange={v => onEmailBgChange?.({ ...emailBg, type: "solid", color: v })} />
+            )}
+            {emailBg?.type === "gradient" && (
+              <>
+                <ColorRow label="Start" value={emailBg.color || "#18181b"} onChange={v => onEmailBgChange?.({ ...emailBg, color: v })} />
+                <ColorRow label="End" value={emailBg.gradientEnd || "#111111"} onChange={v => onEmailBgChange?.({ ...emailBg, gradientEnd: v })} />
+                <NumBox label="Angle" value={emailBg.gradientAngle ?? 135} onChange={v => onEmailBgChange?.({ ...emailBg, gradientAngle: v })} unit="°" min={0} max={360} />
+              </>
+            )}
+            {emailBg?.type === "image" && (
+              <>
+                <p className="text-[9px] text-muted-foreground/50">Upload or enter an image URL for the email background</p>
+                <MediaUploader url={emailBg.imageUrl || ""} onUrlChange={v => onEmailBgChange?.({ ...emailBg, imageUrl: v })} />
+                {emailBg.imageUrl && (
+                  <>
+                    <BgPositionPicker
+                      position={emailBg.imagePosition}
+                      onPositionChange={v => onEmailBgChange?.({ ...emailBg, imagePosition: v })}
+                    />
+                    <BgSizeRow
+                      size={emailBg.imageSize}
+                      repeat={emailBg.imageRepeat}
+                      onSizeChange={v => onEmailBgChange?.({ ...emailBg, imageSize: v as EmailBackground["imageSize"] })}
+                      onRepeatChange={v => onEmailBgChange?.({ ...emailBg, imageRepeat: v as EmailBackground["imageRepeat"] })}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </Section>
+        <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+          <SlidersHorizontal className="w-4 h-4 text-muted-foreground/30" />
+          <p className="text-[10px] text-muted-foreground/40 leading-relaxed">Select a block<br/>to edit its properties</p>
+        </div>
       </div>
     );
   }
@@ -1833,8 +2258,8 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
-  const INP = "w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
-  const NUM = "w-16 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
+  const INP = "w-full text-xs bg-card border border-border/60 rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
+  const NUM = "w-16 text-xs bg-card border border-border/60 rounded-md px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
 
   // ── Spacing section (all blocks that have padding) ─────────────────────────
   const hasSpacing = !["cert_image", "divider"].includes(type);
@@ -1886,10 +2311,7 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
 
     if (type === "image") return (
       <Section label="Image">
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Image URL</label>
-          <input value={block.imageUrl ?? ""} onChange={e => u({ imageUrl: e.target.value })} placeholder="https://example.com/image.png" className={`${INP} font-mono text-[10px]`} />
-        </div>
+        <MediaUploader url={block.imageUrl || ""} onUrlChange={v => u({ imageUrl: v })} />
         <div className="space-y-1">
           <label className="text-[10px] text-muted-foreground/70 select-none">Alt text</label>
           <input value={block.imageAlt ?? ""} onChange={e => u({ imageAlt: e.target.value })} placeholder="Descriptive text for screen readers" className={INP} />
@@ -2111,6 +2533,110 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
       );
     }
 
+    if (type === "video") {
+      return (
+        <Section label="Video">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">Type</label>
+            <div className="grid grid-cols-4 gap-1">
+              {(["youtube", "vimeo", "gif", "direct"] as const).map(v => (
+                <button key={v} type="button"
+                  onClick={() => u({ videoType: v })}
+                  className={cn("h-7 text-[9px] font-semibold rounded border capitalize transition-colors",
+                    (block.videoType || "youtube") === v
+                      ? "bg-[#3ECF8E] text-white border-transparent"
+                      : "border-border text-muted-foreground hover:bg-muted")}
+                >{v === "direct" ? "File URL" : v.charAt(0).toUpperCase() + v.slice(1)}</button>
+              ))}
+            </div>
+          </div>
+          {block.videoType === "gif" ? (
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground/70 select-none">GIF source</label>
+              <MediaUploader url={block.videoUrl || ""} onUrlChange={v => u({ videoUrl: v })} accept="image/gif,image/*" placeholder="https://example.com/animation.gif" />
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground/70 select-none">Video URL</label>
+                <input value={block.videoUrl || ""} onChange={e => u({ videoUrl: e.target.value })}
+                  placeholder={(block.videoType === "youtube" || !block.videoType) ? "https://youtube.com/watch?v=..." : block.videoType === "vimeo" ? "https://vimeo.com/..." : "https://example.com/video.mp4"}
+                  className={`${INP} font-mono text-[10px]`} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground/70 select-none">Thumbnail (optional)</label>
+                <MediaUploader url={block.videoThumb || ""} onUrlChange={v => u({ videoThumb: v })} placeholder="https://example.com/thumb.jpg" />
+              </div>
+            </>
+          )}
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">Caption</label>
+            <input value={block.videoCaptionText || ""} onChange={e => u({ videoCaptionText: e.target.value })}
+              placeholder="Click to watch →" className={INP} />
+          </div>
+        </Section>
+      );
+    }
+
+    if (type === "table") {
+      const headers = block.tableHeaders ?? ["Column 1", "Column 2", "Column 3"];
+      const rows = block.tableRows ?? [];
+      return (
+        <Section label="Table">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-foreground/70">Columns</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => { if (headers.length <= 1) return; u({ tableHeaders: headers.slice(0, -1), tableRows: rows.map(r => r.slice(0, -1)) }); }}
+                className="w-6 h-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:bg-muted text-sm font-bold">−</button>
+              <span className="text-xs font-mono w-4 text-center">{headers.length}</span>
+              <button type="button" onClick={() => u({ tableHeaders: [...headers, `Col ${headers.length + 1}`], tableRows: rows.map(r => [...r, ""]) })}
+                className="w-6 h-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:bg-muted text-sm font-bold">+</button>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">Header labels</label>
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 2)}, 1fr)` }}>
+              {headers.map((h, i) => (
+                <input key={i} value={h}
+                  onChange={e => { const hs = [...headers]; hs[i] = e.target.value; u({ tableHeaders: hs }); }}
+                  className={`${INP} text-[10px]`} />
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-muted-foreground/70 select-none">Rows ({rows.length})</label>
+              <button type="button" onClick={() => u({ tableRows: [...rows, new Array(headers.length).fill("")] })}
+                className="flex items-center gap-0.5 text-[9px] text-[#3ECF8E] font-semibold hover:text-[#34b87a]">
+                <Plus className="w-3 h-3" /> Add row
+              </button>
+            </div>
+            {rows.map((row, ri) => (
+              <div key={ri} className="flex items-center gap-1">
+                <div className="grid gap-1 flex-1 min-w-0" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 2)}, 1fr)` }}>
+                  {headers.map((_, ci) => (
+                    <input key={ci} value={row[ci] || ""}
+                      onChange={e => { const rs = rows.map((r, i) => i === ri ? r.map((c, j) => j === ci ? e.target.value : c) : r); u({ tableRows: rs }); }}
+                      className={`${INP} text-[10px]`} />
+                  ))}
+                </div>
+                <button type="button" onClick={() => u({ tableRows: rows.filter((_, i) => i !== ri) })}
+                  className="text-destructive/50 hover:text-destructive shrink-0 p-0.5">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2 pt-1 border-t border-border/20">
+            <ColorRow label="Header text" value={block.tableHeaderTextColor || "#3ECF8E"} onChange={v => u({ tableHeaderTextColor: v })} />
+            <ColorRow label="Row text" value={block.textColor || "#d1d5db"} onChange={v => u({ textColor: v })} />
+            <ColorRow label="Background" value={block.tableBgColor || "#1e1e1e"} onChange={v => u({ tableBgColor: v })} />
+            <ColorRow label="Border" value={block.tableBorderColor || "#3f3f46"} onChange={v => u({ tableBorderColor: v })} />
+          </div>
+        </Section>
+      );
+    }
+
     return null;
   })();
 
@@ -2148,10 +2674,23 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
             <ColorRow label="Background" value={block.bgColor || "#3ECF8E"} onChange={v => u({ bgColor: v })} />
           )}
           {block.bgType === "image" && (
-            <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground/70 select-none">Image URL</label>
-              <input value={block.bgImage ?? ""} onChange={e => u({ bgImage: e.target.value })} placeholder="https://example.com/banner.jpg" className={`${INP} font-mono text-[10px]`} />
-            </div>
+            <>
+              <MediaUploader url={block.bgImage || ""} onUrlChange={v => u({ bgImage: v })} placeholder="https://example.com/banner.jpg" />
+              {block.bgImage && (
+                <>
+                  <BgPositionPicker
+                    position={block.bgImagePosition}
+                    onPositionChange={v => u({ bgImagePosition: v })}
+                  />
+                  <BgSizeRow
+                    size={block.bgImageSize}
+                    repeat={block.bgImageRepeat}
+                    onSizeChange={v => u({ bgImageSize: v as EmailBlock["bgImageSize"] })}
+                    onRepeatChange={v => u({ bgImageRepeat: v as EmailBlock["bgImageRepeat"] })}
+                  />
+                </>
+              )}
+            </>
           )}
           <ColorRow label="Title color" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
           <ColorRow label="Subtitle color" value={block.subtitleColor || "rgba(255,255,255,0.85)"} onChange={v => u({ subtitleColor: v })} />
@@ -2449,6 +2988,8 @@ export interface EmailBlockBuilderProps {
   availableVars?: string[];
   /** "cert" = cert delivery editor, "broadcast" = broadcast email editor */
   context?: "cert" | "broadcast";
+  emailBg?: EmailBackground;
+  onEmailBgChange?: (bg: EmailBackground) => void;
   onChange: (blocks: EmailBlock[]) => void;
   onSelect: (id: string | null) => void;
   onStartFresh: () => void;
@@ -2464,6 +3005,8 @@ export function EmailBlockBuilder({
   senderName = "Your Organization",
   availableVars = [],
   context = "cert",
+  emailBg,
+  onEmailBgChange: _onEmailBgChange,
   onChange,
   onSelect,
   onStartFresh,
@@ -2611,7 +3154,17 @@ export function EmailBlockBuilder({
         </div>
 
         {/* Email body — blocks */}
-        <div style={{ background: "#18181b" }}>
+        <div style={(() => {
+          if (!emailBg || !emailBg.type || emailBg.type === "solid")
+            return { background: emailBg?.color || "#18181b" };
+          if (emailBg.type === "image" && emailBg.imageUrl)
+            return { backgroundImage: `url('${emailBg.imageUrl}')`, backgroundSize: emailBg.imageSize || "cover", backgroundPosition: emailBg.imagePosition || "center", backgroundRepeat: emailBg.imageRepeat || "no-repeat" };
+          if (emailBg.type === "gradient") {
+            const angle = emailBg.gradientAngle ?? 135;
+            return { background: `linear-gradient(${angle}deg, ${emailBg.color || "#18181b"} 0%, ${emailBg.gradientEnd || "#111111"} 100%)` };
+          }
+          return { background: "#18181b" };
+        })()}>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
