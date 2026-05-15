@@ -42,7 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 import { api } from "@/lib/api/client";
-import { Upload, Video } from "lucide-react";
+import { Upload, Video, Globe } from "lucide-react";
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
@@ -63,7 +63,8 @@ export type BlockType =
   | "spacer"
   | "footer"
   | "video"
-  | "table";
+  | "table"
+  | "iframe";
 
 export interface EmailBlock {
   id: string;
@@ -147,6 +148,12 @@ export interface EmailBlock {
   tableHeaderBgColor?: string;
   tableHeaderTextColor?: string;
   tableBorderColor?: string;
+  // Iframe block
+  iframeUrl?: string;
+  iframeHeight?: number;
+  iframeTitle?: string;
+  iframeSandbox?: string;
+  iframeFallbackText?: string;
 }
 
 export interface EmailBackground {
@@ -175,6 +182,7 @@ export const EMAIL_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNod
   { type: "social",      icon: <Type className="w-3.5 h-3.5" />,              label: "Social Links", desc: "Follow buttons" },
   { type: "video",  icon: <Video className="w-3.5 h-3.5" />,        label: "Video / GIF", desc: "Embed video or GIF" },
   { type: "table",  icon: <TableProperties className="w-3.5 h-3.5" />, label: "Table",     desc: "Data table" },
+  { type: "iframe",      icon: <Globe className="w-3.5 h-3.5" />,             label: "Embed / iFrame", desc: "Website, map, form" },
   { type: "divider",     icon: <Minus className="w-3.5 h-3.5" />,             label: "Divider",      desc: "Separator" },
   { type: "spacer",      icon: <ArrowUpDown className="w-3.5 h-3.5" />,       label: "Spacer",       desc: "Empty space" },
   { type: "footer",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Footer",       desc: "Footer text" },
@@ -212,6 +220,7 @@ export function defaultBlock(type: BlockType): EmailBlock {
     case "footer":      return { id, type, content: "© {{organization_name}} · Powered by Authentix", textColor: "#6b7280", fontSize: 12, lineHeight: 1.6 };
     case "video": return { id, type, videoUrl: "", videoType: "youtube", videoCaptionText: "" };
     case "table": return { id, type, tableHeaders: ["Column 1", "Column 2", "Column 3"], tableRows: [["", "", ""], ["", "", ""]], tableBgColor: "#1e1e1e", tableHeaderBgColor: "transparent", tableHeaderTextColor: "#3ECF8E", tableBorderColor: "#3f3f46" };
+    case "iframe": return { id, type, iframeUrl: "", iframeHeight: 400, iframeTitle: "Embedded content", iframeSandbox: "allow-scripts allow-same-origin allow-forms", iframeFallbackText: "View this content online →" };
   }
 }
 
@@ -610,6 +619,14 @@ ${cells}
       return `<div style="padding:${pV}px ${pH}px;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:${block.tableBgColor || "#1e1e1e"};border-radius:8px;overflow:hidden;font-family:-apple-system,sans-serif;"><thead><tr>${headerCells}</tr></thead><tbody>${rowHtml}</tbody></table></div>`;
     }
 
+    case "iframe": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      if (!block.iframeUrl) return `<div style="padding:${pV}px ${pH}px;"><div style="border:1px dashed #3f3f46;border-radius:8px;padding:32px 16px;text-align:center;"><p style="color:#6b7280;font-size:12px;font-family:sans-serif;margin:0;">Add an embed URL in the properties panel</p></div></div>`;
+      const title = block.iframeTitle || "View Embedded Content";
+      const fallback = block.iframeFallbackText || "Click to open →";
+      return `<div style="padding:${pV}px ${pH}px;text-align:center;"><a href="${block.iframeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e1e1e;border:1px solid #3f3f46;border-radius:8px;padding:20px 32px;text-decoration:none;"><p style="color:#3ECF8E;font-size:14px;font-weight:600;margin:0;font-family:-apple-system,sans-serif;">${title}</p><p style="color:#6b7280;font-size:12px;margin:6px 0 0;font-family:-apple-system,sans-serif;">${fallback}</p></a><p style="color:#6b7280;font-size:10px;margin:8px 0 0;font-family:sans-serif;">Note: embedded content opens in browser</p></div>`;
+    }
+
     default:
       return "";
   }
@@ -937,6 +954,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   footer: "Footer",
   video: "Video / GIF",
   table: "Table",
+  iframe: "Embed / iFrame",
 };
 
 // ── Shared variable dropdown portal (autocomplete + swap) ────────────────────
@@ -1649,6 +1667,28 @@ function BlockLiveView({
               ))}
             </tbody>
           </table>
+        </div>
+      );
+    }
+
+    case "iframe": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      return (
+        <div style={{ padding: `${pV}px ${pH}px` }}>
+          {block.iframeUrl ? (
+            <iframe
+              src={block.iframeUrl}
+              title={block.iframeTitle || "Embedded content"}
+              height={block.iframeHeight || 400}
+              sandbox={block.iframeSandbox || "allow-scripts allow-same-origin allow-forms"}
+              style={{ width: "100%", border: "none", borderRadius: 8, display: "block" }}
+            />
+          ) : (
+            <div style={{ border: "1px dashed #3f3f46", borderRadius: 8, padding: "32px 16px", textAlign: "center", color: "#6b7280", fontSize: 12, fontFamily: "sans-serif" }}>
+              <Globe size={20} style={{ display: "block", margin: "0 auto 6px", opacity: 0.4 }} />
+              Add an embed URL in the properties panel
+            </div>
+          )}
         </div>
       );
     }
@@ -2636,6 +2676,25 @@ export function BlockPropertiesPanel({
         </Section>
       );
     }
+
+    if (type === "iframe") return (
+      <Section label="Embed">
+        <p className="text-[9px] text-muted-foreground/50 -mt-1">iFrames render live in the canvas. Email clients show a fallback link instead.</p>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">URL</label>
+          <input value={block.iframeUrl || ""} onChange={e => u({ iframeUrl: e.target.value })} placeholder="https://calendly.com/…" className={`${INP} font-mono text-[10px]`} />
+        </div>
+        <NumBox label="Height" value={block.iframeHeight ?? 400} onChange={v => u({ iframeHeight: v })} unit="px" min={100} max={1200} />
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Title (accessibility)</label>
+          <input value={block.iframeTitle || ""} onChange={e => u({ iframeTitle: e.target.value })} placeholder="Embedded content" className={INP} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Fallback link text (shown in email)</label>
+          <input value={block.iframeFallbackText || ""} onChange={e => u({ iframeFallbackText: e.target.value })} placeholder="View this content online →" className={INP} />
+        </div>
+      </Section>
+    );
 
     return null;
   })();
