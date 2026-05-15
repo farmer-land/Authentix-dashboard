@@ -159,8 +159,8 @@ export function EmailEditor({
   // Panel / UI state
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [leftPanelTab, setLeftPanelTab] = useState<"blocks" | "settings">("blocks");
-  const [leftPanelWidth, setLeftPanelWidth] = useState(256);
-  const [rightPanelWidth, setRightPanelWidth] = useState(256);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(288);
+  const [rightPanelWidth, setRightPanelWidth] = useState(288);
   const [panelWidth, setPanelWidth] = useState(0);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [rightPanelVisible, setRightPanelVisible] = useState(true);

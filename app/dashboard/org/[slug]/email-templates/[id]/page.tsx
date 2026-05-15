@@ -113,8 +113,8 @@ export default function EmailTemplateEditorPage() {
 
   // Right panel for block properties
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(256);
-  const [rightPanelWidth, setRightPanelWidth] = useState(256);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(288);
+  const [rightPanelWidth, setRightPanelWidth] = useState(288);
   const isDraggingLeft = useRef(false);
   const isDraggingRight = useRef(false);
   const dragStartXLeft = useRef(0);

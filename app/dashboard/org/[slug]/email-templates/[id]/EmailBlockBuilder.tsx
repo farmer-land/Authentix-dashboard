@@ -89,6 +89,7 @@ export interface EmailBlock {
   fontFamily?: string;
   fontSize?: number;
   fontWeight?: string;
+  fontStyle?: string;
   textAlign?: "left" | "center" | "right";
   lineHeight?: number;
   letterSpacing?: number;
@@ -912,17 +913,20 @@ export function PaletteItemCard({
 
       {showPreview && createPortal(
         <div
-          className="fixed z-99999 pointer-events-none"
-          style={{ left: Math.min(previewPos.x, window.innerWidth - 320), top: Math.max(8, previewPos.y) }}
+          className="fixed z-[99999] pointer-events-none"
+          style={{
+            left: Math.min(previewPos.x, window.innerWidth - 320),
+            top: Math.max(8, Math.min(previewPos.y, window.innerHeight - 300)),
+          }}
         >
-          <div className="w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden">
-            <div className="px-3 py-1.5 border-b border-zinc-700 bg-zinc-800/80">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{item.label} preview</p>
+          <div className="w-72 bg-zinc-800 border border-zinc-600/60 rounded-xl shadow-2xl overflow-hidden">
+            <div className="px-3 py-1.5 border-b border-zinc-700/60 bg-zinc-700/50">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">{item.label}</p>
             </div>
-            <div className="overflow-hidden">
+            <div className="overflow-hidden" style={{ maxHeight: 260 }}>
               <div
                 style={{ transform: "scale(0.65)", transformOrigin: "top center", width: "154%", marginLeft: "-27%" }}
-                dangerouslySetInnerHTML={{ __html: previewHtml || `<div style="padding:16px;color:#6b7280;font-size:12px;font-family:sans-serif">${item.label}</div>` }}
+                dangerouslySetInnerHTML={{ __html: previewHtml || `<div style="padding:16px;color:#6b7280;font-size:12px;font-family:sans-serif;background:#18181b">${item.label}</div>` }}
               />
             </div>
           </div>
@@ -1297,6 +1301,110 @@ function MarkdownBlockView({
     <div style={{ padding: "16px 32px", background: block.bgColor ?? "transparent" }}>
       {editing ? (
         <div className="relative">
+          {/* Markdown formatting toolbar */}
+          <div className="flex items-center gap-0.5 mb-2 flex-wrap bg-zinc-800/60 rounded-lg px-2 py-1.5 border border-zinc-700/50">
+            {[
+              { label: "B",    title: "Bold (**text**)",        syntax: ["**", "**"] as [string, string] },
+              { label: "I",    title: "Italic (*text*)",        syntax: ["*", "*"] as [string, string] },
+              { label: "~~",   title: "Strikethrough",          syntax: ["~~", "~~"] as [string, string] },
+              { label: "`",    title: "Inline code",            syntax: ["`", "`"] as [string, string] },
+            ].map(fmt => (
+              <button key={fmt.label} type="button" title={fmt.title}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
+                  if (!ta) return;
+                  const s = ta.selectionStart; const end = ta.selectionEnd;
+                  const sel = draft.slice(s, end) || "text";
+                  const next = draft.slice(0, s) + fmt.syntax[0] + sel + fmt.syntax[1] + draft.slice(end);
+                  setDraft(next);
+                  requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + fmt.syntax[0].length, s + fmt.syntax[0].length + sel.length); });
+                }}
+                className="px-1.5 h-6 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
+                {fmt.label}
+              </button>
+            ))}
+            <div className="w-px h-4 bg-zinc-600 mx-0.5" />
+            {[
+              { label: "H1", title: "Heading 1", prefix: "# " },
+              { label: "H2", title: "Heading 2", prefix: "## " },
+              { label: "H3", title: "Heading 3", prefix: "### " },
+            ].map(h => (
+              <button key={h.label} type="button" title={h.title}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
+                  if (!ta) return;
+                  const s = ta.selectionStart;
+                  const lineStart = draft.lastIndexOf("\n", s - 1) + 1;
+                  const next = draft.slice(0, lineStart) + h.prefix + draft.slice(lineStart);
+                  setDraft(next);
+                  requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + h.prefix.length, s + h.prefix.length); });
+                }}
+                className="px-1.5 h-6 text-[10px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
+                {h.label}
+              </button>
+            ))}
+            <div className="w-px h-4 bg-zinc-600 mx-0.5" />
+            {[
+              { label: "—", title: "Bullet list",   prefix: "- " },
+              { label: "1.", title: "Ordered list",  prefix: "1. " },
+              { label: "❝",  title: "Blockquote",    prefix: "> " },
+              { label: "—",  title: "Divider",       full: "\n---\n" },
+            ].map((item, i) => (
+              <button key={i} type="button" title={item.title}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
+                  if (!ta) return;
+                  if (item.full) {
+                    const s = ta.selectionStart;
+                    const next = draft.slice(0, s) + item.full + draft.slice(s);
+                    setDraft(next);
+                    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + item.full!.length, s + item.full!.length); });
+                  } else if (item.prefix) {
+                    const s = ta.selectionStart;
+                    const lineStart = draft.lastIndexOf("\n", s - 1) + 1;
+                    const next = draft.slice(0, lineStart) + item.prefix + draft.slice(lineStart);
+                    setDraft(next);
+                    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + item.prefix!.length, s + item.prefix!.length); });
+                  }
+                }}
+                className="px-1.5 h-6 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
+                {item.label}
+              </button>
+            ))}
+            <div className="w-px h-4 bg-zinc-600 mx-0.5" />
+            <button type="button" title="Image ![alt](url)"
+              onMouseDown={e => {
+                e.preventDefault();
+                const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
+                if (!ta) return;
+                const s = ta.selectionStart;
+                const insert = "![alt text](https://example.com/image.jpg)";
+                const next = draft.slice(0, s) + insert + draft.slice(s);
+                setDraft(next);
+                requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + 2, s + 10); });
+              }}
+              className="px-1.5 h-6 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
+              🖼
+            </button>
+            <button type="button" title="Link [text](url)"
+              onMouseDown={e => {
+                e.preventDefault();
+                const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
+                if (!ta) return;
+                const s = ta.selectionStart; const end = ta.selectionEnd;
+                const sel = draft.slice(s, end) || "link text";
+                const insert = `[${sel}](https://example.com)`;
+                const next = draft.slice(0, s) + insert + draft.slice(end);
+                setDraft(next);
+                requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + sel.length + 3, s + insert.length - 1); });
+              }}
+              className="px-1.5 h-6 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
+              🔗
+            </button>
+          </div>
           <textarea
             autoFocus
             value={draft}
@@ -1304,12 +1412,11 @@ function MarkdownBlockView({
             onBlur={commit}
             onKeyDown={e => {
               if (e.key === "Escape") commit();
-              // Cmd/Ctrl+Enter also commits
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") commit();
               e.stopPropagation();
             }}
             rows={Math.max(6, draft.split("\n").length + 1)}
-            placeholder={"# Heading\n**bold**, *italic*, [link](url)\n- list item\n> blockquote\n\n{{variable}}"}
+            placeholder={"# Heading\n**bold**, *italic*, [link](url)\n- list item\n> blockquote\n\n{{variable}}\n\n![image](https://url)"}
             className="w-full font-mono text-xs p-3 border-2 border-[#3ECF8E]/50 rounded-lg bg-card text-foreground focus:outline-none focus:border-[#3ECF8E] resize-y leading-relaxed"
             style={{ minHeight: 120 }}
           />
@@ -1397,7 +1504,7 @@ function BlockLiveView({
             tag="p"
             placeholder="Hi {{recipient_name}},"
             availableVars={availableVars}
-            style={{ fontSize: block.fontSize || 16, color: block.textColor || "#e5e7eb", margin: 0, fontFamily: ff, display: "block", textAlign: ta, lineHeight: block.lineHeight || 1.7, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal" }}
+            style={{ fontSize: block.fontSize || 16, color: block.textColor || "#e5e7eb", margin: 0, fontFamily: ff, display: "block", textAlign: ta, lineHeight: block.lineHeight || 1.7, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal", fontStyle: block.fontStyle || "normal" }}
           />
         </div>
       );
@@ -1414,7 +1521,7 @@ function BlockLiveView({
             tag="p"
             placeholder="Enter paragraph text…"
             availableVars={availableVars}
-            style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: block.lineHeight || 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal" }}
+            style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: block.lineHeight || 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal", fontStyle: block.fontStyle || "normal" }}
           />
         </div>
       );
@@ -1538,7 +1645,7 @@ function BlockLiveView({
             tag="p"
             placeholder="LinkedIn share message…"
             availableVars={availableVars}
-            style={{ fontSize: 14, color: block.textColor || "#9ca3af", margin: 0, fontFamily: ff, display: "block" }}
+            style={{ fontSize: 14, color: block.textColor || "#9ca3af", margin: 0, fontFamily: ff, display: "block", fontWeight: block.fontWeight || "normal", fontStyle: block.fontStyle || "normal" }}
           />
         </div>
       );
@@ -1602,7 +1709,7 @@ function BlockLiveView({
             tag="p"
             placeholder="Footer text…"
             availableVars={availableVars}
-            style={{ fontSize: block.fontSize || 12, color: block.textColor || "#6b7280", margin: 0, fontFamily: ff, display: "block", lineHeight: block.lineHeight || 1.6 }}
+            style={{ fontSize: block.fontSize || 12, color: block.textColor || "#6b7280", margin: 0, fontFamily: ff, display: "block", lineHeight: block.lineHeight || 1.6, fontWeight: block.fontWeight || "normal", fontStyle: block.fontStyle || "normal" }}
           />
         </div>
       );
@@ -1993,6 +2100,7 @@ function FloatingColorPicker({ color, label, initialPos, onClose, onChange }: {
 }) {
   const [pos, setPos] = useState(initialPos);
   const dragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -2005,10 +2113,23 @@ function FloatingColorPicker({ color, label, initialPos, onClose, onChange }: {
     return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
   }, []);
 
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    // slight delay so the open-click doesn't immediately close it
+    const t = setTimeout(() => document.addEventListener("mousedown", handler), 50);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", handler); };
+  }, [onClose]);
+
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#ffffff";
 
   return (
     <div
+      ref={containerRef}
       className="fixed z-[9999] bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden select-none"
       style={{ left: pos.x, top: pos.y, width: 232 }}
     >
@@ -2335,10 +2456,12 @@ export function BlockPropertiesPanel({
             )}
             {emailBg?.type === "image" && (
               <>
-                <p className="text-[9px] text-muted-foreground/50">Upload or enter an image URL for the email background</p>
                 <MediaUploader url={emailBg.imageUrl || ""} onUrlChange={v => onEmailBgChange?.({ ...emailBg, imageUrl: v })} />
                 {emailBg.imageUrl && (
                   <>
+                    <div className="rounded-lg overflow-hidden border border-border/30 mt-1">
+                      <img src={emailBg.imageUrl} alt="Background preview" className="w-full object-cover" style={{ maxHeight: 140 }} />
+                    </div>
                     <BgPositionPicker
                       position={emailBg.imagePosition}
                       onPositionChange={v => onEmailBgChange?.({ ...emailBg, imagePosition: v })}
@@ -2462,7 +2585,37 @@ export function BlockPropertiesPanel({
       };
       return (
         <Section label="Content">
-          <textarea value={block.content ?? ""} onChange={e => u({ content: e.target.value })} rows={type === "text" ? 5 : 3} placeholder={ph[type] ?? ""} className={`${INP} resize-y font-mono leading-relaxed`} />
+          {/* Quick format strip */}
+          <div className="flex items-center gap-0.5 pb-1 border-b border-border/20 mb-1 flex-wrap">
+            {[
+              { label: "B", title: "Bold",       onClick: () => u({ fontWeight: block.fontWeight === "700" ? "normal" : "700" }),  active: block.fontWeight === "700",  cls: "font-bold" },
+              { label: "I", title: "Italic",      onClick: () => u({ fontStyle: block.fontStyle === "italic" ? "normal" : "italic" }), active: block.fontStyle === "italic", cls: "italic" },
+            ].map(btn => (
+              <button key={btn.label} type="button" title={btn.title} onClick={btn.onClick}
+                className={cn("w-7 h-6 text-xs rounded transition-colors", btn.cls, btn.active ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {btn.label}
+              </button>
+            ))}
+            <div className="w-px h-4 bg-border/40 mx-0.5" />
+            {(["left", "center", "right"] as const).map(a => (
+              <button key={a} type="button" title={`Align ${a}`} onClick={() => u({ textAlign: a })}
+                className={cn("w-7 h-6 flex items-center justify-center rounded transition-colors", block.textAlign === a || (!block.textAlign && a === "left") ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {a === "left" ? <AlignLeft className="w-3 h-3" /> : a === "center" ? <AlignCenter className="w-3 h-3" /> : <AlignRight className="w-3 h-3" />}
+              </button>
+            ))}
+            <div className="w-px h-4 bg-border/40 mx-0.5" />
+            <div className="flex items-center gap-1">
+              <button type="button" title="Decrease size" onClick={() => u({ fontSize: Math.max(8, (block.fontSize || 15) - 1) })}
+                className="w-5 h-6 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors">−</button>
+              <span className="text-[10px] font-mono text-muted-foreground/60 w-6 text-center">{block.fontSize || 15}</span>
+              <button type="button" title="Increase size" onClick={() => u({ fontSize: Math.min(72, (block.fontSize || 15) + 1) })}
+                className="w-5 h-6 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors">+</button>
+            </div>
+            <div className="w-px h-4 bg-border/40 mx-0.5" />
+            <ColorRow label="" value={block.textColor || "#d1d5db"} onChange={v => u({ textColor: v })} />
+          </div>
+          <textarea value={block.content ?? ""} onChange={e => u({ content: e.target.value })} rows={type === "text" ? 5 : 3} placeholder={ph[type] ?? ""} className={`${INP} resize-y leading-relaxed`} />
+          <p className="text-[9px] text-muted-foreground/40">Use Variables: {"{{recipient_name}}"} {"{{organization_name}}"} etc.</p>
         </Section>
       );
     }
@@ -2798,7 +2951,7 @@ export function BlockPropertiesPanel({
 
   // ── Colors section ────────────────────────────────────────────────────────
 
-  const showColors = !["cert_image", "divider", "spacer", "image"].includes(type);
+  const showColors = !["cert_image"].includes(type);
   const colorsSection = showColors ? (
     <Section label="Colors">
       {/* Header: background type picker */}
@@ -2852,9 +3005,9 @@ export function BlockPropertiesPanel({
           <ColorRow label="Subtitle color" value={block.subtitleColor || "rgba(255,255,255,0.85)"} onChange={v => u({ subtitleColor: v })} />
         </div>
       )}
-      {/* Background for other blocks */}
-      {["text", "greeting", "footer", "qr_code", "markdown", "linkedin", "two_column", "social"].includes(type) && (
-        <ColorRow label="Background" value={block.bgColor || "transparent"} onChange={v => u({ bgColor: v })} />
+      {/* Block background — available for all non-cert blocks */}
+      {!["cert_image", "header"].includes(type) && (
+        <ColorRow label="Block background" value={block.bgColor || "transparent"} onChange={v => u({ bgColor: v })} />
       )}
       {/* Text colors */}
       {["text", "greeting", "footer", "linkedin", "markdown"].includes(type) && (
@@ -2887,8 +3040,9 @@ export function BlockPropertiesPanel({
   // ── Typography section ────────────────────────────────────────────────────
 
   const hasTypo = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column", "markdown", "image"].includes(type);
+  const typoOpenByDefault = ["text", "greeting", "header", "markdown", "footer"].includes(type);
   const typoSection = hasTypo ? (
-    <Section label="Typography" defaultOpen={false}>
+    <Section label="Typography" defaultOpen={typoOpenByDefault}>
       {/* Font family */}
       {!["image"].includes(type) && (
         <div className="space-y-1">
@@ -2963,9 +3117,53 @@ export function BlockPropertiesPanel({
         </p>
       </div>
       {contentSection}
-      {colorsSection}
       {typoSection}
+      {colorsSection}
       {spacingSection}
+      {/* Email background — always accessible even when a block is selected */}
+      {onEmailBgChange && (
+        <Section label="Email Background" defaultOpen={false}>
+          <div className="space-y-2">
+            <div className="flex border border-border/60 rounded-md overflow-hidden text-xs">
+              {(["solid", "gradient", "image"] as const).map(v => (
+                <button key={v} type="button"
+                  onClick={() => onEmailBgChange({ ...emailBg, type: v })}
+                  className={cn("flex-1 h-7 capitalize transition-colors",
+                    (emailBg?.type || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+                >{v}</button>
+              ))}
+            </div>
+            {(!emailBg?.type || emailBg.type === "solid") && (
+              <ColorRow label="Background" value={emailBg?.color || "#18181b"} onChange={v => onEmailBgChange({ ...emailBg, type: "solid", color: v })} />
+            )}
+            {emailBg?.type === "gradient" && (
+              <>
+                <ColorRow label="Start" value={emailBg.color || "#18181b"} onChange={v => onEmailBgChange({ ...emailBg, color: v })} />
+                <ColorRow label="End" value={emailBg.gradientEnd || "#111111"} onChange={v => onEmailBgChange({ ...emailBg, gradientEnd: v })} />
+                <NumBox label="Angle" value={emailBg.gradientAngle ?? 135} onChange={v => onEmailBgChange({ ...emailBg, gradientAngle: v })} unit="°" min={0} max={360} />
+              </>
+            )}
+            {emailBg?.type === "image" && (
+              <>
+                <MediaUploader url={emailBg.imageUrl || ""} onUrlChange={v => onEmailBgChange({ ...emailBg, imageUrl: v })} />
+                {emailBg.imageUrl && (
+                  <>
+                    <div className="rounded-lg overflow-hidden border border-border/30">
+                      <img src={emailBg.imageUrl} alt="" className="w-full object-cover" style={{ maxHeight: 120 }} />
+                    </div>
+                    <BgPositionPicker position={emailBg.imagePosition} onPositionChange={v => onEmailBgChange({ ...emailBg, imagePosition: v })} />
+                    <BgSizeRow
+                      size={emailBg.imageSize} repeat={emailBg.imageRepeat}
+                      onSizeChange={v => onEmailBgChange({ ...emailBg, imageSize: v as EmailBackground["imageSize"] })}
+                      onRepeatChange={v => onEmailBgChange({ ...emailBg, imageRepeat: v as EmailBackground["imageRepeat"] })}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </Section>
+      )}
     </div>
   );
 }
