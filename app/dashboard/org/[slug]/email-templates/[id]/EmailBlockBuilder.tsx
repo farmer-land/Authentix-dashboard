@@ -153,6 +153,7 @@ export interface EmailBlock {
   iframeHeight?: number;
   iframeTitle?: string;
   iframeSandbox?: string;
+  iframeAllow?: string;
   iframeFallbackText?: string;
 }
 
@@ -197,6 +198,33 @@ export const CERT_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNode
 
 // Full palette for cert delivery email editor (email + cert blocks)
 export const PALETTE = [...EMAIL_BLOCKS_PALETTE, ...CERT_BLOCKS_PALETTE];
+
+// ── Embed URL parser — handles pasted <iframe> HTML + platform URL shortcuts ──
+
+export function parseEmbedInput(raw: string): { url: string; height?: number; title?: string; allow?: string } {
+  const s = raw.trim();
+  // Full <iframe> HTML paste → extract attributes
+  const srcMatch = s.match(/<iframe[^>]+\bsrc=["']([^"']+)["']/i);
+  if (srcMatch) {
+    const heightMatch = s.match(/\bheight=["']?(\d+)["']?/i);
+    const titleMatch = s.match(/\btitle=["']([^"']+)["']/i);
+    const allowMatch = s.match(/\ballow=["']([^"']+)["']/i);
+    return {
+      url: srcMatch[1]!,
+      height: heightMatch ? Number(heightMatch[1]) : undefined,
+      title: titleMatch ? titleMatch[1] : undefined,
+      allow: allowMatch ? allowMatch[1] : undefined,
+    };
+  }
+  // YouTube watch URL → embed
+  const ytWatch = s.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytWatch) return { url: `https://www.youtube.com/embed/${ytWatch[1]}`, allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" };
+  // Vimeo URL → embed
+  const vimeo = s.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return { url: `https://player.vimeo.com/video/${vimeo[1]}`, allow: "autoplay; fullscreen; picture-in-picture" };
+  // Already an embed URL — return as-is
+  return { url: s };
+}
 
 // ── Default block configs ────────────────────────────────────────────────────
 
@@ -561,11 +589,11 @@ ${cells}
 
     case "social": {
       const links = block.socialLinks ?? [];
-      const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e" };
+      const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", X: "#000000", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e", Website: "#6b7280" };
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       const btns = links.map(l => {
         const col = SOCIAL_COLORS[l.platform] || "#6b7280";
-        return `<a href="${l.url || "#"}" style="display:inline-block;background:${col};color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;text-decoration:none;margin:4px;">${l.platform}</a>`;
+        return `<a href="${l.url || "#"}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:${col};color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;text-decoration:none;margin:4px;">${l.platform}</a>`;
       }).join("");
       return `<div style="padding:${pV}px ${pH}px;text-align:center;${block.bgColor ? `background:${block.bgColor};` : ""}">${btns || "<span style='color:#6b7280;font-size:12px;'>Add social links in the panel</span>"}</div>`;
     }
@@ -1502,16 +1530,17 @@ function BlockLiveView({
     }
 
     case "social": {
-      const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e" };
+      const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", X: "#000000", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e", Website: "#6b7280" };
       const links = block.socialLinks ?? [];
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       return (
         <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center", background: block.bgColor || "transparent" }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
             {links.length > 0 ? links.map((l, i) => (
-              <span key={i} style={{ background: SOCIAL_COLORS[l.platform] || "#6b7280", color: "#fff", fontSize: 12, fontWeight: 600, padding: "7px 14px", borderRadius: 6, cursor: "default" }}>
+              <a key={i} href={l.url || "#"} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-block", background: SOCIAL_COLORS[l.platform] || "#6b7280", color: "#fff", fontSize: 12, fontWeight: 600, padding: "7px 14px", borderRadius: 6, textDecoration: "none" }}>
                 {l.platform}
-              </span>
+              </a>
             )) : (
               <span style={{ fontSize: 12, color: "#6b7280" }}>Add social links in the panel →</span>
             )}
@@ -1673,6 +1702,12 @@ function BlockLiveView({
 
     case "iframe": {
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const isYt = block.iframeUrl?.includes("youtube.com/embed") || block.iframeUrl?.includes("youtu.be");
+      const isVimeo = block.iframeUrl?.includes("player.vimeo.com");
+      const allowAttr = block.iframeAllow
+        ?? (isYt ? "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          : isVimeo ? "autoplay; fullscreen; picture-in-picture"
+          : undefined);
       return (
         <div style={{ padding: `${pV}px ${pH}px` }}>
           {block.iframeUrl ? (
@@ -1680,7 +1715,8 @@ function BlockLiveView({
               src={block.iframeUrl}
               title={block.iframeTitle || "Embedded content"}
               height={block.iframeHeight || 400}
-              sandbox={block.iframeSandbox || "allow-scripts allow-same-origin allow-forms"}
+              {...(allowAttr ? { allow: allowAttr } : {})}
+              {...(allowAttr ? { allowFullScreen: true } : { sandbox: block.iframeSandbox || "allow-scripts allow-same-origin allow-forms" })}
               style={{ width: "100%", border: "none", borderRadius: 8, display: "block" }}
             />
           ) : (
@@ -2547,7 +2583,7 @@ export function BlockPropertiesPanel({
     );
 
     if (type === "social") {
-      const PLATFORMS = ["LinkedIn", "Twitter", "Instagram", "Facebook", "YouTube", "GitHub", "Website"];
+      const PLATFORMS = ["LinkedIn", "X", "Twitter", "Instagram", "Facebook", "YouTube", "GitHub", "Website"];
       const links = block.socialLinks ?? [];
       return (
         <Section label="Social Links">
@@ -2679,11 +2715,28 @@ export function BlockPropertiesPanel({
 
     if (type === "iframe") return (
       <Section label="Embed">
-        <p className="text-[9px] text-muted-foreground/50 -mt-1">iFrames render live in the canvas. Email clients show a fallback link instead.</p>
+        <p className="text-[9px] text-muted-foreground/50 -mt-1">Paste a URL or the full embed code from YouTube, Calendly, Google Maps, etc.</p>
         <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">URL</label>
-          <input value={block.iframeUrl || ""} onChange={e => u({ iframeUrl: e.target.value })} placeholder="https://calendly.com/…" className={`${INP} font-mono text-[10px]`} />
+          <label className="text-[10px] text-muted-foreground/70 select-none">URL or embed code</label>
+          <textarea
+            rows={3}
+            value={block.iframeUrl || ""}
+            placeholder={"https://calendly.com/…\n— or paste YouTube/Vimeo <iframe> code —"}
+            className={`${INP} resize-none font-mono text-[10px] leading-relaxed`}
+            onChange={e => {
+              const parsed = parseEmbedInput(e.target.value);
+              u({
+                iframeUrl: parsed.url,
+                ...(parsed.height ? { iframeHeight: parsed.height } : {}),
+                ...(parsed.title ? { iframeTitle: parsed.title } : {}),
+                ...(parsed.allow !== undefined ? { iframeAllow: parsed.allow } : {}),
+              });
+            }}
+          />
         </div>
+        {block.iframeUrl && block.iframeUrl.startsWith("http") && (
+          <p className="text-[9px] text-[#3ECF8E]/70 font-mono truncate">↳ {block.iframeUrl}</p>
+        )}
         <NumBox label="Height" value={block.iframeHeight ?? 400} onChange={v => u({ iframeHeight: v })} unit="px" min={100} max={1200} />
         <div className="space-y-1">
           <label className="text-[10px] text-muted-foreground/70 select-none">Title (accessibility)</label>

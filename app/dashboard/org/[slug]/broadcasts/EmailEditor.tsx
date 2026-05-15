@@ -159,6 +159,8 @@ export function EmailEditor({
   // Panel / UI state
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [leftPanelTab, setLeftPanelTab] = useState<"blocks" | "settings">("blocks");
+  const [leftPanelWidth, setLeftPanelWidth] = useState(256);
+  const [rightPanelWidth, setRightPanelWidth] = useState(256);
   const [panelWidth, setPanelWidth] = useState(0);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
@@ -170,15 +172,30 @@ export function EmailEditor({
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
   const dragStartW = useRef(0);
+  const isDraggingLeft = useRef(false);
+  const isDraggingRight = useRef(false);
+  const dragStartXLeft = useRef(0);
+  const dragStartXRight = useRef(0);
+  const dragStartWidthLeft = useRef(0);
+  const dragStartWidthRight = useRef(0);
 
   // Panel resize mouse handlers
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!isDragging.current) return;
-      const delta = dragStartX.current - e.clientX;
-      setPanelWidth(Math.min(700, Math.max(280, dragStartW.current + delta)));
+      if (isDragging.current) {
+        const delta = dragStartX.current - e.clientX;
+        setPanelWidth(Math.min(700, Math.max(280, dragStartW.current + delta)));
+      }
+      if (isDraggingLeft.current) {
+        const delta = e.clientX - dragStartXLeft.current;
+        setLeftPanelWidth(Math.min(480, Math.max(200, dragStartWidthLeft.current + delta)));
+      }
+      if (isDraggingRight.current) {
+        const delta = dragStartXRight.current - e.clientX;
+        setRightPanelWidth(Math.min(480, Math.max(200, dragStartWidthRight.current + delta)));
+      }
     };
-    const onUp = () => { isDragging.current = false; };
+    const onUp = () => { isDragging.current = false; isDraggingLeft.current = false; isDraggingRight.current = false; };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => {
@@ -394,9 +411,19 @@ export function EmailEditor({
           {/* Floating left panel */}
           {leftPanelVisible && (
             <div
-              className="absolute z-40 left-4 top-3 w-64 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-              style={{ height: "calc(100% - 24px)" }}
+              className="absolute z-40 left-4 top-3 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+              style={{ height: "calc(100% - 24px)", width: leftPanelWidth }}
             >
+              {/* Right-edge resize handle */}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10 hover:bg-[#3ECF8E]/20 transition-colors rounded-r-xl"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  isDraggingLeft.current = true;
+                  dragStartXLeft.current = e.clientX;
+                  dragStartWidthLeft.current = leftPanelWidth;
+                }}
+              />
               <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 border-b border-border/40 shrink-0 select-none">
                 <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <span className="flex-1 min-w-0 text-xs font-semibold text-foreground truncate">
@@ -512,9 +539,19 @@ export function EmailEditor({
           {/* Floating right panel — block properties */}
           {rightPanelVisible && (
             <div
-              className="absolute z-40 right-4 top-3 w-64 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-              style={{ height: "calc(100% - 24px)" }}
+              className="absolute z-40 right-4 top-3 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+              style={{ height: "calc(100% - 24px)", width: rightPanelWidth }}
             >
+              {/* Left-edge resize handle */}
+              <div
+                className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10 hover:bg-[#3ECF8E]/20 transition-colors rounded-l-xl"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  isDraggingRight.current = true;
+                  dragStartXRight.current = e.clientX;
+                  dragStartWidthRight.current = rightPanelWidth;
+                }}
+              />
               <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 border-b border-border/40 shrink-0 select-none">
                 <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <p className="flex-1 text-xs font-semibold text-foreground">Properties</p>
@@ -551,8 +588,8 @@ export function EmailEditor({
             id="broadcast-canvas"
             className="absolute inset-0 overflow-y-auto pt-3 pb-24 transition-[padding] duration-200"
             style={{
-              paddingLeft: leftPanelVisible ? 272 : 0,
-              paddingRight: rightPanelVisible ? 272 : 0,
+              paddingLeft: leftPanelVisible ? leftPanelWidth + 16 : 0,
+              paddingRight: rightPanelVisible ? rightPanelWidth + 16 : 0,
               backgroundColor: "#0d0d0d",
               backgroundImage: "radial-gradient(circle, #2a2a2a 1.5px, transparent 1.5px)",
               backgroundSize: "22px 22px",
