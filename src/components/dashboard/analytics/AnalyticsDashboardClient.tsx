@@ -4,7 +4,6 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  differenceInCalendarDays,
   endOfDay,
   format,
   isWithinInterval,
@@ -25,10 +24,6 @@ import {
   YAxis,
   Bar,
   BarChart,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  Legend,
 } from "recharts"
 import {
   Award,
@@ -37,11 +32,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Activity,
-  TrendingUp,
   CheckCircle2,
   XCircle,
   Clock,
-  BarChart3,
   ScanLine,
   AlertTriangle,
   Download,
@@ -51,15 +44,8 @@ import {
   Loader2,
 } from "lucide-react"
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import {
   ChartContainer,
@@ -995,10 +981,10 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
   const rangeLabel = formatRangeLabel(preset, customRange)
   const interval = React.useMemo(() => toInterval(preset, customRange), [preset, customRange])
 
-  const allImports = initialData?.recentImports ?? []
-  const allVerifications = initialData?.recentVerifications ?? []
-  const allCertificatesDaily = initialData?.certificatesDaily ?? []
-  const allCategoryMix = initialData?.certificateCategoryMix ?? []
+  const allImports = React.useMemo(() => initialData?.recentImports ?? [], [initialData])
+  const allVerifications = React.useMemo(() => initialData?.recentVerifications ?? [], [initialData])
+  const allCertificatesDaily = React.useMemo(() => initialData?.certificatesDaily ?? [], [initialData])
+  const allCategoryMix = React.useMemo(() => initialData?.certificateCategoryMix ?? [], [initialData])
 
   const filteredDaily = React.useMemo(
     () => filterCertificatesDailyByInterval(allCertificatesDaily, interval),
