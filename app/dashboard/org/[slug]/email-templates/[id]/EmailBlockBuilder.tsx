@@ -242,6 +242,42 @@ export function embedIsBlocked(url: string): boolean {
   return BLOCKS_EMBED.some(p => url.includes(p));
 }
 
+// Parses clipboard data into table headers+rows. Handles HTML tables (Google Sheets),
+// TSV (Excel / Numbers), and CSV.
+export function parseClipboardTable(html: string, text: string): { headers: string[]; rows: string[][] } | null {
+  if (html && /<table/i.test(html)) {
+    if (typeof DOMParser === "undefined") return null;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const trs = Array.from(doc.querySelectorAll("tr"));
+    if (trs.length === 0) return null;
+    const all = trs.map(tr => Array.from(tr.querySelectorAll("th,td")).map(td => td.textContent?.trim() ?? ""));
+    const headers = all[0] ?? [];
+    if (headers.length === 0) return null;
+    return { headers, rows: all.slice(1) };
+  }
+  if (text && text.includes("\t")) {
+    const lines = text.trim().split(/\r?\n/);
+    const headers = (lines[0] ?? "").split("\t");
+    const rows = lines.slice(1).map(l => l.split("\t"));
+    if (headers.length > 0) return { headers, rows };
+  }
+  if (text && text.includes(",")) {
+    const lines = text.trim().split(/\r?\n/);
+    const parseRow = (line: string) => {
+      const res: string[] = []; let cur = ""; let q = false;
+      for (const ch of line) {
+        if (ch === '"') { q = !q; } else if (ch === "," && !q) { res.push(cur); cur = ""; } else { cur += ch; }
+      }
+      res.push(cur);
+      return res;
+    };
+    const headers = parseRow(lines[0] ?? "");
+    const rows = lines.slice(1).map(parseRow);
+    if (headers.length > 1) return { headers, rows };
+  }
+  return null;
+}
+
 // ── Default block configs ────────────────────────────────────────────────────
 
 export function defaultBlock(type: BlockType): EmailBlock {
@@ -1798,13 +1834,37 @@ function BlockLiveView({
       const headers = block.tableHeaders ?? ["Col 1", "Col 2"];
       const rows = block.tableRows ?? [];
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+
+      const handlePaste = (e: React.ClipboardEvent) => {
+        const html = e.clipboardData.getData("text/html");
+        const text = e.clipboardData.getData("text/plain");
+        const parsed = parseClipboardTable(html, text);
+        if (parsed) {
+          e.preventDefault();
+          u({ tableHeaders: parsed.headers, tableRows: parsed.rows });
+        }
+      };
+
       return (
-        <div style={{ padding: `${pV}px ${pH}px` }}>
+        <div style={{ padding: `${pV}px ${pH}px` }} onPaste={handlePaste}>
+          {isSelected && (
+            <p style={{ fontSize: 10, color: "#6b7280", marginBottom: 6, fontFamily: "sans-serif", fontStyle: "italic" }}>
+              Click cells to edit · Paste CSV/TSV to import from Excel or Google Sheets
+            </p>
+          )}
           <table style={{ width: "100%", borderCollapse: "collapse", background: block.tableBgColor || "#1e1e1e", borderRadius: 8, overflow: "hidden", fontFamily: "-apple-system,sans-serif" }}>
             <thead>
               <tr>
                 {headers.map((h, i) => (
-                  <th key={i} style={{ padding: "8px 12px", textAlign: "left", color: block.tableHeaderTextColor || "#3ECF8E", fontSize: 11, fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase", borderBottom: `2px solid ${block.tableBorderColor || "#3f3f46"}`, background: block.tableHeaderBgColor || "transparent" }}>{h}</th>
+                  <th
+                    key={i}
+                    contentEditable={isSelected}
+                    suppressContentEditableWarning
+                    onBlur={e => {
+                      const hs = [...headers]; hs[i] = e.currentTarget.textContent ?? ""; u({ tableHeaders: hs });
+                    }}
+                    style={{ padding: "8px 12px", textAlign: "left", color: block.tableHeaderTextColor || "#3ECF8E", fontSize: 11, fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase", borderBottom: `2px solid ${block.tableBorderColor || "#3f3f46"}`, background: block.tableHeaderBgColor || "transparent", outline: isSelected ? "1px dashed rgba(62,207,142,0.35)" : "none", cursor: isSelected ? "text" : "default" }}
+                  >{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1812,7 +1872,16 @@ function BlockLiveView({
               {rows.map((row, ri) => (
                 <tr key={ri} style={{ background: ri % 2 === 1 ? "rgba(255,255,255,0.03)" : "transparent" }}>
                   {headers.map((_, ci) => (
-                    <td key={ci} style={{ padding: "8px 12px", fontSize: 13, color: block.textColor || "#d1d5db", borderBottom: `1px solid ${block.tableBorderColor || "#3f3f46"}` }}>{row[ci] || ""}</td>
+                    <td
+                      key={ci}
+                      contentEditable={isSelected}
+                      suppressContentEditableWarning
+                      onBlur={e => {
+                        const rs = rows.map((r, i) => i === ri ? r.map((c, j) => j === ci ? (e.currentTarget.textContent ?? "") : c) : r);
+                        u({ tableRows: rs });
+                      }}
+                      style={{ padding: "8px 12px", fontSize: 13, color: block.textColor || "#d1d5db", borderBottom: `1px solid ${block.tableBorderColor || "#3f3f46"}`, outline: isSelected ? "1px dashed rgba(255,255,255,0.08)" : "none", cursor: isSelected ? "text" : "default" }}
+                    >{row[ci] || ""}</td>
                   ))}
                 </tr>
               ))}
@@ -2227,6 +2296,37 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
   );
 }
 
+// ── Inline color swatch (button only, no label row) ─────────────────────────
+
+function InlineSwatch({ value, onChange, title }: { value: string; onChange: (v: string) => void; title?: string }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState({ x: 0, y: 0 });
+  const swatchRef = useRef<HTMLButtonElement>(null);
+  const openPicker = () => {
+    if (swatchRef.current) {
+      const rect = swatchRef.current.getBoundingClientRect();
+      const pickerW = 240;
+      const x = Math.max(8, rect.left - pickerW - 8);
+      const y = Math.max(8, Math.min(rect.top - 24, window.innerHeight - 360));
+      setPickerPos({ x, y });
+    }
+    setPickerOpen(true);
+  };
+  return (
+    <>
+      <button ref={swatchRef} type="button" onClick={openPicker}
+        className="w-6 h-6 rounded-md border border-border/60 shadow-sm hover:ring-2 hover:ring-[#3ECF8E]/40 transition-all shrink-0"
+        style={{ background: value || "#ffffff" }} title={title ?? value} />
+      {pickerOpen && createPortal(
+        <FloatingColorPicker color={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff"}
+          label={title ?? "Color"} initialPos={pickerPos}
+          onClose={() => setPickerOpen(false)} onChange={onChange} />,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ── Font size input with preset dropdown ─────────────────────────────────────
 
 function FontSizeInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -2612,7 +2712,7 @@ export function BlockPropertiesPanel({
                 className="w-5 h-6 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors">+</button>
             </div>
             <div className="w-px h-4 bg-border/40 mx-0.5" />
-            <ColorRow label="" value={block.textColor || "#d1d5db"} onChange={v => u({ textColor: v })} />
+            <InlineSwatch value={block.textColor || "#d1d5db"} onChange={v => u({ textColor: v })} title="Text color" />
           </div>
           <textarea value={block.content ?? ""} onChange={e => u({ content: e.target.value })} rows={type === "text" ? 5 : 3} placeholder={ph[type] ?? ""} className={`${INP} resize-y leading-relaxed`} />
           <p className="text-[9px] text-muted-foreground/40">Use Variables: {"{{recipient_name}}"} {"{{organization_name}}"} etc.</p>
@@ -2844,6 +2944,7 @@ export function BlockPropertiesPanel({
       const rows = block.tableRows ?? [];
       return (
         <Section label="Table">
+          <p className="text-[9px] text-muted-foreground/50 -mt-1">Click cells on canvas to edit · Paste CSV/TSV from Excel or Google Sheets to import</p>
           <div className="flex items-center justify-between">
             <span className="text-xs text-foreground/70">Columns</span>
             <div className="flex items-center gap-2">
@@ -2854,8 +2955,18 @@ export function BlockPropertiesPanel({
                 className="w-6 h-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:bg-muted text-sm font-bold">+</button>
             </div>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-foreground/70">Rows</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => { if (rows.length <= 0) return; u({ tableRows: rows.slice(0, -1) }); }}
+                className="w-6 h-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:bg-muted text-sm font-bold">−</button>
+              <span className="text-xs font-mono w-4 text-center">{rows.length}</span>
+              <button type="button" onClick={() => u({ tableRows: [...rows, new Array(headers.length).fill("")] })}
+                className="w-6 h-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:bg-muted text-sm font-bold">+</button>
+            </div>
+          </div>
           <div className="space-y-1">
-            <label className="text-[10px] text-muted-foreground/70 select-none">Header labels</label>
+            <label className="text-[10px] text-muted-foreground/70 select-none">Column headers</label>
             <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 2)}, 1fr)` }}>
               {headers.map((h, i) => (
                 <input key={i} value={h}
@@ -2863,30 +2974,6 @@ export function BlockPropertiesPanel({
                   className={`${INP} text-[10px]`} />
               ))}
             </div>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] text-muted-foreground/70 select-none">Rows ({rows.length})</label>
-              <button type="button" onClick={() => u({ tableRows: [...rows, new Array(headers.length).fill("")] })}
-                className="flex items-center gap-0.5 text-[9px] text-[#3ECF8E] font-semibold hover:text-[#34b87a]">
-                <Plus className="w-3 h-3" /> Add row
-              </button>
-            </div>
-            {rows.map((row, ri) => (
-              <div key={ri} className="flex items-center gap-1">
-                <div className="grid gap-1 flex-1 min-w-0" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 2)}, 1fr)` }}>
-                  {headers.map((_, ci) => (
-                    <input key={ci} value={row[ci] || ""}
-                      onChange={e => { const rs = rows.map((r, i) => i === ri ? r.map((c, j) => j === ci ? e.target.value : c) : r); u({ tableRows: rs }); }}
-                      className={`${INP} text-[10px]`} />
-                  ))}
-                </div>
-                <button type="button" onClick={() => u({ tableRows: rows.filter((_, i) => i !== ri) })}
-                  className="text-destructive/50 hover:text-destructive shrink-0 p-0.5">
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
           </div>
           <div className="space-y-2 pt-1 border-t border-border/20">
             <ColorRow label="Header text" value={block.tableHeaderTextColor || "#3ECF8E"} onChange={v => u({ tableHeaderTextColor: v })} />
