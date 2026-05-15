@@ -18,6 +18,8 @@ import {
   CartesianGrid,
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   XAxis,
   YAxis,
   PieChart,
@@ -309,11 +311,10 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
                         )}
                         onMouseEnter={(e) => {
                           const rect = (e.target as HTMLElement).getBoundingClientRect()
-                          const parent = (e.target as HTMLElement).closest(".relative")?.getBoundingClientRect()
                           setTooltip({
                             text: count > 0 ? `${count} certificate${count === 1 ? "" : "s"} on ${format(day, "MMM d, yyyy")}` : `No certificates on ${format(day, "MMM d, yyyy")}`,
-                            x: rect.left - (parent?.left ?? 0) + 7,
-                            y: rect.top - (parent?.top ?? 0) - 30,
+                            x: rect.left + rect.width / 2,
+                            y: rect.top - 8,
                           })
                         }}
                       />
@@ -322,19 +323,19 @@ function ActivityHeatmap({ series }: { series: CertificateDailyPoint[] }) {
                 </div>
               ))}
             </div>
-
-            {tooltip && (
-              <div
-                className="absolute z-10 pointer-events-none bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded-md shadow-lg border border-border/60 whitespace-nowrap"
-                style={{ left: tooltip.x, top: tooltip.y, transform: "translateX(-50%)" }}
-              >
-                {tooltip.text}
-              </div>
-            )}
           </div>
         </div>
         </div>
       </div>
+
+      {tooltip && (
+        <div
+          className="fixed z-50 pointer-events-none bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded-md shadow-lg border border-border/60 whitespace-nowrap"
+          style={{ left: tooltip.x, top: tooltip.y, transform: "translate(-50%, -100%)" }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   )
 }
@@ -366,15 +367,16 @@ function KpiCard({ label, value, sub, icon, accent = "#3ECF8E", trend, trendLabe
       </div>
       <div>
         <p className="text-2xl font-bold tracking-tight tabular-nums">{typeof value === "number" ? value.toLocaleString() : value}</p>
-        {(sub || trendLabel) && (
+        {(trend || trendLabel) ? (
           <div className="flex items-center gap-1.5 mt-1">
             {trend === "up" && <ArrowUpRight className="w-3 h-3 text-emerald-500" />}
             {trend === "down" && <ArrowDownRight className="w-3 h-3 text-red-400" />}
             {trendLabel && <span className={cn("text-xs", trend === "up" ? "text-emerald-500" : trend === "down" ? "text-red-400" : "text-muted-foreground")}>{trendLabel}</span>}
-            {sub && !trendLabel && <span className="text-xs text-muted-foreground">{sub}</span>}
+            {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
           </div>
-        )}
-        {sub && !trendLabel && !trend && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        ) : sub ? (
+          <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+        ) : null}
       </div>
     </div>
   )
@@ -630,29 +632,15 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
       <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No imports in this range</div>
     ) : (
       <ChartContainer config={chartConfig} className={`${height} w-full`}>
-        <AreaChart data={buckets} margin={{ left: 0, right: 0, top: 4 }}>
-          <defs>
-            <linearGradient id="igCompleted" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3ECF8E" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#3ECF8E" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="igFailed" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f87171" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="igProcessing" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
-            </linearGradient>
-          </defs>
+        <BarChart data={buckets} barSize={14} margin={{ left: 0, right: 0, top: 4 }}>
           <CartesianGrid vertical={false} stroke={GRID_STROKE} />
           <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} />
           <YAxis hide allowDecimals={false} />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <Area dataKey="completed" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#igCompleted)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-          <Area dataKey="processing" type="monotone" stroke="#60a5fa" strokeWidth={1.5} fill="url(#igProcessing)" dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-          <Area dataKey="failed" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#igFailed)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-        </AreaChart>
+          <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: "rgba(128,128,128,0.06)" }} />
+          <Bar dataKey="completed" stackId="a" fill="#3ECF8E" fillOpacity={0.9} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="processing" stackId="a" fill="#60a5fa" fillOpacity={0.9} />
+          <Bar dataKey="failed" stackId="a" fill="#f87171" fillOpacity={0.9} radius={[3, 3, 0, 0]} />
+        </BarChart>
       </ChartContainer>
     )
 
@@ -733,20 +721,20 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
         <AreaChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
           <defs>
             <linearGradient id="vgValid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3ECF8E" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#3ECF8E" stopOpacity={0} />
+              <stop offset="5%" stopColor="#3ECF8E" stopOpacity={0.5} />
+              <stop offset="95%" stopColor="#3ECF8E" stopOpacity={0.05} />
             </linearGradient>
             <linearGradient id="vgInvalid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f87171" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+              <stop offset="5%" stopColor="#f87171" stopOpacity={0.5} />
+              <stop offset="95%" stopColor="#f87171" stopOpacity={0.05} />
             </linearGradient>
           </defs>
           <CartesianGrid vertical={false} stroke={GRID_STROKE} />
           <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} />
           <YAxis hide allowDecimals={false} />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <Area dataKey="valid" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#vgValid)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-          <Area dataKey="invalid" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#vgInvalid)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+          <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: GRID_STROKE }} />
+          <Area dataKey="valid" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#vgValid)" dot={false} activeDot={{ r: 4, fill: "#3ECF8E", strokeWidth: 0 }} stackId="v" />
+          <Area dataKey="invalid" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#vgInvalid)" dot={false} activeDot={{ r: 4, fill: "#f87171", strokeWidth: 0 }} stackId="v" />
         </AreaChart>
       </ChartContainer>
     )
@@ -1175,37 +1163,39 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <Tabs value={preset} onValueChange={(v) => setPreset(v as RangePreset)}>
-            <TabsList className="h-9">
-              <TabsTrigger value="today" className="text-xs px-3">Today</TabsTrigger>
-              <TabsTrigger value="week" className="text-xs px-3">7 days</TabsTrigger>
-              <TabsTrigger value="month" className="text-xs px-3">30 days</TabsTrigger>
-              <TabsTrigger value="custom" className="text-xs px-3">Custom</TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div className="flex flex-col gap-2 items-end">
+          <div className="flex items-center gap-3">
+            <Tabs value={preset} onValueChange={(v) => setPreset(v as RangePreset)}>
+              <TabsList className="h-9">
+                <TabsTrigger value="today" className="text-xs px-3">Today</TabsTrigger>
+                <TabsTrigger value="week" className="text-xs px-3">7 days</TabsTrigger>
+                <TabsTrigger value="month" className="text-xs px-3">30 days</TabsTrigger>
+                <TabsTrigger value="custom" className="text-xs px-3">Custom</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 text-xs"
+              onClick={() => exportDailyCSV(filteredDaily, rangeLabel)}
+              disabled={filteredDaily.length === 0}
+            >
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0"
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              title="Refresh stats"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+            </Button>
+          </div>
           {preset === "custom" && (
-            <DatePickerWithRange date={customRange} onDateChange={setCustomRange} className="w-52" label="" align="end" />
+            <DatePickerWithRange date={customRange} onDateChange={setCustomRange} className="w-64" label="" align="end" />
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5 text-xs"
-            onClick={() => exportDailyCSV(filteredDaily, rangeLabel)}
-            disabled={filteredDaily.length === 0}
-          >
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 w-9 p-0"
-            onClick={handleManualRefresh}
-            disabled={refreshing}
-            title="Refresh stats"
-          >
-            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-          </Button>
         </div>
       </div>
 
