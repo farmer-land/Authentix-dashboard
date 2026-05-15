@@ -243,7 +243,13 @@ function JobItem({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function NotificationPanel({ expanded }: { expanded: boolean }) {
+export function NotificationPanel({
+  expanded,
+  onOpenChange,
+}: {
+  expanded: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const {
     jobs,
     unseenCount,
@@ -269,7 +275,7 @@ export function NotificationPanel({ expanded }: { expanded: boolean }) {
         !panelRef.current?.contains(target) &&
         !dropdownRef.current?.contains(target)
       ) {
-        setOpen(false);
+        handleClose();
       }
     };
     document.addEventListener('mousedown', handler);
@@ -277,8 +283,15 @@ export function NotificationPanel({ expanded }: { expanded: boolean }) {
   }, [open]);
 
   const handleToggle = () => {
-    setOpen(v => !v);
-    if (!open) markAllSeen();
+    const next = !open;
+    setOpen(next);
+    onOpenChange?.(next);
+    if (next) markAllSeen();
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    onOpenChange?.(false);
   };
 
   const pendingCount = jobs.filter(j => j.status === 'queued' || j.status === 'running').length;
@@ -321,7 +334,7 @@ export function NotificationPanel({ expanded }: { expanded: boolean }) {
       {open && (
         <div
           ref={dropdownRef}
-          className="fixed bottom-16 left-16 w-75 rounded-xl border border-border bg-background shadow-xl z-100 overflow-hidden"
+          className="fixed bottom-16 left-52 w-72 rounded-xl border border-border bg-background shadow-xl z-100 overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
@@ -334,18 +347,27 @@ export function NotificationPanel({ expanded }: { expanded: boolean }) {
                 </span>
               )}
             </div>
-            {notificationPermission === 'default' && (
+            <div className="flex items-center gap-2">
+              {notificationPermission === 'default' && (
+                <button
+                  onClick={() => requestNotificationPermission()}
+                  className="text-[11px] text-primary hover:underline font-medium flex items-center gap-1"
+                >
+                  <Zap className="w-3 h-3" />
+                  Enable alerts
+                </button>
+              )}
+              {notificationPermission === 'denied' && (
+                <span className="text-[10px] text-muted-foreground/50">Alerts blocked</span>
+              )}
               <button
-                onClick={() => requestNotificationPermission()}
-                className="text-[11px] text-primary hover:underline font-medium flex items-center gap-1"
+                onClick={handleClose}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Close notifications"
               >
-                <Zap className="w-3 h-3" />
-                Enable alerts
+                <X className="w-3.5 h-3.5" />
               </button>
-            )}
-            {notificationPermission === 'denied' && (
-              <span className="text-[10px] text-muted-foreground/50">Alerts blocked</span>
-            )}
+            </div>
           </div>
 
           {/* Job list */}

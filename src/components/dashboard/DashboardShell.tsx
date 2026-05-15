@@ -279,6 +279,7 @@ export function DashboardShell({
   const [mounted, setMounted] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [pendingJobsCount, setPendingJobsCount] = useState(0);
 
@@ -355,7 +356,7 @@ export function DashboardShell({
     router.refresh();
   }, [router, queryClient]);
 
-  const isExpanded = sidebarExpanded || dropdownOpen;
+  const isExpanded = sidebarExpanded || dropdownOpen || notificationOpen;
 
   return (
     <OrgProvider slug={slug}>
@@ -407,7 +408,7 @@ export function DashboardShell({
             {/* Bottom actions */}
             <div className="p-2 border-t space-y-0.5">
               {/* Notifications */}
-              <NotificationPanel expanded={isExpanded} />
+              <NotificationPanel expanded={isExpanded} onOpenChange={setNotificationOpen} />
 
               {/* User profile */}
               <UserMenu

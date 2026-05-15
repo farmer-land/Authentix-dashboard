@@ -36,8 +36,8 @@ export const organizationsApi = {
   ): Promise<Organization> => {
     if (logoFile) {
       const formData = new FormData();
-      formData.append("file", logoFile);
       formData.append("metadata", JSON.stringify(data));
+      formData.append("file", logoFile);
 
       const response = await fetch(`${API_BASE_URL}/organizations/me`, {
         method: "PUT",
