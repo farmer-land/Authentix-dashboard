@@ -30,6 +30,7 @@ export const organizationsApi = {
       postal_code?: string | null;
       gst_number?: string | null;
       cin_number?: string | null;
+      verification_message?: string | null;
     },
     logoFile?: File,
   ): Promise<Organization> => {
