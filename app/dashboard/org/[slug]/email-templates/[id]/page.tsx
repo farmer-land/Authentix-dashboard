@@ -192,7 +192,7 @@ export default function EmailTemplateEditorPage() {
 
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [body, subject, name]);
+  }, [body, subject, name, isDefault, isActive]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -327,7 +327,10 @@ export default function EmailTemplateEditorPage() {
   const addBlock = useCallback((type: BlockType) => {
     const b = defaultBlock(type);
     setBlocks(prev => {
-      const newBlocks = [...prev, b];
+      // Insert before footer if it is the last block, so footer stays pinned at the bottom
+      const lastIsFooter = prev[prev.length - 1]?.type === "footer";
+      const insertAt = lastIsFooter ? prev.length - 1 : prev.length;
+      const newBlocks = [...prev.slice(0, insertAt), b, ...prev.slice(insertAt)];
       const h = historyRef.current;
       h.past.push([...blocksRef.current]);
       if (h.past.length > 60) h.past.shift();

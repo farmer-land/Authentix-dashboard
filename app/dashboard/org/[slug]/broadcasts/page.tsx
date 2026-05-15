@@ -260,12 +260,16 @@ function CampaignWizard({
         }),
       };
       const broadcast = await createMutation.mutateAsync(dto as CreateBroadcastDto);
-      // Immediately send
-      await api.delivery.sendBroadcast(broadcast.id);
-      toast.success(`Campaign sent to ${recipientCount} recipients!`);
+      // Immediately send — if this fails the broadcast is saved as draft
+      try {
+        await api.delivery.sendBroadcast(broadcast.id);
+        toast.success(`Campaign sent to ${recipientCount} recipients!`);
+      } catch (sendErr) {
+        toast.error("Campaign saved but send failed — find it in drafts to retry.");
+      }
       onCreated(broadcast.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send campaign");
+      toast.error(err instanceof Error ? err.message : "Failed to create campaign");
     } finally {
       setSending(false);
     }
@@ -277,7 +281,7 @@ function CampaignWizard({
         name: w.name,
         subject: w.subject || "(draft)",
         from_name: w.from_name,
-        from_email: w.from_email || "certificate@digicertificates.in",
+        from_email: w.from_email,
         html_body: w.html_body || "",
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
       });
@@ -337,7 +341,7 @@ function CampaignWizard({
         <div className="space-y-1.5">
           <Label>From email <span className="text-red-500">*</span></Label>
           <Input
-            placeholder="certificate@digicertificates.in"
+            placeholder="hello@yourdomain.com"
             value={w.from_email}
             onChange={e => set("from_email", e.target.value)}
           />

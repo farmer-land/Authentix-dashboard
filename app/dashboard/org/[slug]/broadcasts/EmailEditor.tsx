@@ -227,8 +227,12 @@ export function EmailEditor({
 
   const addBlock = useCallback((type: BlockType) => {
     const b = defaultBlock(type);
-    const newBlocks = [...blocksRef.current, b];
-    historyRef.current.past = [...historyRef.current.past, blocksRef.current];
+    const cur = blocksRef.current;
+    // Insert before footer if it is the last block, so footer stays pinned at the bottom
+    const lastIsFooter = cur[cur.length - 1]?.type === "footer";
+    const insertAt = lastIsFooter ? cur.length - 1 : cur.length;
+    const newBlocks = [...cur.slice(0, insertAt), b, ...cur.slice(insertAt)];
+    historyRef.current.past = [...historyRef.current.past, cur];
     historyRef.current.future = [];
     blocksRef.current = newBlocks;
     setBlocks(newBlocks);
@@ -313,22 +317,18 @@ export function EmailEditor({
 
   // ── Done ────────────────────────────────────────────────────────────────────
 
-  const handleDone = async () => {
+  const handleDone = () => {
     setPublishing(true);
-    try {
-      onDone({
-        subject,
-        from_name: fromName,
-        from_email: fromEmail,
-        reply_to: replyTo,
-        preview_text: previewText,
-        html_body: bodyHtml,
-        content_json: null,
-      });
-    } catch {
-      toast.error("Failed to save email design");
-      setPublishing(false);
-    }
+    onDone({
+      subject,
+      from_name: fromName,
+      from_email: fromEmail,
+      reply_to: replyTo,
+      preview_text: previewText,
+      html_body: bodyHtml,
+      content_json: null,
+    });
+    // Note: component unmounts after onDone — no need to reset publishing
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────

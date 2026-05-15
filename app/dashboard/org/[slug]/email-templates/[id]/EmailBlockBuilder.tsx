@@ -48,6 +48,7 @@ export type BlockType =
   | "header"
   | "greeting"
   | "text"
+  | "image"
   | "markdown"
   | "two_column"
   | "cert_image"
@@ -55,6 +56,7 @@ export type BlockType =
   | "details_box"
   | "cta_button"
   | "linkedin"
+  | "social"
   | "divider"
   | "spacer"
   | "footer";
@@ -62,29 +64,70 @@ export type BlockType =
 export interface EmailBlock {
   id: string;
   type: BlockType;
+  // Background
   bgColor?: string;
+  bgType?: "solid" | "gradient" | "image";
+  bgImage?: string;
+  gradientEnd?: string;
+  gradientAngle?: number;
+  // Header-specific
   title?: string;
   titleColor?: string;
   subtitle?: string;
+  subtitleColor?: string;
+  // Text
   content?: string;
   textColor?: string;
   fontFamily?: string;
   fontSize?: number;
+  fontWeight?: string;
   textAlign?: "left" | "center" | "right";
+  lineHeight?: number;
+  letterSpacing?: number;
+  // Spacing
+  paddingV?: number;
+  paddingH?: number;
+  // Border
+  borderRadius?: number;
+  borderColor?: string;
+  borderWidth?: number;
+  // Details box
   detailRows?: Array<{ label: string; value: string }>;
   detailBgColor?: string;
   detailTextColor?: string;
+  // CTA button
   btnLabel?: string;
   btnUrl?: string;
   btnColor?: string;
+  btnTextColor?: string;
   btnRadius?: number;
+  btnWidth?: "auto" | "full";
+  btnPaddingH?: number;
+  btnPaddingV?: number;
+  btnFontWeight?: string;
+  // Spacer
   height?: number;
+  // QR
   qrUrl?: string;
-  // two_column
+  // Two column
   leftContent?: string;
   rightContent?: string;
   leftTextColor?: string;
   rightTextColor?: string;
+  // Divider
+  dividerStyle?: "solid" | "dashed" | "dotted";
+  dividerColor?: string;
+  dividerThickness?: number;
+  dividerWidth?: number;
+  // Image block
+  imageUrl?: string;
+  imageAlt?: string;
+  imageLinkUrl?: string;
+  imageAlign?: "left" | "center" | "right";
+  imageWidth?: number;
+  imageBorderRadius?: number;
+  // Social block
+  socialLinks?: Array<{ platform: string; url: string }>;
 }
 
 // ── Palette catalog (exported for use in left panel) ─────────────────────────
@@ -94,10 +137,12 @@ export const EMAIL_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNod
   { type: "header",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Header",       desc: "Title banner" },
   { type: "greeting",    icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Greeting",     desc: "Hi {{name}}" },
   { type: "text",        icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Text",         desc: "Paragraph" },
+  { type: "image",       icon: <ImageIcon className="w-3.5 h-3.5" />,         label: "Image",        desc: "Embed image" },
   { type: "markdown",    icon: <Type className="w-3.5 h-3.5" />,              label: "Markdown",     desc: "Rich text / tables" },
   { type: "two_column",  icon: <TableProperties className="w-3.5 h-3.5" />,   label: "Two Columns",  desc: "Side-by-side layout" },
   { type: "cta_button",  icon: <MousePointerClick className="w-3.5 h-3.5" />, label: "CTA Button",   desc: "Action link" },
   { type: "linkedin",    icon: <Type className="w-3.5 h-3.5" />,              label: "LinkedIn",     desc: "Share prompt" },
+  { type: "social",      icon: <Type className="w-3.5 h-3.5" />,              label: "Social Links", desc: "Follow buttons" },
   { type: "divider",     icon: <Minus className="w-3.5 h-3.5" />,             label: "Divider",      desc: "Separator" },
   { type: "spacer",      icon: <ArrowUpDown className="w-3.5 h-3.5" />,       label: "Spacer",       desc: "Empty space" },
   { type: "footer",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Footer",       desc: "Footer text" },
@@ -118,19 +163,21 @@ export const PALETTE = [...EMAIL_BLOCKS_PALETTE, ...CERT_BLOCKS_PALETTE];
 export function defaultBlock(type: BlockType): EmailBlock {
   const id = nanoid(8);
   switch (type) {
-    case "header":      return { id, type, bgColor: "#1e293b", titleColor: "#ffffff", title: "Congratulations, {{recipient_name}}!", subtitle: "You've completed {{course_name}}" };
-    case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb" };
-    case "text":        return { id, type, content: "We are delighted to inform you that you have successfully completed this program. Your certificate is ready below.", textColor: "#d1d5db" };
+    case "header":      return { id, type, bgType: "gradient", bgColor: "#3ECF8E", gradientEnd: "#1a9e6b", gradientAngle: 135, titleColor: "#ffffff", title: "Congratulations, {{recipient_name}}!", subtitle: "You've completed {{course_name}}" };
+    case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb", fontSize: 16, lineHeight: 1.7 };
+    case "text":        return { id, type, content: "We are delighted to inform you that you have successfully completed this program. Your certificate is ready below.", textColor: "#d1d5db", fontSize: 15, lineHeight: 1.7 };
+    case "image":       return { id, type, imageUrl: "", imageAlt: "", imageAlign: "center", imageWidth: 100, imageBorderRadius: 8 };
     case "markdown":    return { id, type, content: "## Congratulations, **{{recipient_name}}**!\n\nYou have successfully completed **{{course_name}}**.\n\n- 📅 Issued on {{issue_date}}\n- 🔗 [View & verify your certificate]({{verification_url}})\n\n> Your achievement has been recorded and is ready to share.", textColor: "#d1d5db" };
     case "two_column":  return { id, type, leftContent: "**Course Details**\n\nCourse: {{course_name}}\nDate: {{issue_date}}", rightContent: "**About Your Certificate**\n\nThis certificate verifies your achievement. Share it with your network!", leftTextColor: "#d1d5db", rightTextColor: "#d1d5db" };
     case "cert_image":  return { id, type };
     case "qr_code":     return { id, type, content: "Scan QR to verify certificate authenticity" };
     case "details_box": return { id, type, detailRows: [{ label: "Course", value: "{{course_name}}" }, { label: "Date Issued", value: "{{issue_date}}" }], detailBgColor: "#1a1a1a", detailTextColor: "#3ECF8E" };
-    case "cta_button":  return { id, type, btnLabel: "View & Verify Certificate", btnUrl: "{{verification_url}}", btnColor: "#3ECF8E" };
+    case "cta_button":  return { id, type, btnLabel: "View & Verify Certificate", btnUrl: "{{verification_url}}", btnColor: "#3ECF8E", btnTextColor: "#ffffff", btnRadius: 8, btnWidth: "auto", btnPaddingH: 32, btnPaddingV: 13 };
     case "linkedin":    return { id, type, content: "🎓 Share your achievement on LinkedIn and inspire others!", textColor: "#9ca3af" };
-    case "divider":     return { id, type };
+    case "social":      return { id, type, socialLinks: [{ platform: "LinkedIn", url: "" }, { platform: "Twitter", url: "" }] };
+    case "divider":     return { id, type, dividerStyle: "solid", dividerColor: "#333333", dividerThickness: 1, dividerWidth: 100 };
     case "spacer":      return { id, type, height: 24 };
-    case "footer":      return { id, type, content: "© {{organization_name}} · Powered by Authentix", textColor: "#6b7280" };
+    case "footer":      return { id, type, content: "© {{organization_name}} · Powered by Authentix", textColor: "#6b7280", fontSize: 12, lineHeight: 1.6 };
   }
 }
 
@@ -357,24 +404,50 @@ function blockToHtml(block: EmailBlock): string {
   void fs;
 
   switch (block.type) {
-    case "header":
-      return `<div style="background: linear-gradient(135deg, ${block.bgColor || "#3ECF8E"} 0%, ${darken(block.bgColor || "#3ECF8E")} 100%); padding: 44px 32px; text-align: center;">
-  <h1 style="color: ${block.titleColor || "#ffffff"}; font-size: 28px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.5px;${ff}">${block.title || ""}</h1>
-  ${block.subtitle ? `<p style="color: rgba(255,255,255,0.85); font-size: 16px; margin: 0;${ff}">${block.subtitle}</p>` : ""}
+    case "header": {
+      const pV = block.paddingV ?? 44;
+      const pH = block.paddingH ?? 32;
+      const bgStyle = (() => {
+        if (block.bgType === "image" && block.bgImage)
+          return `background-image:url('${block.bgImage}');background-size:cover;background-position:center;`;
+        if (block.bgType === "solid")
+          return `background:${block.bgColor || "#3ECF8E"};`;
+        // gradient (default)
+        const angle = block.gradientAngle ?? 135;
+        return `background:linear-gradient(${angle}deg, ${block.bgColor || "#3ECF8E"} 0%, ${block.gradientEnd || darken(block.bgColor || "#3ECF8E")} 100%);`;
+      })();
+      return `<div style="${bgStyle}padding:${pV}px ${pH}px;text-align:center;">
+  <h1 style="color:${block.titleColor || "#ffffff"};font-size:28px;font-weight:${block.fontWeight || "700"};margin:0 0 8px;letter-spacing:-0.5px;${ff}">${block.title || ""}</h1>
+  ${block.subtitle ? `<p style="color:${block.subtitleColor || "rgba(255,255,255,0.85)"};font-size:16px;margin:0;${ff}">${block.subtitle}</p>` : ""}
 </div>`;
+    }
 
     case "greeting": {
       const ta = block.textAlign || "left";
-      return `<div style="padding: 20px 32px; min-height: 64px; display: flex; align-items: center; justify-content: ${ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start"};${block.bgColor ? `background:${block.bgColor};` : ""}">
-  <p style="font-size: ${block.fontSize || 16}px; color: ${block.textColor || "#e5e7eb"}; margin: 0; text-align: ${ta};${ff}">${block.content || "Hi {{recipient_name}},"}</p>
+      const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
+      return `<div style="padding:${pV}px ${pH}px;min-height:64px;display:flex;align-items:center;justify-content:${ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start"};${block.bgColor ? `background:${block.bgColor};` : ""}">
+  <p style="font-size:${block.fontSize || 16}px;color:${block.textColor || "#e5e7eb"};margin:0;text-align:${ta};line-height:${block.lineHeight || 1.7};letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};${ff}">${block.content || "Hi {{recipient_name}},"}</p>
 </div>`;
     }
 
     case "text": {
       const ta = block.textAlign || "left";
-      return `<div style="padding: 16px 32px; text-align: ${ta};${block.bgColor ? `background:${block.bgColor};` : ""}">
-  <p style="font-size: ${block.fontSize || 15}px; color: ${block.textColor || "#d1d5db"}; line-height: 1.7; margin: 0;${ff}">${block.content || ""}</p>
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      return `<div style="padding:${pV}px ${pH}px;text-align:${ta};${block.bgColor ? `background:${block.bgColor};` : ""}">
+  <p style="font-size:${block.fontSize || 15}px;color:${block.textColor || "#d1d5db"};line-height:${block.lineHeight || 1.7};margin:0;letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};${ff}">${block.content || ""}</p>
 </div>`;
+    }
+
+    case "image": {
+      const align = block.imageAlign || "center";
+      const justify = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const imgStyle = `max-width:${block.imageWidth || 100}%;height:auto;border-radius:${block.imageBorderRadius ?? 8}px;display:block;`;
+      const imgTag = block.imageUrl
+        ? `<img src="${block.imageUrl}" alt="${block.imageAlt || ""}" style="${imgStyle}" />`
+        : `<div style="background:#27272a;border:1px dashed #3f3f46;border-radius:${block.imageBorderRadius ?? 8}px;height:120px;display:flex;align-items:center;justify-content:center;"><span style="color:#6b7280;font-size:12px;font-family:sans-serif;">Image placeholder</span></div>`;
+      const wrapped = block.imageLinkUrl ? `<a href="${block.imageLinkUrl}" style="display:block;">${imgTag}</a>` : imgTag;
+      return `<div style="padding:${pV}px ${pH}px;display:flex;justify-content:${justify};${block.bgColor ? `background:${block.bgColor};` : ""}">${wrapped}</div>`;
     }
 
     case "markdown":
@@ -424,24 +497,51 @@ ${cells}
 </div>`;
     }
 
-    case "cta_button":
-      return `<div style="text-align: center; margin: 24px 32px;">
-  <a href="${block.btnUrl || "{{verification_url}}"}" style="display: inline-block; background: ${block.btnColor || "#3ECF8E"}; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;${ff}">${block.btnLabel || "View &amp; Verify Certificate"}</a>
+    case "cta_button": {
+      const bpH = block.btnPaddingH ?? 32;
+      const bpV = block.btnPaddingV ?? 13;
+      const bw = block.btnWidth === "full" ? "width:100%;box-sizing:border-box;" : "display:inline-block;";
+      const pV = block.paddingV ?? 24; const pH = block.paddingH ?? 32;
+      return `<div style="text-align:center;margin:${pV}px ${pH}px;">
+  <a href="${block.btnUrl || "{{verification_url}}"}" style="${bw}background:${block.btnColor || "#3ECF8E"};color:${block.btnTextColor || "#ffffff"};font-size:15px;font-weight:${block.btnFontWeight || "600"};padding:${bpV}px ${bpH}px;border-radius:${block.btnRadius ?? 8}px;text-decoration:none;letter-spacing:0.2px;${ff}">${block.btnLabel || "View &amp; Verify Certificate"}</a>
 </div>`;
+    }
 
-    case "linkedin":
-      return `<div style="padding: 20px 32px; text-align: center;${block.bgColor ? `background:${block.bgColor};` : ""}"><p style="font-size: 14px; color: ${block.textColor || "#9ca3af"}; margin: 0;${ff}">${block.content || "🎓 Share your achievement on LinkedIn and inspire others!"}</p></div>`;
+    case "linkedin": {
+      const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
+      return `<div style="padding:${pV}px ${pH}px;text-align:center;${block.bgColor ? `background:${block.bgColor};` : ""}"><p style="font-size:14px;color:${block.textColor || "#9ca3af"};margin:0;${ff}">${block.content || "🎓 Share your achievement on LinkedIn and inspire others!"}</p></div>`;
+    }
 
-    case "divider":
-      return `<hr style="border: none; border-top: 1px solid #333; margin: 16px 32px;" />`;
+    case "social": {
+      const links = block.socialLinks ?? [];
+      const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e" };
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const btns = links.map(l => {
+        const col = SOCIAL_COLORS[l.platform] || "#6b7280";
+        return `<a href="${l.url || "#"}" style="display:inline-block;background:${col};color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;text-decoration:none;margin:4px;">${l.platform}</a>`;
+      }).join("");
+      return `<div style="padding:${pV}px ${pH}px;text-align:center;${block.bgColor ? `background:${block.bgColor};` : ""}">${btns || "<span style='color:#6b7280;font-size:12px;'>Add social links in the panel</span>"}</div>`;
+    }
+
+    case "divider": {
+      const style = block.dividerStyle || "solid";
+      const color = block.dividerColor || "#333333";
+      const thickness = block.dividerThickness || 1;
+      const width = block.dividerWidth || 100;
+      const margin = `${16 + Math.round((100 - width) * 3)}px`;
+      return `<div style="padding:8px 0;text-align:center;"><hr style="border:none;border-top:${thickness}px ${style} ${color};width:${width}%;margin:0 auto;" /></div>`;
+      void margin;
+    }
 
     case "spacer":
       return `<div style="height: ${block.height || 24}px;"></div>`;
 
-    case "footer":
-      return `<div style="padding: 16px 32px; text-align: center; border-top: 1px solid #2d2d2d;${block.bgColor ? `background:${block.bgColor};` : ""}">
-  <p style="font-size: 12px; color: ${block.textColor || "#6b7280"}; margin: 0;${ff}">${block.content || "© {{organization_name}} · Powered by Authentix"}</p>
+    case "footer": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      return `<div style="padding:${pV}px ${pH}px;text-align:center;border-top:1px solid #2d2d2d;${block.bgColor ? `background:${block.bgColor};` : ""}">
+  <p style="font-size:${block.fontSize || 12}px;color:${block.textColor || "#6b7280"};margin:0;line-height:${block.lineHeight || 1.6};${ff}">${block.content || "© {{organization_name}} · Powered by Authentix"}</p>
 </div>`;
+    }
 
     default:
       return "";
@@ -741,6 +841,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   header: "Header",
   greeting: "Greeting",
   text: "Text Block",
+  image: "Image",
   markdown: "Markdown",
   two_column: "Two Columns",
   cert_image: "Certificate Image",
@@ -748,6 +849,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   details_box: "Details Box",
   cta_button: "CTA Button",
   linkedin: "LinkedIn Nudge",
+  social: "Social Links",
   divider: "Divider",
   spacer: "Spacer",
   footer: "Footer",
@@ -1104,13 +1206,19 @@ function BlockLiveView({
   const ff = block.fontFamily || "inherit";
 
   switch (block.type) {
-    case "header":
+    case "header": {
+      const pV = block.paddingV ?? 44; const pH = block.paddingH ?? 32;
+      const bgCss = (() => {
+        if (block.bgType === "image" && block.bgImage)
+          return { backgroundImage: `url('${block.bgImage}')`, backgroundSize: "cover", backgroundPosition: "center" };
+        if (block.bgType === "solid")
+          return { background: block.bgColor || "#3ECF8E" };
+        const angle = block.gradientAngle ?? 135;
+        return { background: `linear-gradient(${angle}deg, ${block.bgColor || "#3ECF8E"} 0%, ${block.gradientEnd || darken(block.bgColor || "#3ECF8E")} 100%)` };
+      })();
       return (
-        <div style={{ position: "relative", background: block.bgColor || "#1e293b", padding: "44px 32px", textAlign: "center", overflow: "hidden" }}>
-          {/* Depth overlay — works on any base color */}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0.35) 100%)", pointerEvents: "none" }} />
-          {/* Brand accent line at top */}
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "#3ECF8E", pointerEvents: "none" }} />
+        <div style={{ position: "relative", ...bgCss, padding: `${pV}px ${pH}px`, textAlign: "center", overflow: "hidden" }}>
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0.25) 100%)", pointerEvents: "none" }} />
           <div style={{ position: "relative" }}>
             <EditableText
               value={block.title || ""}
@@ -1118,7 +1226,7 @@ function BlockLiveView({
               tag="h1"
               placeholder="Header title…"
               availableVars={availableVars}
-              style={{ color: block.titleColor || "#ffffff", fontSize: 28, fontWeight: 700, margin: "0 0 8px", letterSpacing: "-0.5px", fontFamily: ff, display: "block" }}
+              style={{ color: block.titleColor || "#ffffff", fontSize: 28, fontWeight: block.fontWeight || "700", margin: "0 0 8px", letterSpacing: "-0.5px", fontFamily: ff, display: "block" }}
             />
             <EditableText
               value={block.subtitle || ""}
@@ -1126,23 +1234,25 @@ function BlockLiveView({
               tag="p"
               placeholder="Subtitle…"
               availableVars={availableVars}
-              style={{ color: block.titleColor ? `${block.titleColor}cc` : "rgba(255,255,255,0.8)", fontSize: 16, margin: 0, fontFamily: ff, display: "block" }}
+              style={{ color: block.subtitleColor || "rgba(255,255,255,0.85)", fontSize: 16, margin: 0, fontFamily: ff, display: "block" }}
             />
           </div>
         </div>
       );
+    }
 
     case "greeting": {
       const ta = (block.textAlign || "left") as React.CSSProperties["textAlign"];
+      const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
       return (
-        <div style={{ padding: "20px 32px", background: block.bgColor || "transparent", display: "flex", alignItems: "center", justifyContent: ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start", minHeight: 64 }}>
+        <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", display: "flex", alignItems: "center", justifyContent: ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start", minHeight: 64 }}>
           <EditableText
             value={block.content || ""}
             onChange={v => u({ content: v })}
             tag="p"
             placeholder="Hi {{recipient_name}},"
             availableVars={availableVars}
-            style={{ fontSize: block.fontSize || 16, color: block.textColor || "#e5e7eb", margin: 0, fontFamily: ff, display: "block", textAlign: ta }}
+            style={{ fontSize: block.fontSize || 16, color: block.textColor || "#e5e7eb", margin: 0, fontFamily: ff, display: "block", textAlign: ta, lineHeight: block.lineHeight || 1.7, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal" }}
           />
         </div>
       );
@@ -1150,16 +1260,41 @@ function BlockLiveView({
 
     case "text": {
       const ta = (block.textAlign || "left") as React.CSSProperties["textAlign"];
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       return (
-        <div style={{ padding: "16px 32px", background: block.bgColor || "transparent", textAlign: ta }}>
+        <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", textAlign: ta }}>
           <EditableText
             value={block.content || ""}
             onChange={v => u({ content: v })}
             tag="p"
             placeholder="Enter paragraph text…"
             availableVars={availableVars}
-            style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta }}
+            style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: block.lineHeight || 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal" }}
           />
+        </div>
+      );
+    }
+
+    case "image": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const align = block.imageAlign || "center";
+      const justify = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
+      return (
+        <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", display: "flex", justifyContent: justify }}>
+          {block.imageUrl ? (
+            <img
+              src={block.imageUrl}
+              alt={block.imageAlt || ""}
+              style={{ maxWidth: `${block.imageWidth || 100}%`, height: "auto", borderRadius: `${block.imageBorderRadius ?? 8}px`, display: "block" }}
+            />
+          ) : (
+            <div style={{ background: "#27272a", border: "1px dashed #3f3f46", borderRadius: `${block.imageBorderRadius ?? 8}px`, height: 120, width: `${block.imageWidth || 100}%`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div className="flex flex-col items-center gap-2 text-zinc-500">
+                <ImageIcon className="w-6 h-6" />
+                <span style={{ fontSize: 12 }}>Paste image URL in panel</span>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1217,23 +1352,41 @@ function BlockLiveView({
       );
     }
 
-    case "cta_button":
+    case "cta_button": {
+      const pV2 = block.paddingV ?? 24; const pH2 = block.paddingH ?? 32;
+      const bpH = block.btnPaddingH ?? 32; const bpV = block.btnPaddingV ?? 13;
+      const btnStyle: React.CSSProperties = {
+        display: block.btnWidth === "full" ? "block" : "inline-block",
+        background: block.btnColor || "#3ECF8E",
+        color: block.btnTextColor || "#ffffff",
+        fontSize: 15,
+        fontWeight: block.btnFontWeight || "600",
+        padding: `${bpV}px ${bpH}px`,
+        borderRadius: block.btnRadius ?? 8,
+        letterSpacing: "0.2px",
+        fontFamily: ff,
+        textAlign: "center",
+        width: block.btnWidth === "full" ? "100%" : undefined,
+        boxSizing: "border-box",
+      };
       return (
-        <div style={{ textAlign: "center", margin: "24px 32px" }}>
+        <div style={{ textAlign: "center", margin: `${pV2}px ${pH2}px` }}>
           <EditableText
             value={block.btnLabel || ""}
             onChange={v => u({ btnLabel: v })}
             tag="span"
             placeholder="Button label…"
             availableVars={availableVars}
-            style={{ display: "inline-block", background: block.btnColor || "#3ECF8E", color: "#ffffff", fontSize: 15, fontWeight: 600, padding: "13px 32px", borderRadius: 8, letterSpacing: "0.2px", fontFamily: ff }}
+            style={btnStyle}
           />
         </div>
       );
+    }
 
-    case "linkedin":
+    case "linkedin": {
+      const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
       return (
-        <div style={{ padding: "20px 32px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 56, background: block.bgColor || "transparent" }}>
+        <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 56, background: block.bgColor || "transparent" }}>
           <EditableText
             value={block.content || ""}
             onChange={v => u({ content: v })}
@@ -1244,9 +1397,38 @@ function BlockLiveView({
           />
         </div>
       );
+    }
 
-    case "divider":
-      return <hr style={{ border: "none", borderTop: "1px solid #333", margin: "16px 32px" }} />;
+    case "social": {
+      const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e" };
+      const links = block.socialLinks ?? [];
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      return (
+        <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center", background: block.bgColor || "transparent" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+            {links.length > 0 ? links.map((l, i) => (
+              <span key={i} style={{ background: SOCIAL_COLORS[l.platform] || "#6b7280", color: "#fff", fontSize: 12, fontWeight: 600, padding: "7px 14px", borderRadius: 6, cursor: "default" }}>
+                {l.platform}
+              </span>
+            )) : (
+              <span style={{ fontSize: 12, color: "#6b7280" }}>Add social links in the panel →</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    case "divider": {
+      const style = block.dividerStyle || "solid";
+      const color = block.dividerColor || "#333333";
+      const thickness = block.dividerThickness || 1;
+      const width = block.dividerWidth || 100;
+      return (
+        <div style={{ padding: "8px 0", textAlign: "center" }}>
+          <hr style={{ border: "none", borderTop: `${thickness}px ${style} ${color}`, width: `${width}%`, margin: "0 auto" }} />
+        </div>
+      );
+    }
 
     case "spacer":
       return (
@@ -1264,19 +1446,21 @@ function BlockLiveView({
         </div>
       );
 
-    case "footer":
+    case "footer": {
+      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       return (
-        <div style={{ padding: "16px 32px", textAlign: "center", borderTop: "1px solid #2d2d2d", background: block.bgColor || "transparent" }}>
+        <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center", borderTop: "1px solid #2d2d2d", background: block.bgColor || "transparent" }}>
           <EditableText
             value={block.content || ""}
             onChange={v => u({ content: v })}
             tag="p"
             placeholder="Footer text…"
             availableVars={availableVars}
-            style={{ fontSize: 12, color: block.textColor || "#6b7280", margin: 0, fontFamily: ff, display: "block" }}
+            style={{ fontSize: block.fontSize || 12, color: block.textColor || "#6b7280", margin: 0, fontFamily: ff, display: "block", lineHeight: block.lineHeight || 1.6 }}
           />
         </div>
       );
+    }
 
     case "markdown":
       return <MarkdownBlockView block={block} isSelected={isSelected} onChange={onChange} />;
@@ -1326,7 +1510,7 @@ const ALIGN_OPTIONS = [
 
 const FONT_SIZE_PRESETS = [10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48];
 
-const QUICK_COLORS = ["#ffffff","#18181b","#3ECF8E","#3b82f6","#f59e0b","#ef4444","#8b5cf6","#6b7280","#e5e7eb","#d1d5db"];
+const QUICK_COLORS = ["#ffffff","#f8fafc","#e5e7eb","#3ECF8E","#22c55e","#3b82f6","#6366f1","#8b5cf6","#f59e0b","#ef4444","#ec4899","#6b7280","#374151","#111827"];
 
 // ── Collapsible section accordion ────────────────────────────────────────────
 
@@ -1436,25 +1620,27 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
   const openPicker = () => {
     if (swatchRef.current) {
       const rect = swatchRef.current.getBoundingClientRect();
-      setPickerPos({
-        x: Math.max(8, Math.min(rect.left - 240, window.innerWidth - 248)),
-        y: Math.max(8, Math.min(rect.top, window.innerHeight - 340)),
-      });
+      // Position picker to the LEFT of the right panel (232px wide + 12px gap)
+      const pickerW = 240;
+      const x = Math.max(8, rect.left - pickerW - 8);
+      const y = Math.max(8, Math.min(rect.top - 24, window.innerHeight - 360));
+      setPickerPos({ x, y });
     }
     setPickerOpen(true);
   };
 
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-foreground/70 select-none">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase">{value}</span>
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs text-foreground/70 select-none flex-1 min-w-0 truncate">{label}</span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] font-mono text-muted-foreground/40 uppercase hidden">{value}</span>
         <button
           ref={swatchRef}
           type="button"
           onClick={openPicker}
           className="w-6 h-6 rounded-md border border-border/60 shadow-sm hover:ring-2 hover:ring-[#3ECF8E]/40 transition-all shrink-0"
           style={{ background: value || "#ffffff" }}
+          title={`${label}: ${value}`}
         />
       </div>
       {pickerOpen && createPortal(
@@ -1510,10 +1696,14 @@ function FontSizeInput({ value, onChange }: { value: number; onChange: (v: numbe
       {open && createPortal(
         <div
           className="fixed z-[99999] bg-card border border-border/50 rounded-lg shadow-xl overflow-hidden w-20"
-          style={{
-            top: ref.current ? ref.current.getBoundingClientRect().bottom + 2 : 0,
-            left: ref.current ? Math.max(8, ref.current.getBoundingClientRect().right - 80) : 0,
-          }}
+          style={(() => {
+            if (!ref.current) return { top: 0, left: 0 };
+            const rect = ref.current.getBoundingClientRect();
+            const dropH = 180;
+            const spaceBelow = window.innerHeight - rect.bottom - 4;
+            const top = spaceBelow >= dropH ? rect.bottom + 2 : Math.max(8, rect.top - dropH - 2);
+            return { top, left: Math.max(8, rect.right - 80) };
+          })()}
         >
           <div className="max-h-44 overflow-y-auto">
             {FONT_SIZE_PRESETS.map(s => (
@@ -1578,7 +1768,14 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
       {open && createPortal(
         <div
           className="fixed z-99999 bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
-          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0, left: ref.current ? Math.max(8, ref.current.getBoundingClientRect().right - 200) : 0, width: 200, maxHeight: 280 }}
+          style={(() => {
+            if (!ref.current) return { top: 0, left: 0, width: 200, maxHeight: 280 };
+            const rect = ref.current.getBoundingClientRect();
+            const dropH = 280;
+            const spaceBelow = window.innerHeight - rect.bottom - 8;
+            const top = spaceBelow >= dropH ? rect.bottom + 4 : Math.max(8, rect.top - dropH - 4);
+            return { top, left: Math.max(8, rect.right - 200), width: 200, maxHeight: dropH };
+          })()}
           onClick={e => e.stopPropagation()}
           onMouseDown={e => e.stopPropagation()}
         >
@@ -1636,33 +1833,40 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
-  // Which sections apply
-  const hasContent   = !["cert_image", "divider"].includes(type);
-  const hasTypo      = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column", "markdown"].includes(type);
-  const hasColors    = !["cert_image", "divider", "spacer"].includes(type);
-
-  const showBg       = ["header", "text", "greeting", "footer", "qr_code", "markdown", "linkedin", "two_column"].includes(type);
-  const showFont     = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column", "markdown"].includes(type);
-  const showSize     = ["header", "text", "greeting", "cta_button", "markdown"].includes(type);
-  const showAlign    = ["text", "greeting", "header", "footer", "linkedin", "cta_button"].includes(type);
-
-  const defaultTextColor = (() => {
-    if (type === "greeting") return "#e5e7eb";
-    if (type === "text" || type === "markdown") return "#d1d5db";
-    if (type === "footer") return "#6b7280";
-    if (type === "linkedin") return "#9ca3af";
-    if (type === "cta_button") return "#ffffff";
-    return "#d1d5db";
-  })();
-
-  const defaultSize = (() => {
-    if (type === "header") return 28;
-    if (type === "greeting") return 16;
-    if (type === "cta_button") return 15;
-    return 15;
-  })();
-
   const INP = "w-full text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
+  const NUM = "w-16 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
+
+  // ── Spacing section (all blocks that have padding) ─────────────────────────
+  const hasSpacing = !["cert_image", "divider"].includes(type);
+  const spacingSection = hasSpacing ? (
+    <Section label="Spacing" defaultOpen={false}>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Top / Bottom</label>
+          <div className="flex items-center gap-1">
+            <input type="number" min={0} max={120} value={block.paddingV ?? (type === "header" ? 44 : type === "spacer" ? 0 : 16)} onChange={e => u({ paddingV: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Left / Right</label>
+          <div className="flex items-center gap-1">
+            <input type="number" min={0} max={120} value={block.paddingH ?? 32} onChange={e => u({ paddingH: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
+          </div>
+        </div>
+      </div>
+      {type === "spacer" && (
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-foreground/70">Height</span>
+          <div className="flex items-center gap-1.5">
+            <input type="number" min={4} max={200} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
+          </div>
+        </div>
+      )}
+    </Section>
+  ) : null;
 
   // ── Content section ───────────────────────────────────────────────────────
 
@@ -1676,6 +1880,45 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
         <div className="space-y-1">
           <label className="text-[10px] text-muted-foreground/70 select-none">Subtitle</label>
           <input value={block.subtitle ?? ""} onChange={e => u({ subtitle: e.target.value })} placeholder="You've completed {{course_name}}" className={INP} />
+        </div>
+      </Section>
+    );
+
+    if (type === "image") return (
+      <Section label="Image">
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Image URL</label>
+          <input value={block.imageUrl ?? ""} onChange={e => u({ imageUrl: e.target.value })} placeholder="https://example.com/image.png" className={`${INP} font-mono text-[10px]`} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Alt text</label>
+          <input value={block.imageAlt ?? ""} onChange={e => u({ imageAlt: e.target.value })} placeholder="Descriptive text for screen readers" className={INP} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Link URL (optional)</label>
+          <input value={block.imageLinkUrl ?? ""} onChange={e => u({ imageLinkUrl: e.target.value })} placeholder="https://example.com" className={`${INP} font-mono text-[10px]`} />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Width (%)</span>
+          <input type="number" min={10} max={100} value={block.imageWidth ?? 100} onChange={e => u({ imageWidth: Number(e.target.value) })} className={NUM} />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Border radius</span>
+          <div className="flex items-center gap-1">
+            <input type="number" min={0} max={60} value={block.imageBorderRadius ?? 8} onChange={e => u({ imageBorderRadius: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Alignment</span>
+          <div className="flex border border-border rounded-md overflow-hidden">
+            {ALIGN_OPTIONS.map(a => (
+              <button key={a.value} type="button" onClick={() => u({ imageAlign: a.value as EmailBlock["imageAlign"] })}
+                className={cn("w-8 h-7 flex items-center justify-center transition-colors", (block.imageAlign || "center") === a.value ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {a.icon}
+              </button>
+            ))}
+          </div>
         </div>
       </Section>
     );
@@ -1708,10 +1951,10 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
           <input value={block.content ?? ""} onChange={e => u({ content: e.target.value })} placeholder="Scan to verify certificate authenticity" className={INP} />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">QR URL (leave blank for auto)</label>
+          <label className="text-[10px] text-muted-foreground/70 select-none">QR URL (blank = auto)</label>
           <input value={block.qrUrl ?? ""} onChange={e => u({ qrUrl: e.target.value })} placeholder="{{verification_url}}" className={`${INP} font-mono`} />
         </div>
-        <p className="text-[9px] text-muted-foreground/40 leading-relaxed">The QR code will encode the recipient's verification URL when sent.</p>
+        <p className="text-[9px] text-muted-foreground/40 leading-relaxed">The QR code encodes the recipient's verification URL when sent.</p>
       </Section>
     );
 
@@ -1719,7 +1962,7 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
       const rows = block.detailRows ?? [];
       return (
         <Section label="Content">
-          <p className="text-[9px] text-muted-foreground/50 -mt-1">Each row shows a label and a value (supports variables)</p>
+          <p className="text-[9px] text-muted-foreground/50 -mt-1">Each row: label → value (supports variables)</p>
           {rows.map((row, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <input value={row.label} onChange={e => { const r = [...rows]; r[i] = { ...r[i]!, label: e.target.value }; u({ detailRows: r }); }} placeholder="Label" className="w-20 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 shrink-0" />
@@ -1738,29 +1981,90 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
     }
 
     if (type === "cta_button") return (
-      <Section label="Content">
+      <Section label="Button">
         <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Button Label</label>
+          <label className="text-[10px] text-muted-foreground/70 select-none">Label</label>
           <input value={block.btnLabel ?? ""} onChange={e => u({ btnLabel: e.target.value })} placeholder="View & Verify Certificate" className={INP} />
         </div>
         <div className="space-y-1">
           <label className="text-[10px] text-muted-foreground/70 select-none">URL</label>
           <input value={block.btnUrl ?? ""} onChange={e => u({ btnUrl: e.target.value })} placeholder="{{verification_url}}" className={`${INP} font-mono`} />
         </div>
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Corner radius (px)</label>
-          <input type="number" min={0} max={40} value={block.btnRadius ?? 8} onChange={e => u({ btnRadius: Number(e.target.value) })} className="w-20 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40" />
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Width</span>
+          <div className="flex border border-border rounded-md overflow-hidden text-xs">
+            {(["auto", "full"] as const).map(v => (
+              <button key={v} type="button" onClick={() => u({ btnWidth: v })}
+                className={cn("px-2.5 h-7 transition-colors capitalize", (block.btnWidth || "auto") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">H padding</label>
+            <div className="flex items-center gap-1">
+              <input type="number" min={4} max={80} value={block.btnPaddingH ?? 32} onChange={e => u({ btnPaddingH: Number(e.target.value) })} className={NUM} />
+              <span className="text-[9px] text-muted-foreground/50">px</span>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/70 select-none">V padding</label>
+            <div className="flex items-center gap-1">
+              <input type="number" min={4} max={40} value={block.btnPaddingV ?? 13} onChange={e => u({ btnPaddingV: Number(e.target.value) })} className={NUM} />
+              <span className="text-[9px] text-muted-foreground/50">px</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Radius</span>
+          <div className="flex items-center gap-1">
+            <input type="number" min={0} max={40} value={block.btnRadius ?? 8} onChange={e => u({ btnRadius: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
+          </div>
         </div>
       </Section>
     );
 
+    if (type === "divider") return (
+      <Section label="Divider">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Style</span>
+          <div className="flex border border-border rounded-md overflow-hidden text-xs">
+            {(["solid", "dashed", "dotted"] as const).map(v => (
+              <button key={v} type="button" onClick={() => u({ dividerStyle: v })}
+                className={cn("px-2 h-7 capitalize transition-colors", (block.dividerStyle || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Thickness</span>
+          <div className="flex items-center gap-1">
+            <input type="number" min={1} max={8} value={block.dividerThickness ?? 1} onChange={e => u({ dividerThickness: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Width</span>
+          <div className="flex items-center gap-1">
+            <input type="number" min={10} max={100} value={block.dividerWidth ?? 100} onChange={e => u({ dividerWidth: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">%</span>
+          </div>
+        </div>
+        <ColorRow label="Color" value={block.dividerColor || "#333333"} onChange={v => u({ dividerColor: v })} />
+      </Section>
+    );
+
     if (type === "spacer") return (
-      <Section label="Content">
+      <Section label="Spacer">
         <div className="flex items-center justify-between">
           <span className="text-xs text-foreground/70">Height</span>
           <div className="flex items-center gap-1.5">
-            <input type="number" min={4} max={200} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className="w-16 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right" />
-            <span className="text-[9px] text-muted-foreground/50 select-none">px</span>
+            <input type="number" min={4} max={200} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
           </div>
         </div>
       </Section>
@@ -1780,35 +2084,96 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
       </Section>
     );
 
+    if (type === "social") {
+      const PLATFORMS = ["LinkedIn", "Twitter", "Instagram", "Facebook", "YouTube", "GitHub", "Website"];
+      const links = block.socialLinks ?? [];
+      return (
+        <Section label="Social Links">
+          {links.map((l, i) => (
+            <div key={i} className="space-y-1 p-2 rounded-lg border border-border/40 bg-muted/10">
+              <div className="flex items-center gap-1.5">
+                <select value={l.platform} onChange={e => { const s = [...links]; s[i] = { ...s[i]!, platform: e.target.value }; u({ socialLinks: s }); }}
+                  className="flex-1 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none">
+                  {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <button type="button" onClick={() => u({ socialLinks: links.filter((_, j) => j !== i) })} className="text-destructive/50 hover:text-destructive">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+              <input value={l.url} onChange={e => { const s = [...links]; s[i] = { ...s[i]!, url: e.target.value }; u({ socialLinks: s }); }}
+                placeholder="https://linkedin.com/in/…" className={`${INP} font-mono text-[10px]`} />
+            </div>
+          ))}
+          <button type="button" onClick={() => u({ socialLinks: [...links, { platform: "LinkedIn", url: "" }] })} className="flex items-center gap-1 text-xs text-[#3ECF8E] font-medium hover:text-[#34b87a]">
+            <Plus className="w-3 h-3" /> Add Platform
+          </button>
+        </Section>
+      );
+    }
+
     return null;
   })();
 
   // ── Colors section ────────────────────────────────────────────────────────
 
-  const colorsSection = hasColors ? (
+  const showColors = !["cert_image", "divider", "spacer", "image"].includes(type);
+  const colorsSection = showColors ? (
     <Section label="Colors">
-      {showBg && (
-        <ColorRow
-          label={type === "header" ? "Header BG" : "Background"}
-          value={type === "header" ? (block.bgColor || "#1e293b") : type === "qr_code" ? (block.bgColor || "#1e1e1e") : (block.bgColor || "#18181b")}
-          onChange={v => u({ bgColor: v })}
-        />
-      )}
+      {/* Header: background type picker */}
       {type === "header" && (
-        <ColorRow label="Title color" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
+        <div className="space-y-2">
+          <label className="text-[10px] text-muted-foreground/70 select-none">Background type</label>
+          <div className="flex border border-border rounded-md overflow-hidden text-xs">
+            {(["gradient", "solid", "image"] as const).map(v => (
+              <button key={v} type="button" onClick={() => u({ bgType: v })}
+                className={cn("flex-1 h-7 capitalize transition-colors", (block.bgType || "gradient") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {v}
+              </button>
+            ))}
+          </div>
+          {(block.bgType === "gradient" || !block.bgType) && (
+            <div className="space-y-2">
+              <ColorRow label="Start color" value={block.bgColor || "#3ECF8E"} onChange={v => u({ bgColor: v })} />
+              <ColorRow label="End color" value={block.gradientEnd || darken(block.bgColor || "#3ECF8E")} onChange={v => u({ gradientEnd: v })} />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground/70">Angle</span>
+                <div className="flex items-center gap-1">
+                  <input type="number" min={0} max={360} value={block.gradientAngle ?? 135} onChange={e => u({ gradientAngle: Number(e.target.value) })} className={NUM} />
+                  <span className="text-[9px] text-muted-foreground/50">°</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {block.bgType === "solid" && (
+            <ColorRow label="Background" value={block.bgColor || "#3ECF8E"} onChange={v => u({ bgColor: v })} />
+          )}
+          {block.bgType === "image" && (
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground/70 select-none">Image URL</label>
+              <input value={block.bgImage ?? ""} onChange={e => u({ bgImage: e.target.value })} placeholder="https://example.com/banner.jpg" className={`${INP} font-mono text-[10px]`} />
+            </div>
+          )}
+          <ColorRow label="Title color" value={block.titleColor || "#ffffff"} onChange={v => u({ titleColor: v })} />
+          <ColorRow label="Subtitle color" value={block.subtitleColor || "rgba(255,255,255,0.85)"} onChange={v => u({ subtitleColor: v })} />
+        </div>
       )}
+      {/* Background for other blocks */}
+      {["text", "greeting", "footer", "qr_code", "markdown", "linkedin", "two_column", "social"].includes(type) && (
+        <ColorRow label="Background" value={block.bgColor || "transparent"} onChange={v => u({ bgColor: v })} />
+      )}
+      {/* Text colors */}
       {["text", "greeting", "footer", "linkedin", "markdown"].includes(type) && (
-        <ColorRow label="Text color" value={block.textColor || defaultTextColor} onChange={v => u({ textColor: v })} />
+        <ColorRow label="Text color" value={block.textColor || (type === "footer" || type === "linkedin" ? "#6b7280" : type === "greeting" ? "#e5e7eb" : "#d1d5db")} onChange={v => u({ textColor: v })} />
       )}
       {type === "cta_button" && (
         <>
-          <ColorRow label="Button BG" value={block.btnColor || "#3ECF8E"} onChange={v => u({ btnColor: v })} />
-          <ColorRow label="Button text" value={block.textColor || "#ffffff"} onChange={v => u({ textColor: v })} />
+          <ColorRow label="Button color" value={block.btnColor || "#3ECF8E"} onChange={v => u({ btnColor: v })} />
+          <ColorRow label="Button text" value={block.btnTextColor || "#ffffff"} onChange={v => u({ btnTextColor: v })} />
         </>
       )}
       {type === "details_box" && (
         <>
-          <ColorRow label="Box BG" value={block.detailBgColor || "#1a1a1a"} onChange={v => u({ detailBgColor: v })} />
+          <ColorRow label="Box background" value={block.detailBgColor || "#1a1a1a"} onChange={v => u({ detailBgColor: v })} />
           <ColorRow label="Values color" value={block.detailTextColor || "#3ECF8E"} onChange={v => u({ detailTextColor: v })} />
         </>
       )}
@@ -1819,49 +2184,75 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
         </>
       )}
       {type === "qr_code" && (
-        <ColorRow label="QR color" value={block.textColor || "#ffffff"} onChange={v => u({ textColor: v })} />
+        <ColorRow label="QR dot color" value={block.textColor || "#ffffff"} onChange={v => u({ textColor: v })} />
       )}
     </Section>
   ) : null;
 
   // ── Typography section ────────────────────────────────────────────────────
 
+  const hasTypo = ["header", "text", "greeting", "footer", "linkedin", "cta_button", "two_column", "markdown", "image"].includes(type);
   const typoSection = hasTypo ? (
-    <Section label="Typography">
-      {showFont && (
+    <Section label="Typography" defaultOpen={false}>
+      {/* Font family */}
+      {!["image"].includes(type) && (
         <div className="space-y-1">
           <label className="text-[10px] text-muted-foreground/70 select-none">Font family</label>
           <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
         </div>
       )}
-      {showSize && (
+      {/* Font size */}
+      {["header", "text", "greeting", "footer", "cta_button", "markdown"].includes(type) && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-foreground/70 shrink-0">Font size</span>
           <div className="w-24">
-            <FontSizeInput value={block.fontSize || defaultSize} onChange={v => u({ fontSize: v })} />
+            <FontSizeInput value={block.fontSize || (type === "header" ? 28 : type === "greeting" ? 16 : type === "footer" ? 12 : 15)} onChange={v => u({ fontSize: v })} />
           </div>
         </div>
       )}
-      {showAlign && (
+      {/* Font weight */}
+      {["header", "text", "greeting", "footer", "cta_button", "linkedin"].includes(type) && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-foreground/70">Weight</span>
+          <div className="flex border border-border rounded-md overflow-hidden text-xs">
+            {[["normal","Regular"],["600","Semi"],["700","Bold"],["800","Extra"]] .map(([v, label]) => (
+              <button key={v} type="button" onClick={() => u({ fontWeight: v, ...(type === "cta_button" ? { btnFontWeight: v } : {}) })}
+                className={cn("px-1.5 h-7 transition-colors", (type === "cta_button" ? (block.btnFontWeight || "600") : (block.fontWeight || "normal")) === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Alignment */}
+      {["text", "greeting", "header", "footer", "linkedin", "cta_button"].includes(type) && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-foreground/70">Alignment</span>
           <div className="flex border border-border rounded-md overflow-hidden">
             {ALIGN_OPTIONS.map(a => (
-              <button
-                key={a.value}
-                type="button"
-                onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
-                className={cn(
-                  "w-8 h-7 flex items-center justify-center transition-colors",
-                  (block.textAlign || "left") === a.value
-                    ? "bg-[#3ECF8E] text-white"
-                    : "text-muted-foreground hover:bg-muted"
-                )}
-                title={`Align ${a.value}`}
-              >
+              <button key={a.value} type="button" onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
+                className={cn("w-8 h-7 flex items-center justify-center transition-colors", (block.textAlign || "left") === a.value ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+                title={`Align ${a.value}`}>
                 {a.icon}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+      {/* Line height */}
+      {["text", "greeting", "footer", "markdown"].includes(type) && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-foreground/70 shrink-0">Line height</span>
+          <input type="number" min={1} max={3} step={0.1} value={block.lineHeight ?? 1.7} onChange={e => u({ lineHeight: parseFloat(e.target.value) })} className={`${NUM} w-20`} />
+        </div>
+      )}
+      {/* Letter spacing */}
+      {["header", "text", "greeting", "footer"].includes(type) && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-foreground/70 shrink-0">Letter spacing</span>
+          <div className="flex items-center gap-1">
+            <input type="number" min={-2} max={10} step={0.5} value={block.letterSpacing ?? 0} onChange={e => u({ letterSpacing: parseFloat(e.target.value) })} className={NUM} />
+            <span className="text-[9px] text-muted-foreground/50">px</span>
           </div>
         </div>
       )}
@@ -1876,10 +2267,10 @@ export function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock | 
           {BLOCK_LABELS[block.type]}
         </p>
       </div>
-      {/* Accordion sections — Content first (most used), then Colors, then Typography */}
       {contentSection}
       {colorsSection}
       {typoSection}
+      {spacingSection}
     </div>
   );
 }
@@ -2081,6 +2472,8 @@ export function EmailBlockBuilder({
   onAddBlock,
 }: EmailBlockBuilderProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [insertPickerAfterId, setInsertPickerAfterId] = useState<string | null>(null);
+  const [insertPickerPos, setInsertPickerPos] = useState({ x: 0, y: 0 });
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -2109,12 +2502,30 @@ export function EmailBlockBuilder({
     onChange(arrayMove(blocks, idx, newIdx));
   };
 
-  const insertBlockAfter = (afterId: string) => {
-    const b = defaultBlock("text");
-    const idx = blocks.findIndex(blk => blk.id === afterId);
-    const next = [...blocks.slice(0, idx + 1), b, ...blocks.slice(idx + 1)];
+  const openInsertPicker = (afterId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pickerW = 288;
+    const pickerH = 220;
+    let x = rect.left + rect.width / 2 - pickerW / 2;
+    let y = rect.bottom + 6;
+    x = Math.max(8, Math.min(x, window.innerWidth - pickerW - 8));
+    if (y + pickerH > window.innerHeight - 8) y = rect.top - pickerH - 6;
+    setInsertPickerPos({ x, y });
+    setInsertPickerAfterId(afterId);
+  };
+
+  const doInsertBlock = (type: BlockType) => {
+    if (insertPickerAfterId === null) return;
+    const b = defaultBlock(type);
+    const idx = blocks.findIndex(blk => blk.id === insertPickerAfterId);
+    const next = idx === -1
+      ? [...blocks, b]
+      : [...blocks.slice(0, idx + 1), b, ...blocks.slice(idx + 1)];
     onChange(next);
     onSelect(b.id);
+    setInsertPickerAfterId(null);
   };
 
   const updateBlock = (updated: EmailBlock) => {
@@ -2210,61 +2621,81 @@ export function EmailBlockBuilder({
           >
             <SortableContext items={blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
               <div>
-                {blocks.map((block, idx) => (
-                  <React.Fragment key={block.id}>
-                    {idx > 0 && (
-                      <div className="relative h-6 group/insert">
-                        <div className="absolute inset-0 flex items-center opacity-0 group-hover/insert:opacity-100 transition-all duration-150">
-                          <div className="flex-1 border-t border-dashed border-[#3ECF8E]/50" />
+                {blocks.map((block, idx) => {
+                  const isFooterLast = block.type === "footer" && idx === blocks.length - 1;
+                  const prevBlock = idx > 0 ? blocks[idx - 1] : null;
+                  return (
+                    <React.Fragment key={block.id}>
+                      {idx > 0 && (
+                        <div className="relative h-6 group/insert">
+                          <div className="absolute inset-0 flex items-center opacity-0 group-hover/insert:opacity-100 transition-all duration-150">
+                            <div className="flex-1 border-t border-dashed border-[#3ECF8E]/50" />
+                            <button
+                              type="button"
+                              onMouseDown={e => openInsertPicker(prevBlock!.id, e)}
+                              className="mx-2 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#3ECF8E] text-zinc-900 text-[10px] font-bold hover:bg-[#2aac76] shadow-sm transition-colors shrink-0"
+                              title="Insert a block here"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              Insert
+                            </button>
+                            <div className="flex-1 border-t border-dashed border-[#3ECF8E]/50" />
+                          </div>
+                        </div>
+                      )}
+                      {/* Add block zone appears ABOVE the footer when footer is last */}
+                      {isFooterLast && (
+                        <div className="flex justify-center py-3" onMouseDown={e => e.stopPropagation()}>
                           <button
                             type="button"
-                            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertBlockAfter(blocks[idx - 1]!.id); }}
-                            className="mx-2 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#3ECF8E] text-zinc-900 text-[10px] font-bold hover:bg-[#2aac76] shadow-sm transition-colors shrink-0"
-                            title="Insert text block here"
+                            onMouseDown={e => {
+                              const beforeFooterId = prevBlock?.id ?? block.id;
+                              openInsertPicker(beforeFooterId, e);
+                            }}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600 hover:text-[#3ECF8E] transition-all duration-150 px-4 py-1.5 rounded-full border border-dashed border-zinc-700/40 hover:border-[#3ECF8E]/50 hover:bg-[#3ECF8E]/5"
                           >
-                            <Plus className="w-2.5 h-2.5" />
-                            Insert
+                            <Plus className="w-3 h-3" />
+                            Add block
                           </button>
-                          <div className="flex-1 border-t border-dashed border-[#3ECF8E]/50" />
                         </div>
-                      </div>
-                    )}
-                    <SortableBlockCard
-                      block={block}
-                      isSelected={block.id === selectedId}
-                      isFirst={idx === 0}
-                      isLast={idx === blocks.length - 1}
-                      onSelect={() => onSelect(block.id === selectedId ? null : block.id)}
-                      onRemove={() => removeBlock(block.id)}
-                      onDuplicate={() => duplicateBlock(block.id)}
-                      onMoveUp={() => moveBlock(block.id, "up")}
-                      onMoveDown={() => moveBlock(block.id, "down")}
-                      onChange={updateBlock}
-                      availableVars={availableVars}
-                    />
-                  </React.Fragment>
-                ))}
+                      )}
+                      <SortableBlockCard
+                        block={block}
+                        isSelected={block.id === selectedId}
+                        isFirst={idx === 0}
+                        isLast={idx === blocks.length - 1}
+                        onSelect={() => onSelect(block.id === selectedId ? null : block.id)}
+                        onRemove={() => removeBlock(block.id)}
+                        onDuplicate={() => duplicateBlock(block.id)}
+                        onMoveUp={() => moveBlock(block.id, "up")}
+                        onMoveDown={() => moveBlock(block.id, "down")}
+                        onChange={updateBlock}
+                        availableVars={availableVars}
+                      />
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </SortableContext>
 
-            {/* Add block at end */}
-            <div
-              className="flex justify-center py-3"
-              onMouseDown={e => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onMouseDown={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (blocks.length > 0) insertBlockAfter(blocks[blocks.length - 1]!.id);
-                }}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600 hover:text-[#3ECF8E] transition-all duration-150 px-4 py-1.5 rounded-full border border-dashed border-zinc-700/40 hover:border-[#3ECF8E]/50 hover:bg-[#3ECF8E]/5"
+            {/* Add block at end — only when last block is NOT a footer */}
+            {blocks[blocks.length - 1]?.type !== "footer" && (
+              <div
+                className="flex justify-center py-3"
+                onMouseDown={e => e.stopPropagation()}
               >
-                <Plus className="w-3 h-3" />
-                Add block
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    if (blocks.length > 0) openInsertPicker(blocks[blocks.length - 1]!.id, e);
+                  }}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600 hover:text-[#3ECF8E] transition-all duration-150 px-4 py-1.5 rounded-full border border-dashed border-zinc-700/40 hover:border-[#3ECF8E]/50 hover:bg-[#3ECF8E]/5"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add block
+                </button>
+              </div>
+            )}
 
             <DragOverlay dropAnimation={null}>
               {activeBlock && (
@@ -2283,6 +2714,40 @@ export function EmailBlockBuilder({
       </div>
 
       <div className="h-16" />
+
+      {/* Insert block type picker portal */}
+      {insertPickerAfterId !== null && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            onMouseDown={() => setInsertPickerAfterId(null)}
+          />
+          <div
+            className="fixed z-[61] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden"
+            style={{ left: insertPickerPos.x, top: insertPickerPos.y, width: 288 }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="px-3 pt-2.5 pb-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Insert block</p>
+            </div>
+            <div className="grid grid-cols-4 gap-0.5 px-1.5 pb-1.5">
+              {(context === "cert" ? PALETTE : EMAIL_BLOCKS_PALETTE).map(item => (
+                <button
+                  key={item.type}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); doInsertBlock(item.type); }}
+                  className="flex flex-col items-center gap-1.5 px-1 py-2.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                  title={item.desc}
+                >
+                  <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
+                  <span className="text-[9px] font-semibold leading-none text-center">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
     </div>
   );
 }
