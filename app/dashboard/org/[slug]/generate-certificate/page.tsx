@@ -1770,7 +1770,7 @@ export default function GenerateCertificatePage() {
                 )}
 
                 {/* Scrollable tab content */}
-                <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
                   <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
                     <div className="px-3 pt-2 pb-1 shrink-0">
                       <div className="flex items-center bg-muted rounded-lg p-1 gap-1 h-8">
@@ -1871,7 +1871,7 @@ export default function GenerateCertificatePage() {
                   </button>
                 </div>
                 {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
                   <RightPanel
                     selectedField={selectedField}
                     onFieldUpdate={(updates) => {

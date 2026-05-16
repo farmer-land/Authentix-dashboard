@@ -793,7 +793,7 @@ export default function EmailTemplateEditorPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
                 <BlockPropertiesPanel
                   block={blocks.find(b => b.id === selectedId) ?? null}
                   onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}

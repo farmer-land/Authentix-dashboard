@@ -1965,10 +1965,10 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-2.5 text-left group"
       >
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none group-hover:text-muted-foreground/90 transition-colors">
+        <p className="text-xs font-semibold text-foreground/75 select-none group-hover:text-foreground transition-colors">
           {label}
         </p>
-        <ChevronRight className={cn("w-3 h-3 text-muted-foreground/30 transition-transform duration-150", open && "rotate-90")} />
+        <ChevronRight className={cn("w-3 h-3 text-muted-foreground/40 transition-transform duration-150", open && "rotate-90")} />
       </button>
       {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
     </div>
@@ -1982,7 +1982,7 @@ function NumBox({ label, value, onChange, unit, min, max, step = 1, className = 
   unit?: string; min?: number; max?: number; step?: number; className?: string;
 }) {
   return (
-    <div className={cn("flex items-center bg-card border border-border/60 rounded-md h-8 px-2.5 gap-1.5", className)}>
+    <div className={cn("flex items-center bg-muted/50 border border-border/50 rounded-lg h-8 px-2.5 gap-1.5", className)}>
       <span className="text-[10px] text-muted-foreground/60 shrink-0 select-none">{label}</span>
       <input
         type="number" value={value} min={min} max={max} step={step}
@@ -2275,7 +2275,7 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
           ref={swatchRef}
           type="button"
           onClick={openPicker}
-          className="w-6 h-6 rounded-md border border-border/60 shadow-sm hover:ring-2 hover:ring-[#3ECF8E]/40 transition-all shrink-0"
+          className="w-6 h-6 rounded-lg border border-border/50 shadow-sm hover:ring-2 hover:ring-[#3ECF8E]/40 transition-all shrink-0"
           style={{ background: value || "#ffffff" }}
           title={`${label}: ${value}`}
         />
@@ -2457,7 +2457,7 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground focus:outline-none hover:border-[#3ECF8E]/60 transition-colors flex-1 min-w-0 text-left flex items-center justify-between gap-1"
+          className="text-[11px] border border-border/50 rounded-lg px-1.5 py-0.5 bg-muted/50 text-foreground focus:outline-none hover:border-[#3ECF8E]/60 transition-colors flex-1 min-w-0 text-left flex items-center justify-between gap-1"
           style={{ fontFamily: value || "inherit" }}
         >
           <span className="truncate">{currentLabel}</span>
@@ -2529,7 +2529,7 @@ export function BlockPropertiesPanel({
     return (
       <div className="flex flex-col min-h-0">
         <div className="px-4 py-3 border-b border-border/20 bg-muted/20 shrink-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Canvas</p>
+          <p className="text-xs font-semibold text-foreground/75">Canvas</p>
         </div>
         <Section label="Email Background">
           <div className="space-y-2">
@@ -2587,8 +2587,8 @@ export function BlockPropertiesPanel({
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
-  const INP = "w-full text-xs bg-card border border-border/60 rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
-  const NUM = "w-16 text-xs bg-card border border-border/60 rounded-md px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
+  const INP = "w-full text-xs bg-muted/50 border border-border/50 rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
+  const NUM = "w-16 text-xs bg-muted/50 border border-border/50 rounded-lg px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
 
   // ── Spacing section (all blocks that have padding) ─────────────────────────
   const hasSpacing = !["cert_image", "divider"].includes(type);

@@ -33,7 +33,7 @@ function normalizeFontWeight(w: string): FontWeight {
 }
 
 const CHECKER = 'repeating-conic-gradient(#c0c0c0 0% 25%, #fff 0% 50%) 0 0 / 8px 8px';
-const INP = 'bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-md text-xs';
+const INP = 'bg-muted/50 border border-border/50 rounded-lg text-xs';
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 
@@ -61,10 +61,10 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 text-left group"
       >
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none group-hover:text-muted-foreground/90 transition-colors">
+        <p className="text-xs font-semibold text-foreground/75 select-none group-hover:text-foreground transition-colors">
           {label}
         </p>
-        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground/30 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
+        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground/40 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
       </button>
       {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
     </div>
@@ -118,7 +118,7 @@ function FontSizeBox({ value, onChange }: { value: number; onChange: (v: number)
         />
         <span className="text-[9px] text-muted-foreground/50 shrink-0 select-none pr-1">px</span>
         <button
-          className="h-full px-1.5 border-l border-gray-200 dark:border-white/10 text-muted-foreground hover:text-foreground hover:bg-gray-50 dark:hover:bg-white/10 transition-colors flex items-center"
+          className="h-full px-1.5 border-l border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors flex items-center"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setOpen((v) => !v)}
         >
@@ -366,7 +366,7 @@ function GradientAngleDial({ angle, onChange }: { angle: number; onChange: (a: n
       ref={dialRef}
       onMouseDown={handleMouseDown}
       title={`${angle}°`}
-      className="w-8 h-8 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 cursor-grab active:cursor-grabbing shrink-0 select-none flex items-center justify-center"
+      className="w-8 h-8 rounded-full border border-border/50 bg-muted/50 cursor-grab active:cursor-grabbing shrink-0 select-none flex items-center justify-center"
     >
       <svg width="32" height="32" viewBox="0 0 32 32" style={{ display: 'block' }}>
         <circle cx="16" cy="16" r="1.5" fill="rgba(100,100,100,0.4)" />
@@ -613,14 +613,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
   const canvasControls = (
     <>
       <div className="px-4 py-3 border-t border-border/30">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-3 select-none">Canvas</p>
+        <p className="text-xs font-semibold text-foreground/75 mb-3 select-none">Canvas</p>
         <div className="space-y-3">
           {/* Zoom controls */}
           <div>
             <p className="text-[10px] text-muted-foreground/50 mb-2 select-none">Zoom</p>
             <div className="flex items-center gap-2">
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) - 0.1))}
                 title="Zoom out"
               >
@@ -630,7 +630,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 <select
                   value={ZOOM_STEPS.includes(scale ?? 1) ? (scale ?? 1) : ''}
                   onChange={(e) => e.target.value && onScaleChange?.(parseFloat(e.target.value))}
-                  className="w-full h-8 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-md text-xs text-center outline-none cursor-pointer appearance-none"
+                  className="w-full h-8 bg-muted/50 border border-border/50 rounded-lg text-xs text-center outline-none cursor-pointer appearance-none"
                   title="Zoom presets"
                 >
                   {!ZOOM_STEPS.includes(scale ?? 1) && (
@@ -645,14 +645,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </span>
               </div>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) + 0.1))}
                 title="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={onFitToScreen}
                 title="Fit to screen"
               >
@@ -682,14 +682,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       {/* Template dimensions */}
       {(pdfWidth || pdfHeight) && (
         <div className="px-4 py-3 border-t border-border/30">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2 select-none">Template</p>
+          <p className="text-xs font-semibold text-foreground/75 mb-2 select-none">Template</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-md h-8 px-2.5 gap-1.5">
+            <div className="flex items-center bg-muted/50 border border-border/50 rounded-lg h-8 px-2.5 gap-1.5">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">W</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfWidth ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
-            <div className="flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-md h-8 px-2.5 gap-1.5">
+            <div className="flex items-center bg-muted/50 border border-border/50 rounded-lg h-8 px-2.5 gap-1.5">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">H</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfHeight ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
@@ -753,8 +753,8 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
 
   const selCls = `h-8 text-xs ${INP}`;
   const activeBtn = 'bg-primary/15 text-primary border-primary/30';
-  const inactiveBtn = `bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-muted-foreground hover:text-foreground`;
-  const btn = (active: boolean) => `h-8 flex items-center justify-center rounded-md border transition-colors ${active ? activeBtn : inactiveBtn}`;
+  const inactiveBtn = `bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground`;
+  const btn = (active: boolean) => `h-8 flex items-center justify-center rounded-lg border transition-colors ${active ? activeBtn : inactiveBtn}`;
 
   return (
     <div className="flex flex-col">
@@ -1009,7 +1009,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
               <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Module Color</p>
               <div className={`flex items-stretch ${INP} overflow-hidden`} style={{ height: '30px' }}>
                 <button title="Pick colour"
-                  className="w-9 shrink-0 flex items-center justify-center border-r border-gray-200 dark:border-white/10 hover:opacity-80 transition-opacity"
+                  className="w-9 shrink-0 flex items-center justify-center border-r border-border/50 hover:opacity-80 transition-opacity"
                   onClick={(e) => openPicker('main', e.currentTarget)}>
                   <span className="relative w-5 h-5 rounded-[4px] overflow-hidden" style={{ background: CHECKER }}>
                     <span className="absolute inset-0" style={{ backgroundColor: selectedField.color }} />
@@ -1068,7 +1068,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             {(selectedField.colorMode ?? 'solid') === 'solid' && (
               <div className={`flex items-stretch ${INP} overflow-hidden`} style={{ height: '30px' }}>
                 <button title="Pick colour"
-                  className="w-9 shrink-0 flex items-center justify-center border-r border-gray-200 dark:border-white/10 hover:opacity-80 transition-opacity"
+                  className="w-9 shrink-0 flex items-center justify-center border-r border-border/50 hover:opacity-80 transition-opacity"
                   onClick={(e) => openPicker('main', e.currentTarget)}>
                   <span className="relative w-5 h-5 rounded-[4px] overflow-hidden" style={{ background: CHECKER }}>
                     <span className="absolute inset-0" style={{ backgroundColor: selectedField.color, opacity: opacity / 100 }} />
@@ -1082,7 +1082,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                   onKeyDown={(e) => { if (e.key === 'Enter') { commitHex(hexInput); (e.target as HTMLInputElement).blur(); } }}
                   className="flex-1 min-w-0 bg-transparent text-xs font-mono uppercase outline-none"
                   maxLength={6} spellCheck={false} placeholder="000000" />
-                <span className="w-px bg-gray-200 dark:bg-white/10 shrink-0 my-1" />
+                <span className="w-px bg-border/50 shrink-0 my-1" />
                 <input type="number" min={0} max={100} value={opacity}
                   onChange={(e) => onFieldUpdate({ opacity: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)) })}
                   className="w-7 bg-transparent text-xs text-right outline-none" />
@@ -1094,7 +1094,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             {(selectedField.colorMode === 'linear' || selectedField.colorMode === 'radial') && (
               <div className="space-y-2">
                 {/* Preview bar */}
-                <div className="h-4 rounded w-full border border-gray-200 dark:border-white/10"
+                <div className="h-4 rounded w-full border border-border/50"
                   style={{
                     background: selectedField.colorMode === 'linear'
                       ? `linear-gradient(${selectedField.gradientAngle ?? 90}deg, ${selectedField.gradientStartColor ?? selectedField.color}, ${selectedField.gradientEndColor ?? '#ffffff'})`
@@ -1110,7 +1110,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                     />
                   )}
                   {/* Start stop */}
-                  <button className="relative w-6 h-6 shrink-0 rounded border border-gray-200 dark:border-white/10 overflow-hidden hover:border-primary/50"
+                  <button className="relative w-6 h-6 shrink-0 rounded border border-border/50 overflow-hidden hover:border-primary/50"
                     style={{ background: CHECKER }} onClick={(e) => openPicker('gradStart', e.currentTarget)}>
                     <span className="absolute inset-0" style={{ backgroundColor: selectedField.gradientStartColor ?? selectedField.color, opacity: (selectedField.gradientStartOpacity ?? 100) / 100 }} />
                   </button>
@@ -1120,7 +1120,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                   <span className="text-[9px] text-muted-foreground/40 shrink-0">%</span>
                   <span className="text-muted-foreground/30 text-xs shrink-0">→</span>
                   {/* End stop */}
-                  <button className="relative w-6 h-6 shrink-0 rounded border border-gray-200 dark:border-white/10 overflow-hidden hover:border-primary/50"
+                  <button className="relative w-6 h-6 shrink-0 rounded border border-border/50 overflow-hidden hover:border-primary/50"
                     style={{ background: CHECKER }} onClick={(e) => openPicker('gradEnd', e.currentTarget)}>
                     <span className="absolute inset-0" style={{ backgroundColor: selectedField.gradientEndColor ?? '#ffffff', opacity: (selectedField.gradientEndOpacity ?? 100) / 100 }} />
                   </button>
@@ -1165,7 +1165,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                         onChange={(v) => onFieldUpdate({ textShadow: { ...selectedField.textShadow!, blur: Math.max(0, v) } })} unit="px" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="relative w-7 h-7 shrink-0 rounded border border-gray-200 dark:border-white/10 overflow-hidden hover:border-primary/50"
+                      <button className="relative w-7 h-7 shrink-0 rounded border border-border/50 overflow-hidden hover:border-primary/50"
                         style={{ background: CHECKER }} onClick={(e) => openPicker('shadow', e.currentTarget)}>
                         <span className="absolute inset-0" style={{ backgroundColor: selectedField.textShadow.color }} />
                       </button>
@@ -1201,7 +1201,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                     onChange={(v) => onFieldUpdate({ strokeWidth: v })} unit="px" />
                   {/* Color swatch inline */}
                   <button
-                    className="flex items-center gap-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded h-7 px-2 hover:opacity-80 transition-opacity"
+                    className="flex items-center gap-2 bg-muted/50 border border-border/50 rounded-lg h-7 px-2 hover:opacity-80 transition-opacity"
                     onClick={(e) => openPicker('stroke', e.currentTarget)}
                   >
                     <span className="relative w-4 h-4 rounded-[3px] overflow-hidden shrink-0" style={{ background: CHECKER }}>
