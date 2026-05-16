@@ -1,5 +1,7 @@
 'use client';
 
+'use client';
+
 import { useRef, useEffect, useState } from 'react';
 import { CertificateField } from '@/lib/types/certificate';
 import { DraggableField } from './DraggableField';
@@ -190,23 +192,34 @@ export function CertificateCanvas({
     };
   }, []);
 
-  // Wheel Handler: Pan coordinates or Zoom if Ctrl/Meta pressed
-  const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
+  // Keep scale/onScaleChange in a ref so the wheel handler never needs to be recreated
+  const scaleRef = useRef(scale);
+  const onScaleChangeRef = useRef(onScaleChange);
+  useEffect(() => { scaleRef.current = scale; }, [scale]);
+  useEffect(() => { onScaleChangeRef.current = onScaleChange; }, [onScaleChange]);
+
+  // Non-passive wheel handler — must use addEventListener to allow preventDefault on trackpad
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      // Zoom
-      const delta = -e.deltaY * 0.005; // smoother zoom
-      const newScale = Math.min(5, Math.max(0.1, scale + delta));
-      onScaleChange(newScale);
-    } else {
-      // Pan
-      e.preventDefault(); // prevent browser back/forward gestures
-      setPan((prev) => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY,
-      }));
-    }
-  };
+      if (e.ctrlKey || e.metaKey) {
+        const zoomFactor = e.deltaMode === 0
+          ? 1 - e.deltaY * 0.004
+          : 1 - e.deltaY * 0.05;
+        const newScale = Math.min(5, Math.max(0.1, scaleRef.current * zoomFactor));
+        onScaleChangeRef.current(newScale);
+      } else {
+        setPan((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY,
+        }));
+      }
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []); // register once on mount
 
   // Mouse Drag Handlers for Panning - allow left click on empty canvas area
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -291,9 +304,8 @@ export function CertificateCanvas({
   const visibleFields = fields.filter(f => !hiddenFields.has(f.id));
 
   return (
-    <div 
+    <div
         className="relative w-full h-full bg-background overflow-hidden flex items-center justify-center select-none"
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
@@ -360,8 +372,8 @@ export function CertificateCanvas({
             }}
           />
 
-          {/* Fields Overlay */}
-          <div className="absolute inset-0 overflow-hidden">
+          {/* Fields Overlay — overflow-visible so resize handles aren't clipped */}
+          <div className="absolute inset-0 overflow-visible">
             {visibleFields.map((field) => (
               <div key={field.id} data-field="true">
               <DraggableField
