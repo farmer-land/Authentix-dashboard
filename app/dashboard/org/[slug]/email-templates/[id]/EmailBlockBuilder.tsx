@@ -3486,7 +3486,6 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
           {...attributes}
           {...listeners}
           className="absolute left-0 top-0 bottom-0 w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-30 opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ background: "linear-gradient(to right, rgba(0,0,0,0.45), transparent)" }}
           onClick={e => e.stopPropagation()}
           title="Drag to reorder"
         >
@@ -3568,11 +3567,19 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
 
 // ── Main canvas component ────────────────────────────────────────────────────
 
+export interface SenderOption {
+  name: string;
+  email: string;
+  isDefault?: boolean;
+}
+
 export interface EmailBlockBuilderProps {
   blocks: EmailBlock[];
   selectedId: string | null;
   subject?: string;
   senderName?: string;
+  /** Available configured senders from integrations — if provided, renders a select instead of free text */
+  senderOptions?: SenderOption[];
   availableVars?: string[];
   /** "cert" = cert delivery editor, "broadcast" = broadcast email editor */
   context?: "cert" | "broadcast";
@@ -3591,6 +3598,7 @@ export function EmailBlockBuilder({
   selectedId,
   subject = "",
   senderName = "Your Organization",
+  senderOptions,
   availableVars = [],
   context = "cert",
   emailBg,
@@ -3716,16 +3724,36 @@ export function EmailBlockBuilder({
               {senderName.trim()[0]?.toUpperCase() || "A"}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2">
-                <input
-                  value={senderName}
-                  onChange={e => onSenderNameChange?.(e.target.value)}
-                  className="text-sm font-semibold text-zinc-100 bg-transparent border-none outline-none min-w-0 w-auto max-w-[220px] cursor-text hover:bg-zinc-700/40 focus:bg-zinc-700/60 rounded px-1 -ml-1 transition-colors"
-                  placeholder="Sender Name"
-                  title="Click to edit sender name"
-                />
+              <div className="flex items-center gap-2">
+                {senderOptions && senderOptions.length > 0 ? (
+                  <select
+                    value={senderName}
+                    onChange={e => onSenderNameChange?.(e.target.value)}
+                    className="text-sm font-semibold text-zinc-100 bg-zinc-700/60 border border-zinc-600/60 outline-none rounded px-2 py-0.5 max-w-[220px] cursor-pointer hover:bg-zinc-700 focus:bg-zinc-700 transition-colors appearance-none"
+                    title="Select sender"
+                  >
+                    {senderOptions.map(opt => (
+                      <option key={opt.email} value={opt.name} className="bg-zinc-800 text-zinc-100">
+                        {opt.name}{opt.email ? ` <${opt.email}>` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={senderName}
+                    onChange={e => onSenderNameChange?.(e.target.value)}
+                    className="text-sm font-semibold text-zinc-100 bg-transparent border-none outline-none min-w-0 w-auto max-w-[220px] cursor-text hover:bg-zinc-700/40 focus:bg-zinc-700/60 rounded px-1 -ml-1 transition-colors"
+                    placeholder="Sender Name"
+                    title="Click to edit sender name"
+                  />
+                )}
                 <span className="text-[11px] text-zinc-600 shrink-0">via Authentix</span>
               </div>
+              {senderOptions && senderOptions.length > 0 && (
+                <p className="text-[10px] text-zinc-600 mt-0.5">
+                  {senderOptions.find(o => o.name === senderName)?.email ?? ""}
+                </p>
+              )}
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[11px] text-zinc-600 shrink-0 font-medium">Subject:</span>
                 <input

@@ -1621,109 +1621,14 @@ export default function GenerateCertificatePage() {
           {/* Canvas area + optional preview — flex row */}
           <div className="flex-1 flex overflow-hidden">
 
-          {/* Editing canvas — fills remaining width */}
-          <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
-            {useInfiniteCanvas ? (
-              <ErrorBoundary fallbackLabel="Canvas failed to load">
-              <InfiniteCanvas
-                fileUrl={template.fileUrl}
-
-                pdfWidth={template.pdfWidth}
-                pdfHeight={template.pdfHeight}
-                fields={fields.filter(f => (f.pageNumber ?? 0) === currentPage)}
-                selectedFieldId={selectedFieldId}
-                hiddenFields={hiddenFields}
-                scale={canvasScale}
-                currentPage={currentPage + 1}
-                totalPages={totalPages}
-                onFieldUpdate={handleUpdateField}
-                onFieldSelect={handleFieldSelect}
-                onScaleChange={setCanvasScale}
-                onFieldDelete={handleDeleteField}
-                onTemplateResize={handleTemplateResize}
-                onTemplateResizeStart={handleTemplateResizeStart}
-                onPageChange={(page) => setCurrentPage(page - 1)}
-                onAssetDrop={(url, name, x, y, replaceBlobUrl) => handleAddAssetField(url, name, x, y, replaceBlobUrl)}
-                onFieldDuplicate={handleFieldDuplicate}
-                onPreviewToggle={() => {
-                  const opening = !previewOpen;
-                  setPreviewOpen(opening);
-                  if (opening) {
-                    setLeftPanelVisible(false);
-                    setRightPanelVisible(false);
-                    setSelectedFieldId(null);
-                  }
-                }}
-                previewOpen={previewOpen}
-                onUndo={undo}
-                onRedo={redo}
-                canUndo={canUndo}
-                canRedo={canRedo}
-                saveStatus={saveStatus}
-                onFieldsDelete={handleFieldsDelete}
-                onFieldReorder={handleFieldReorder}
-                onFieldLock={handleFieldLock}
-                onFieldDragStart={handleFieldDragStart}
-                snapToGrid={snapToGrid}
-                onSnapToggle={() => setSnapToGrid(v => !v)}
-                fitTrigger={fitTrigger}
-              />
-              </ErrorBoundary>
-            ) : (
-              <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8">
-                <CertificateCanvas
-                  fileUrl={template.fileUrl}
-  
-                  pdfWidth={template.pdfWidth}
-                  pdfHeight={template.pdfHeight}
-                  fields={fields}
-                  selectedFieldId={selectedFieldId}
-                  hiddenFields={hiddenFields}
-                  scale={canvasScale}
-                  onFieldUpdate={handleUpdateField}
-                  onFieldSelect={handleFieldSelect}
-                  onScaleChange={setCanvasScale}
-                  onFieldDelete={handleDeleteField}
-                  onTemplateResize={handleTemplateResize}
-                />
-              </div>
-            )}
-
-            {/* ── Left panel collapsed vertical pill ── */}
-            {!leftPanelVisible && (
-              <div
-                className="absolute z-40 flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                style={{ left: 8, top: '50%', transform: 'translateY(-50%)', width: 40 }}
-                onClick={() => setLeftPanelVisible(true)}
-                title="Expand layers panel"
-              >
-                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
-                <span
-                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
-                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                >
-                  Layers
-                </span>
-                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
-              </div>
-            )}
-
-            {/* ── Left floating panel ── */}
-            {leftPanelVisible && (
-              <div
-                className="absolute z-40 w-72 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-                style={{
-                  left: 8,
-                  top: 16,
-                  height: 'calc(100% - 32px)',
-                }}
-              >
+          {/* ── Left panel — flex push (pill or expanded) ── */}
+          {!previewOpen && (
+            leftPanelVisible ? (
+              <div className="w-72 shrink-0 flex flex-col bg-card border-r border-border/50 overflow-hidden">
                 {/* Header */}
-                <div
-                  className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/40 shrink-0 select-none"
-                >
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-medium text-foreground flex-1">Layers</span>
+                  <span className="text-xs font-semibold text-foreground flex-1">Layers</span>
                   <button
                     onClick={() => setLeftPanelVisible(false)}
                     className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
@@ -1826,30 +1731,100 @@ export default function GenerateCertificatePage() {
                   </Tabs>
                 </div>
               </div>
-            )}
-
-            {/* ── Top-right: panel restore only (preview is in toolbar) ── */}
-            <div className="absolute top-4 right-4 z-41 flex flex-col gap-2">
-              {/* Properties restore — only when right panel hidden, field selected, not in preview */}
-              {selectedField && !rightPanelVisible && !previewOpen && (
-                <button
-                  className="w-8 h-8 flex items-center justify-center bg-card border border-border/50 rounded-lg shadow-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  onClick={() => setRightPanelVisible(true)}
-                  title="Show properties panel"
-                >
-                  <Palette className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* ── Right properties panel — floating over canvas ── */}
-            {selectedField && rightPanelVisible && !previewOpen && (
+            ) : (
+              /* Collapsed left pill */
               <div
-                className="absolute z-40 right-4 top-4 w-80 flex flex-col bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden"
-                style={{ height: 'calc(100% - 32px)' }}
+                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-r border-border/40 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors select-none py-4"
+                onClick={() => setLeftPanelVisible(true)}
+                title="Expand layers panel"
               >
+                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
+                <span
+                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                >
+                  Layers
+                </span>
+                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+              </div>
+            )
+          )}
+
+          {/* Editing canvas — fills remaining width */}
+          <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
+            {useInfiniteCanvas ? (
+              <ErrorBoundary fallbackLabel="Canvas failed to load">
+              <InfiniteCanvas
+                fileUrl={template.fileUrl}
+
+                pdfWidth={template.pdfWidth}
+                pdfHeight={template.pdfHeight}
+                fields={fields.filter(f => (f.pageNumber ?? 0) === currentPage)}
+                selectedFieldId={selectedFieldId}
+                hiddenFields={hiddenFields}
+                scale={canvasScale}
+                currentPage={currentPage + 1}
+                totalPages={totalPages}
+                onFieldUpdate={handleUpdateField}
+                onFieldSelect={handleFieldSelect}
+                onScaleChange={setCanvasScale}
+                onFieldDelete={handleDeleteField}
+                onTemplateResize={handleTemplateResize}
+                onTemplateResizeStart={handleTemplateResizeStart}
+                onPageChange={(page) => setCurrentPage(page - 1)}
+                onAssetDrop={(url, name, x, y, replaceBlobUrl) => handleAddAssetField(url, name, x, y, replaceBlobUrl)}
+                onFieldDuplicate={handleFieldDuplicate}
+                onPreviewToggle={() => {
+                  const opening = !previewOpen;
+                  setPreviewOpen(opening);
+                  if (opening) {
+                    setLeftPanelVisible(false);
+                    setRightPanelVisible(false);
+                    setSelectedFieldId(null);
+                  }
+                }}
+                previewOpen={previewOpen}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                saveStatus={saveStatus}
+                onFieldsDelete={handleFieldsDelete}
+                onFieldReorder={handleFieldReorder}
+                onFieldLock={handleFieldLock}
+                onFieldDragStart={handleFieldDragStart}
+                snapToGrid={snapToGrid}
+                onSnapToggle={() => setSnapToGrid(v => !v)}
+                fitTrigger={fitTrigger}
+              />
+              </ErrorBoundary>
+            ) : (
+              <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8">
+                <CertificateCanvas
+                  fileUrl={template.fileUrl}
+
+                  pdfWidth={template.pdfWidth}
+                  pdfHeight={template.pdfHeight}
+                  fields={fields}
+                  selectedFieldId={selectedFieldId}
+                  hiddenFields={hiddenFields}
+                  scale={canvasScale}
+                  onFieldUpdate={handleUpdateField}
+                  onFieldSelect={handleFieldSelect}
+                  onScaleChange={setCanvasScale}
+                  onFieldDelete={handleDeleteField}
+                  onTemplateResize={handleTemplateResize}
+                />
+              </div>
+            )}
+          </div>{/* end editing canvas */}
+
+          {/* ── Right panel — flex push (pill or expanded) ── */}
+          {selectedField && !previewOpen && (
+            rightPanelVisible ? (
+              <div className="w-80 shrink-0 flex flex-col bg-zinc-950 border-l border-zinc-800 overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center gap-2 px-4 py-3 bg-zinc-900 border-b border-zinc-800 shrink-0 rounded-t-xl">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 border-b border-zinc-800 shrink-0">
                   <Palette className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                   <span className="text-sm font-bold text-white flex-1">Properties</span>
                   <button
@@ -1878,9 +1853,24 @@ export default function GenerateCertificatePage() {
                   />
                 </div>
               </div>
-            )}
-
-          </div>{/* end editing canvas */}
+            ) : (
+              /* Collapsed right pill */
+              <div
+                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-l border-zinc-800 bg-zinc-950 cursor-pointer hover:bg-zinc-900 transition-colors select-none py-4"
+                onClick={() => setRightPanelVisible(true)}
+                title="Expand properties panel"
+              >
+                <Palette className="w-4 h-4 text-zinc-500" />
+                <span
+                  className="text-[9px] font-semibold text-zinc-600 tracking-widest uppercase"
+                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                >
+                  Properties
+                </span>
+                <Maximize2 className="w-3 h-3 text-zinc-700" />
+              </div>
+            )
+          )}
 
           {/* ── Preview panel ── */}
           {previewOpen && (

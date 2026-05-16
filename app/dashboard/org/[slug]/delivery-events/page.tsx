@@ -10,12 +10,14 @@ import {
 import {
   Activity, RefreshCw, ChevronLeft, ChevronRight,
   CheckCircle2, XCircle, Mail, MousePointerClick, AlertTriangle,
-  Clock, Send, Eye, ChevronDown, ChevronUp,
+  Clock, Send, Eye, ChevronDown, ChevronUp, RotateCcw,
 } from "lucide-react";
 import { useEmailEvents } from "@/lib/hooks/queries/delivery";
 import type { DeliveryEmailEvent, EmailEventType } from "@/lib/api/client";
+import { api } from "@/lib/api/client";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const PAGE_SIZE = 50;
 
@@ -91,25 +93,57 @@ function extractClickUrl(event: DeliveryEmailEvent): string | null {
   return typeof click?.link === "string" ? click.link : null;
 }
 
+function extractSubject(event: DeliveryEmailEvent): string | null {
+  const p = event.raw_payload as Record<string, unknown>;
+  const data = (p.data as Record<string, unknown> | undefined) ?? {};
+  if (typeof data.subject === "string") return data.subject;
+  if (typeof p.subject === "string") return p.subject;
+  return null;
+}
+
+function extractFrom(event: DeliveryEmailEvent): string | null {
+  const p = event.raw_payload as Record<string, unknown>;
+  const data = (p.data as Record<string, unknown> | undefined) ?? {};
+  if (typeof data.from === "string") return data.from;
+  if (typeof p.from === "string") return p.from;
+  return null;
+}
+
 // ── Event row ──────────────────────────────────────────────────────────────────
 
 function EventRow({ event }: { event: DeliveryEmailEvent }) {
   const [expanded, setExpanded] = useState(false);
+  const [resending, setResending] = useState(false);
   const cfg = EVENT_CONFIG[event.event_type as EmailEventType] ?? EVENT_CONFIG.unknown;
   const date = new Date(event.received_at);
   const isError = event.event_type === "bounced" || event.event_type === "complained" || event.event_type === "failed";
   const errorReason = isError ? extractErrorReason(event) : null;
   const recipient = extractRecipient(event);
   const clickUrl = event.event_type === "clicked" ? extractClickUrl(event) : null;
+  const subject = extractSubject(event);
+  const from = extractFrom(event);
+
+  const handleResend = async () => {
+    if (!recipient) { toast.error("No recipient address found in event data"); return; }
+    setResending(true);
+    try {
+      await api.delivery.testSend({ test_email: recipient, use_platform_default: true });
+      toast.success(`Re-sent to ${recipient}`);
+    } catch {
+      toast.error("Resend failed — check your default integration is configured");
+    } finally {
+      setResending(false);
+    }
+  };
 
   return (
     <>
       <tr
         className={cn(
-          "border-b hover:bg-muted/20 transition-colors",
+          "border-b hover:bg-muted/20 transition-colors cursor-pointer",
           expanded && "bg-muted/10",
-          isError && "last:border-0",
         )}
+        onClick={() => setExpanded(v => !v)}
       >
         <td className="px-4 py-3">
           <Badge variant="outline" className={cn("text-xs flex items-center gap-1.5 w-fit", cfg!.className)}>
@@ -135,6 +169,10 @@ function EventRow({ event }: { event: DeliveryEmailEvent }) {
             <span className="text-xs text-muted-foreground truncate max-w-50 block" title={clickUrl}>
               {clickUrl}
             </span>
+          ) : subject ? (
+            <span className="text-xs text-muted-foreground truncate max-w-50 block" title={subject}>
+              {subject}
+            </span>
           ) : (
             <span className="text-xs font-mono text-muted-foreground/50 truncate max-w-40 block">
               {event.provider_message_id ?? "—"}
@@ -142,50 +180,85 @@ function EventRow({ event }: { event: DeliveryEmailEvent }) {
           )}
         </td>
         <td className="px-4 py-3 text-right">
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
             <span className="text-xs text-muted-foreground" title={format(date, "dd MMM yyyy, HH:mm:ss")}>
               {formatDistanceToNow(date, { addSuffix: true })}
             </span>
-            {(isError || event.event_type === "clicked") && (
-              <button
-                onClick={() => setExpanded(v => !v)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                title="Show details"
-              >
-                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              </button>
-            )}
+            <button
+              onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={expanded ? "Collapse" : "Show details"}
+            >
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
           </div>
         </td>
       </tr>
       {expanded && (
         <tr className="border-b bg-muted/5">
-          <td colSpan={5} className="px-4 py-3">
-            <div className="space-y-1.5">
-              {event.provider_message_id && (
+          <td colSpan={5} className="px-4 py-4">
+            <div className="flex items-start gap-8">
+              {/* Detail fields */}
+              <div className="flex-1 space-y-2">
+                {recipient && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">To</span>
+                    <span className="text-[11px] text-foreground/80 font-medium">{recipient}</span>
+                  </div>
+                )}
+                {from && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">From</span>
+                    <span className="text-[11px] text-foreground/70">{from}</span>
+                  </div>
+                )}
+                {subject && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">Subject</span>
+                    <span className="text-[11px] text-foreground/70">{subject}</span>
+                  </div>
+                )}
+                {event.provider_message_id && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">Message ID</span>
+                    <span className="text-[11px] font-mono text-foreground/50 break-all">{event.provider_message_id}</span>
+                  </div>
+                )}
+                {errorReason && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">Reason</span>
+                    <span className="text-[11px] text-red-600 dark:text-red-400">{errorReason}</span>
+                  </div>
+                )}
+                {clickUrl && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">Clicked URL</span>
+                    <a href={clickUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 dark:text-blue-400 underline underline-offset-2 break-all">
+                      {clickUrl}
+                    </a>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-medium text-muted-foreground w-24 shrink-0">Message ID</span>
-                  <span className="text-[11px] font-mono text-foreground/70">{event.provider_message_id}</span>
+                  <span className="text-[11px] font-semibold text-muted-foreground w-24 shrink-0">Received</span>
+                  <span className="text-[11px] text-foreground/60">{format(date, "dd MMM yyyy 'at' HH:mm:ss")}</span>
                 </div>
-              )}
-              {errorReason && (
-                <div className="flex items-start gap-2">
-                  <span className="text-[11px] font-medium text-muted-foreground w-24 shrink-0">Reason</span>
-                  <span className="text-[11px] text-red-600 dark:text-red-400">{errorReason}</span>
-                </div>
-              )}
-              {clickUrl && (
-                <div className="flex items-start gap-2">
-                  <span className="text-[11px] font-medium text-muted-foreground w-24 shrink-0">Clicked URL</span>
-                  <a href={clickUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 dark:text-blue-400 underline underline-offset-2 break-all">
-                    {clickUrl}
-                  </a>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium text-muted-foreground w-24 shrink-0">Received</span>
-                <span className="text-[11px] text-foreground/70">{format(date, "dd MMM yyyy 'at' HH:mm:ss")}</span>
               </div>
+
+              {/* Actions */}
+              {(isError || event.event_type === "bounced") && recipient && (
+                <div className="shrink-0 pt-0.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={handleResend}
+                    disabled={resending}
+                  >
+                    <RotateCcw className={cn("h-3 w-3", resending && "animate-spin")} />
+                    {resending ? "Sending…" : "Resend"}
+                  </Button>
+                </div>
+              )}
             </div>
           </td>
         </tr>

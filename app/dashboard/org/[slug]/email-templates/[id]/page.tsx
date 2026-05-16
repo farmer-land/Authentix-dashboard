@@ -111,6 +111,9 @@ export default function EmailTemplateEditorPage() {
     onLoadSuccess,
   } = useEmailEditorState();
 
+  // Configured delivery integrations for sender name dropdown
+  const [senderOptions, setSenderOptions] = useState<{ name: string; email: string; isDefault?: boolean }[]>([]);
+
   // Right panel for block properties
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(288);
@@ -175,6 +178,22 @@ export default function EmailTemplateEditorPage() {
     loadTemplate();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
+
+  // Load configured sender identities for the sender dropdown
+  useEffect(() => {
+    api.delivery.listIntegrations().then(integrations => {
+      const email = integrations
+        .filter(i => i.channel === "email" && i.is_active && i.from_name)
+        .map(i => ({ name: i.from_name!, email: i.from_email ?? "", isDefault: i.is_default }));
+      if (email.length > 0) {
+        setSenderOptions(email);
+        // Auto-select the default integration's from_name if senderName is still the default placeholder
+        const def = email.find(o => o.isDefault) ?? email[0];
+        if (def) setSenderName(def.name);
+      }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Auto-save (debounced 4s) ─────────────────────────────────────────────
   useEffect(() => {
@@ -753,6 +772,7 @@ export default function EmailTemplateEditorPage() {
                 selectedId={selectedId}
                 subject={subject}
                 senderName={senderName}
+                senderOptions={senderOptions}
                 availableVars={allVars}
                 context="cert"
                 emailBg={emailBg}
