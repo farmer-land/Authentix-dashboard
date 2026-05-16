@@ -57,7 +57,7 @@ const PROVIDER_OPTIONS: { value: string; label: string }[] = [
 
 function EventRow({ event }: { event: DeliveryEmailEvent }) {
   const cfg = EVENT_CONFIG[event.event_type as EmailEventType] ?? EVENT_CONFIG.unknown;
-  const date = new Date(event.created_at);
+  const date = new Date(event.received_at);
 
   return (
     <tr className="border-b last:border-0 hover:bg-muted/20 transition-colors">

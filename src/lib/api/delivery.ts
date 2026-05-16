@@ -232,7 +232,7 @@ export interface DeliveryEmailEvent {
   provider_message_id: string | null;
   event_type: EmailEventType;
   raw_payload: Record<string, unknown>;
-  created_at: string;
+  received_at: string;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
