@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough } from 'lucide-react';
 import { RgbaColorPicker } from 'react-colorful';
-import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, startTransition, createContext, useContext } from 'react';
 import { api } from '@/lib/api/client';
 import type { GoogleFont } from '@/app/api/fonts/route';
 
@@ -53,13 +53,21 @@ function rgbaToHex({ r, g, b }: { r: number; g: number; b: number }) {
 
 // ── Primitives ─────────────────────────────────────────────────────────────────
 
+const SectionOpenCtx = createContext<{ open: string | null; setOpen: (k: string | null) => void } | null>(null);
+
 function Section({ label, children, defaultOpen = true }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const ctx = useContext(SectionOpenCtx);
+  const [localOpen, setLocalOpen] = useState(defaultOpen && !ctx);
+  const open = ctx ? ctx.open === label : localOpen;
+  const toggle = () => {
+    if (ctx) ctx.setOpen(ctx.open === label ? null : label);
+    else setLocalOpen(v => !v);
+  };
   return (
     <div className="border-t border-zinc-800">
       <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-2.5 text-left"
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-5 py-2.5 text-left hover:bg-zinc-800/30 transition-colors"
       >
         <p className="text-sm font-bold text-white select-none">{label}</p>
         <ChevronRight className={`w-3.5 h-3.5 text-zinc-600 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
@@ -499,6 +507,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
   const [mounted, setMounted] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<EffectType>('none');
   const [labelDraft, setLabelDraft] = useState(selectedField?.label ?? '');
+  const [openSection, setOpenSection] = useState<string | null>("Position");
   const labelInputRef = useRef<HTMLInputElement>(null);
 
   // Font picker state
@@ -764,6 +773,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
   const btn = (active: boolean) => `h-8 flex items-center justify-center rounded border transition-colors ${active ? activeBtn : inactiveBtn}`;
 
   return (
+    <SectionOpenCtx.Provider value={{ open: openSection, setOpen: setOpenSection }}>
     <div className="flex flex-col">
 
       {/* ── Field type + label ── */}
@@ -1541,5 +1551,6 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         document.body
       )}
     </div>
+    </SectionOpenCtx.Provider>
   );
 }

@@ -127,6 +127,8 @@ export function EmailEditor({
   onDone,
   onBack,
 }: EmailEditorProps) {
+  const [localCampaignName, setLocalCampaignName] = useState(campaignName);
+  const [editingName, setEditingName] = useState(false);
   // Meta fields
   const [subject, setSubject] = useState(initialSubject);
   const [fromName, setFromName] = useState(initialFromName);
@@ -369,7 +371,24 @@ export function EmailEditor({
           Email Campaigns
         </button>
         <span className="text-muted-foreground/40">/</span>
-        <span className="text-xs text-foreground truncate max-w-48">{campaignName || "New Campaign"}</span>
+        {editingName ? (
+          <input
+            autoFocus
+            value={localCampaignName}
+            onChange={e => setLocalCampaignName(e.target.value)}
+            onBlur={() => setEditingName(false)}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setEditingName(false); }}
+            className="text-xs text-foreground bg-muted border border-border rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 max-w-48 min-w-20"
+          />
+        ) : (
+          <button
+            onClick={() => setEditingName(true)}
+            className="text-xs text-foreground truncate max-w-48 hover:underline decoration-dashed underline-offset-2 text-left"
+            title="Click to rename"
+          >
+            {localCampaignName || "New Campaign"}
+          </button>
+        )}
 
         <div className="flex items-center gap-2 ml-auto">
           <Badge variant="outline" className="text-xs text-muted-foreground">

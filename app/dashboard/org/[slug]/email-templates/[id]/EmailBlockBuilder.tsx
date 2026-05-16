@@ -162,6 +162,15 @@ export interface EmailBlock {
   blockBorderColor?: string;   // hex
   // Hide on mobile
   hideOnMobile?: boolean;
+  // Social block
+  socialAlign?: "left" | "center" | "right";
+  socialIconSize?: "sm" | "md" | "lg";
+  socialIconStyle?: "button" | "pill" | "outline";
+  // Image block extras
+  imageShadow?: "none" | "soft" | "hard";
+  imageOpenNewTab?: boolean;
+  // Video caption alignment
+  videoCaptionAlign?: "left" | "center" | "right";
 }
 
 export interface EmailBackground {
@@ -290,7 +299,7 @@ export function defaultBlock(type: BlockType): EmailBlock {
   const id = nanoid(8);
   switch (type) {
     case "header":      return { id, type, bgType: "gradient", bgColor: "#3ECF8E", gradientEnd: "#1a9e6b", gradientAngle: 135, titleColor: "#ffffff", title: "Congratulations, {{recipient_name}}!", subtitle: "You've completed {{course_name}}" };
-    case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb", fontSize: 16, lineHeight: 1.7 };
+    case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb", fontSize: 16, lineHeight: 1.7, textAlign: "left" };
     case "text":        return { id, type, content: "We are delighted to inform you that you have successfully completed this program. Your certificate is ready below.", textColor: "#d1d5db", fontSize: 15, lineHeight: 1.7 };
     case "image":       return { id, type, imageUrl: "", imageAlt: "", imageAlign: "center", imageWidth: 100, imageBorderRadius: 8 };
     case "markdown":    return { id, type, content: "## Congratulations, **{{recipient_name}}**!\n\nYou have successfully completed **{{course_name}}**.\n\n- 📅 Issued on {{issue_date}}\n- 🔗 [View & verify your certificate]({{verification_url}})\n\n> Your achievement has been recorded and is ready to share.", textColor: "#d1d5db" };
@@ -575,11 +584,13 @@ function blockToHtml(block: EmailBlock): string {
       const align = block.imageAlign || "center";
       const justify = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
-      const imgStyle = `max-width:${block.imageWidth || 100}%;height:auto;border-radius:${block.imageBorderRadius ?? 8}px;display:block;`;
+      const shadowCss = block.imageShadow === "soft" ? "box-shadow:0 4px 24px rgba(0,0,0,0.18);" : block.imageShadow === "hard" ? "box-shadow:4px 6px 0 rgba(0,0,0,0.35);" : "";
+      const imgStyle = `max-width:${block.imageWidth || 100}%;height:auto;border-radius:${block.imageBorderRadius ?? 8}px;display:block;${shadowCss}`;
+      const newTab = block.imageOpenNewTab !== false;
       const imgTag = block.imageUrl
         ? `<img src="${block.imageUrl}" alt="${block.imageAlt || ""}" style="${imgStyle}" />`
         : `<div style="background:#27272a;border:1px dashed #3f3f46;border-radius:${block.imageBorderRadius ?? 8}px;height:120px;display:flex;align-items:center;justify-content:center;"><span style="color:#6b7280;font-size:12px;font-family:sans-serif;">Image placeholder</span></div>`;
-      const wrapped = block.imageLinkUrl ? `<a href="${block.imageLinkUrl}" style="display:block;">${imgTag}</a>` : imgTag;
+      const wrapped = block.imageLinkUrl ? `<a href="${block.imageLinkUrl}"${newTab ? ' target="_blank" rel="noopener noreferrer"' : ''} style="display:block;">${imgTag}</a>` : imgTag;
       return `<div style="padding:${pV}px ${pH}px;display:flex;justify-content:${justify};${block.bgColor ? `background:${block.bgColor};` : ""}">${wrapped}</div>`;
     }
 
@@ -649,11 +660,23 @@ ${cells}
       const links = block.socialLinks ?? [];
       const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", X: "#000000", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e", Website: "#6b7280" };
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const align = block.socialAlign || "center";
+      const iconSize = block.socialIconSize || "md";
+      const iconStyle = block.socialIconStyle || "button";
+      const [fz, padV, padH, radius] =
+        iconSize === "sm" ? [11, 5, 12, 6] :
+        iconSize === "lg" ? [14, 10, 20, 8] :
+        [12, 7, 16, 6];
       const btns = links.map(l => {
         const col = SOCIAL_COLORS[l.platform] || "#6b7280";
-        return `<a href="${l.url || "#"}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:${col};color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;text-decoration:none;margin:4px;">${l.platform}</a>`;
+        const aStyle = iconStyle === "pill"
+          ? `background:${col};color:#fff;border-radius:999px;border:none;`
+          : iconStyle === "outline"
+          ? `background:transparent;color:${col};border:2px solid ${col};border-radius:${radius}px;`
+          : `background:${col};color:#fff;border-radius:${radius}px;border:none;`;
+        return `<a href="${l.url || "#"}" target="_blank" rel="noopener noreferrer" style="display:inline-block;${aStyle}font-size:${fz}px;font-weight:600;padding:${padV}px ${padH}px;text-decoration:none;margin:4px;">${l.platform}</a>`;
       }).join("");
-      return `<div style="padding:${pV}px ${pH}px;text-align:center;${block.bgColor ? `background:${block.bgColor};` : ""}">${btns || "<span style='color:#6b7280;font-size:12px;'>Add social links in the panel</span>"}</div>`;
+      return `<div style="padding:${pV}px ${pH}px;text-align:${align};${block.bgColor ? `background:${block.bgColor};` : ""}">${btns || "<span style='color:#6b7280;font-size:12px;'>Add social links in the panel</span>"}</div>`;
     }
 
     case "divider": {
@@ -1629,13 +1652,14 @@ function BlockLiveView({
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       const align = block.imageAlign || "center";
       const justify = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
+      const shadowStyle = block.imageShadow === "soft" ? "0 4px 24px rgba(0,0,0,0.18)" : block.imageShadow === "hard" ? "4px 6px 0 rgba(0,0,0,0.35)" : "none";
       return (
         <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", display: "flex", justifyContent: justify }}>
           {block.imageUrl ? (
             <img
               src={block.imageUrl}
               alt={block.imageAlt || ""}
-              style={{ maxWidth: `${block.imageWidth || 100}%`, height: "auto", borderRadius: `${block.imageBorderRadius ?? 8}px`, display: "block" }}
+              style={{ maxWidth: `${block.imageWidth || 100}%`, height: "auto", borderRadius: `${block.imageBorderRadius ?? 8}px`, display: "block", boxShadow: shadowStyle }}
             />
           ) : (
             <div style={{ background: "#27272a", border: "1px dashed #3f3f46", borderRadius: `${block.imageBorderRadius ?? 8}px`, height: 120, width: `${block.imageWidth || 100}%`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1753,15 +1777,31 @@ function BlockLiveView({
       const SOCIAL_COLORS: Record<string, string> = { LinkedIn: "#0A66C2", Twitter: "#1DA1F2", X: "#000000", Instagram: "#E1306C", Facebook: "#1877F2", YouTube: "#FF0000", GitHub: "#24292e", Website: "#6b7280" };
       const links = block.socialLinks ?? [];
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const align = block.socialAlign || "center";
+      const iconSize = block.socialIconSize || "md";
+      const iconStyle = block.socialIconStyle || "button";
+      const [fz, padV, padH, radius] =
+        iconSize === "sm" ? [11, 5, 12, 6] :
+        iconSize === "lg" ? [14, 10, 20, 8] :
+        [12, 7, 16, 6];
+      const justifyContent = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
       return (
-        <div style={{ padding: `${pV}px ${pH}px`, textAlign: "center", background: block.bgColor || "transparent" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-            {links.length > 0 ? links.map((l, i) => (
-              <a key={i} href={l.url || "#"} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-block", background: SOCIAL_COLORS[l.platform] || "#6b7280", color: "#fff", fontSize: 12, fontWeight: 600, padding: "7px 14px", borderRadius: 6, textDecoration: "none" }}>
-                {l.platform}
-              </a>
-            )) : (
+        <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent }}>
+            {links.length > 0 ? links.map((l, i) => {
+              const col = SOCIAL_COLORS[l.platform] || "#6b7280";
+              const btnStyle: React.CSSProperties = iconStyle === "pill"
+                ? { background: col, color: "#fff", borderRadius: 999, border: "none" }
+                : iconStyle === "outline"
+                ? { background: "transparent", color: col, border: `2px solid ${col}`, borderRadius: radius }
+                : { background: col, color: "#fff", borderRadius: radius, border: "none" };
+              return (
+                <a key={i} href={l.url || "#"} target="_blank" rel="noopener noreferrer"
+                  style={{ display: "inline-block", ...btnStyle, fontSize: fz, fontWeight: 600, padding: `${padV}px ${padH}px`, textDecoration: "none" }}>
+                  {l.platform}
+                </a>
+              );
+            }) : (
               <span style={{ fontSize: 12, color: "#6b7280" }}>Add social links in the panel →</span>
             )}
           </div>
@@ -2018,20 +2058,26 @@ const FONT_SIZE_PRESETS = [10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 4
 
 const QUICK_COLORS = ["#ffffff","#f8fafc","#e5e7eb","#3ECF8E","#22c55e","#3b82f6","#6366f1","#8b5cf6","#f59e0b","#ef4444","#ec4899","#6b7280","#374151","#111827"];
 
-// ── Collapsible section accordion ────────────────────────────────────────────
+// ── Collapsible section — supports accordion mode via context ─────────────────
+
+const SectionOpenCtx = React.createContext<{ open: string | null; setOpen: (k: string | null) => void } | null>(null);
 
 function Section({ label, children, defaultOpen = true }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const ctx = React.useContext(SectionOpenCtx);
+  const [localOpen, setLocalOpen] = useState(defaultOpen && !ctx);
+  const open = ctx ? ctx.open === label : localOpen;
+  const toggle = () => {
+    if (ctx) ctx.setOpen(ctx.open === label ? null : label);
+    else setLocalOpen(v => !v);
+  };
   return (
     <div className="border-t border-zinc-800 first:border-t-0">
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-2.5 text-left"
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-5 py-2.5 text-left hover:bg-zinc-800/30 transition-colors"
       >
-        <p className="text-sm font-bold text-white select-none">
-          {label}
-        </p>
+        <p className="text-sm font-bold text-white select-none">{label}</p>
         <ChevronRight className={cn("w-3.5 h-3.5 text-zinc-600 transition-transform duration-150", open && "rotate-90")} />
       </button>
       {open && <div className="px-5 pb-5 space-y-3">{children}</div>}
@@ -2755,6 +2801,29 @@ export function BlockPropertiesPanel({
             ))}
           </div>
         </div>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Shadow</span>
+          <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8 flex-1">
+            {(["none", "soft", "hard"] as const).map(v => (
+              <button key={v} type="button" onClick={() => u({ imageShadow: v })}
+                className={cn("flex-1 h-full text-xs capitalize transition-colors",
+                  (block.imageShadow || "none") === v ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+        {block.imageLinkUrl && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-zinc-400">Open in new tab</span>
+            <button className="relative rounded-full transition-colors shrink-0"
+              style={{ width: 28, height: 14, backgroundColor: block.imageOpenNewTab !== false ? '#3ECF8E' : 'var(--border)' }}
+              onClick={() => u({ imageOpenNewTab: block.imageOpenNewTab === false ? true : false })}>
+              <span className="absolute bg-white rounded-full shadow-sm transition-all"
+                style={{ width: 10, height: 10, top: 2, left: block.imageOpenNewTab !== false ? 'calc(100% - 12px)' : 2 }} />
+            </button>
+          </div>
+        )}
       </Section>
     );
 
@@ -2951,24 +3020,64 @@ export function BlockPropertiesPanel({
       const links = block.socialLinks ?? [];
       return (
         <Section label="Social Links">
-          {links.map((l, i) => (
-            <div key={i} className="space-y-1 p-2 rounded-lg border border-border/40 bg-muted/10">
-              <div className="flex items-center gap-1.5">
-                <select value={l.platform} onChange={e => { const s = [...links]; s[i] = { ...s[i]!, platform: e.target.value }; u({ socialLinks: s }); }}
-                  className="flex-1 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none">
-                  {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <button type="button" onClick={() => u({ socialLinks: links.filter((_, j) => j !== i) })} className="text-destructive/50 hover:text-destructive">
-                  <Trash2 className="w-3 h-3" />
-                </button>
+          <div className="grid grid-cols-3 gap-1.5 pb-1">
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500 select-none">Align</p>
+              <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-7">
+                {(["left", "center", "right"] as const).map(a => (
+                  <button key={a} type="button" onClick={() => u({ socialAlign: a })}
+                    className={cn("flex-1 h-full flex items-center justify-center transition-colors",
+                      (block.socialAlign || "center") === a ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
+                    {a === "left" ? <AlignLeft className="w-2.5 h-2.5" /> : a === "center" ? <AlignCenter className="w-2.5 h-2.5" /> : <AlignRight className="w-2.5 h-2.5" />}
+                  </button>
+                ))}
               </div>
-              <input value={l.url} onChange={e => { const s = [...links]; s[i] = { ...s[i]!, url: e.target.value }; u({ socialLinks: s }); }}
-                placeholder="https://linkedin.com/in/…" className={`${INP} font-mono text-[10px]`} />
             </div>
-          ))}
-          <button type="button" onClick={() => u({ socialLinks: [...links, { platform: "LinkedIn", url: "" }] })} className="flex items-center gap-1 text-xs text-[#3ECF8E] font-medium hover:text-[#34b87a]">
-            <Plus className="w-3 h-3" /> Add Platform
-          </button>
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500 select-none">Size</p>
+              <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-7">
+                {(["sm", "md", "lg"] as const).map(s => (
+                  <button key={s} type="button" onClick={() => u({ socialIconSize: s })}
+                    className={cn("flex-1 h-full text-[9px] font-bold uppercase transition-colors",
+                      (block.socialIconSize || "md") === s ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500 select-none">Style</p>
+              <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-7">
+                {(["button", "pill", "outline"] as const).map(s => (
+                  <button key={s} type="button" onClick={() => u({ socialIconStyle: s })}
+                    className={cn("flex-1 h-full text-[8px] font-bold capitalize transition-colors",
+                      (block.socialIconStyle || "button") === s ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-zinc-800 pt-2 space-y-2">
+            {links.map((l, i) => (
+              <div key={i} className="space-y-1 p-2 rounded-lg border border-border/40 bg-muted/10">
+                <div className="flex items-center gap-1.5">
+                  <select value={l.platform} onChange={e => { const s = [...links]; s[i] = { ...s[i]!, platform: e.target.value }; u({ socialLinks: s }); }}
+                    className="flex-1 text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground focus:outline-none">
+                    {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <button type="button" onClick={() => u({ socialLinks: links.filter((_, j) => j !== i) })} className="text-destructive/50 hover:text-destructive">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+                <input value={l.url} onChange={e => { const s = [...links]; s[i] = { ...s[i]!, url: e.target.value }; u({ socialLinks: s }); }}
+                  placeholder="https://linkedin.com/in/…" className={`${INP} font-mono text-[10px]`} />
+              </div>
+            ))}
+            <button type="button" onClick={() => u({ socialLinks: [...links, { platform: "LinkedIn", url: "" }] })} className="flex items-center gap-1 text-xs text-[#3ECF8E] font-medium hover:text-[#34b87a]">
+              <Plus className="w-3 h-3" /> Add Platform
+            </button>
+          </div>
         </Section>
       );
     }
@@ -3333,7 +3442,24 @@ export function BlockPropertiesPanel({
     </Section>
   ) : null;
 
+  const defaultOpenSection = (() => {
+    switch (type) {
+      case "image": return "Image";
+      case "cta_button": return "Button";
+      case "social": return "Social Links";
+      case "video": return "Video";
+      case "iframe": return "Embed";
+      case "table": return "Table";
+      case "divider": return "Divider";
+      case "spacer": return "Spacer";
+      case "two_column": return "Content";
+      default: return "Content";
+    }
+  })();
+  const [openSection, setOpenSection] = useState<string | null>(defaultOpenSection);
+
   return (
+    <SectionOpenCtx.Provider value={{ open: openSection, setOpen: setOpenSection }}>
     <div className="flex flex-col min-h-0">
       {/* Block type badge */}
       <div className="px-5 py-3 border-b border-zinc-800 shrink-0">
@@ -3359,7 +3485,7 @@ export function BlockPropertiesPanel({
       {borderSection}
       {spacingSection}
       {/* Block Border section */}
-      <Section label="Block Border" defaultOpen={false}>
+      <Section label="Block Border">
         <div className="space-y-2.5">
           <div className="grid grid-cols-2 gap-2">
             <div className={`flex items-center ${PILL_FULL} overflow-hidden`} style={{ height: '28px' }}>
@@ -3427,6 +3553,7 @@ export function BlockPropertiesPanel({
         </Section>
       )}
     </div>
+    </SectionOpenCtx.Provider>
   );
 }
 
@@ -3558,13 +3685,33 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
         setContextMenu({ x: e.clientX, y: e.clientY });
       }}
     >
+      {/* Block type badge — outside overflow-hidden so it's always visible */}
+      {isSelected && (
+        <div className="absolute top-1.5 left-2 z-30 flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-900/85 backdrop-blur-sm border border-[#3ECF8E]/40 text-[8px] font-bold uppercase tracking-widest text-[#3ECF8E] pointer-events-none select-none shadow-sm">
+          {BLOCK_LABELS[block.type]}
+        </div>
+      )}
+
+      {/* Floating controls — outside overflow-hidden so never clipped on small blocks */}
+      <div className={cn(
+        "absolute -top-0 right-1.5 z-30 flex items-center gap-0.5 px-1 py-0.5 rounded-b-md bg-zinc-900/90 border border-t-0 border-zinc-700/70 shadow-sm transition-opacity pointer-events-auto",
+        isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+      )}>
+        <button type="button" onClick={e => { e.stopPropagation(); onDuplicate(); }} className="p-0.5 text-zinc-500 hover:text-[#3ECF8E] transition-colors" title="Duplicate (⌘D)">
+          <Copy className="w-3 h-3" />
+        </button>
+        <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors" title="Delete (⌫)">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+
       {/* Card — full-width, Figma-style selection ring */}
       <div
         className={cn(
           "relative overflow-hidden transition-all duration-100",
           isSelected
             ? "outline outline-2 outline-[#3ECF8E] shadow-[0_0_0_4px_rgba(62,207,142,0.12)]"
-            : "outline outline-0 outline-transparent hover:outline hover:outline-1 hover:outline-[#3ECF8E]/25",
+            : "outline outline-0 outline-transparent hover:outline hover:outline-2 hover:outline-[#3ECF8E]/50",
         )}
         style={{
           border: (block.borderWidth ?? 0) > 0 ? `${block.borderWidth}px solid ${block.borderColor || '#3f3f46'}` : undefined,
@@ -3580,26 +3727,6 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
           title="Drag to reorder"
         >
           <GripVertical className="w-3 h-3 text-zinc-300 drop-shadow-sm" />
-        </div>
-
-        {/* Block type badge — only when selected, top-left */}
-        {isSelected && (
-          <div className="absolute top-0 left-0 z-20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest bg-[#3ECF8E] text-zinc-900 pointer-events-none select-none rounded-br-md">
-            {BLOCK_LABELS[block.type]}
-          </div>
-        )}
-
-        {/* Floating controls — top right, appear on hover/select */}
-        <div className={cn(
-          "absolute top-1.5 right-1.5 z-20 flex items-center gap-0.5 px-1 py-0.5 rounded-md bg-zinc-900/90 border border-zinc-700/70 shadow-sm transition-opacity pointer-events-auto",
-          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}>
-          <button type="button" onClick={e => { e.stopPropagation(); onDuplicate(); }} className="p-0.5 text-zinc-500 hover:text-[#3ECF8E] transition-colors" title="Duplicate (⌘D)">
-            <Copy className="w-3 h-3" />
-          </button>
-          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors" title="Delete (⌫)">
-            <Trash2 className="w-3 h-3" />
-          </button>
         </div>
 
         {/* Selection overlay — intercepts single click to select without entering edit mode */}
