@@ -299,6 +299,8 @@ export function DraggableField({
         top: scaledY,
         width: scaledWidth,
         height: scaledHeight,
+        transform: field.rotation ? `rotate(${field.rotation}deg)` : undefined,
+        transformOrigin: 'center',
         ...(field.type !== 'image' ? {
           fontSize: scaledFontSize,
           fontFamily: field.fontFamily,
@@ -306,7 +308,7 @@ export function DraggableField({
           fontWeight: field.fontWeight,
           fontStyle: field.fontStyle,
           textAlign: field.textAlign,
-          padding: '4px 8px',
+          padding: `${(field.bgPaddingV ?? 4) * scale}px ${(field.bgPaddingH ?? 8) * scale}px`,
           backgroundColor: field.backgroundColor || undefined,
         } : {}),
         display: 'flex',
@@ -318,7 +320,9 @@ export function DraggableField({
           ? '2px solid var(--primary)'
           : undefined,
         outlineOffset: (isSelected || isMultiSelected) ? '1px' : '0px',
-        borderRadius: field.type === 'image' ? (field.cornerRadius ? `${field.cornerRadius}px` : '2px') : '2px',
+        borderRadius: field.type === 'image'
+          ? (field.cornerRadius ? `${field.cornerRadius}px` : '2px')
+          : (field.bgCornerRadius ? `${field.bgCornerRadius * scale}px` : '2px'),
         opacity: field.locked ? 0.75 : 1,
       }}
       onMouseDown={handleMouseDown}

@@ -156,6 +156,12 @@ export interface EmailBlock {
   iframeSandbox?: string;
   iframeAllow?: string;
   iframeFallbackText?: string;
+  // Block-level border (top / bottom)
+  blockBorderTop?: number;     // px, 0–8
+  blockBorderBottom?: number;  // px, 0–8
+  blockBorderColor?: string;   // hex
+  // Hide on mobile
+  hideOnMobile?: boolean;
 }
 
 export interface EmailBackground {
@@ -712,19 +718,44 @@ ${cells}
 
 const BLOCKS_JSON_MARKER = "__blocks_v1__";
 
-export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground): string {
+export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground, preheader?: string, utm?: { source?: string; medium?: string; campaign?: string }): string {
   if (!blocks.length) return "";
+
+  // Determine if any block needs mobile-hide support
+  const needsMobileHide = blocks.some(b => b.hideOnMobile);
+  const mobileHideStyle = needsMobileHide
+    ? `<style>@media only screen and (max-width:600px){.mobile-hide{display:none!important;max-height:0!important;overflow:hidden!important;}}</style>`
+    : "";
+
   const inner = blocks.map(block => {
     const html = blockToHtml(block);
+    // Apply block-level border wrapper
+    const borderStyle = [
+      block.blockBorderTop ? `border-top:${block.blockBorderTop}px solid ${block.blockBorderColor || '#3f3f46'};` : '',
+      block.blockBorderBottom ? `border-bottom:${block.blockBorderBottom}px solid ${block.blockBorderColor || '#3f3f46'};` : '',
+    ].join('');
     const bw = block.borderWidth ?? 0;
     const br = block.borderRadius ?? 0;
+    let wrapped = html;
     if (bw > 0 || br > 0) {
       const bStr = bw > 0 ? `border:${bw}px solid ${block.borderColor || '#3f3f46'};` : '';
       const rStr = br > 0 ? `border-radius:${br}px;overflow:hidden;` : '';
-      return `<div style="${bStr}${rStr}">${html}</div>`;
+      wrapped = `<div style="${bStr}${rStr}">${wrapped}</div>`;
     }
-    return html;
+    if (borderStyle) {
+      wrapped = `<div style="${borderStyle}">${wrapped}</div>`;
+    }
+    // Apply hide-on-mobile wrapper
+    if (block.hideOnMobile) {
+      wrapped = `<!--[if !mso]><!-->
+<div class="mobile-hide" style="display:block;">
+  ${wrapped}
+</div>
+<!--<![endif]-->`;
+    }
+    return wrapped;
   }).join("\n");
+
   const wrapperBg = (() => {
     if (!emailBg || !emailBg.type || emailBg.type === "solid")
       return `background:${emailBg?.color || "#ffffff"};`;
@@ -740,11 +771,34 @@ export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground): s
     }
     return "background:#ffffff;";
   })();
+
+  // Preheader hidden div
+  const preheaderHtml = preheader
+    ? `<div style="display:none;font-size:1px;color:#fefefe;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>`
+    : "";
+
   // Embed blocks as a JSON comment so the editor can restore them on next open
   const jsonComment = `<!-- ${BLOCKS_JSON_MARKER}:${JSON.stringify(blocks)} -->`;
-  return `${jsonComment}\n<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; ${wrapperBg} border-radius: 10px; overflow: hidden; border: 1px solid #2d2d2d;">
+  let fullHtml = `${jsonComment}\n${mobileHideStyle}<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; ${wrapperBg} border-radius: 10px; overflow: hidden; border: 1px solid #2d2d2d;">
+${preheaderHtml}
 ${inner}
 </div>`;
+
+  // Apply UTM params to all http(s) hrefs
+  if (utm && (utm.source || utm.medium || utm.campaign)) {
+    const utmStr = [
+      utm.source ? `utm_source=${encodeURIComponent(utm.source)}` : '',
+      utm.medium ? `utm_medium=${encodeURIComponent(utm.medium)}` : '',
+      utm.campaign ? `utm_campaign=${encodeURIComponent(utm.campaign)}` : '',
+    ].filter(Boolean).join('&');
+
+    fullHtml = fullHtml.replace(/href="(https?:\/\/[^"]+)"/g, (_, url) => {
+      const sep = url.includes('?') ? '&' : '?';
+      return `href="${url}${sep}${utmStr}"`;
+    });
+  }
+
+  return fullHtml;
 }
 
 /** Extract blocks from the embedded JSON comment in stored HTML. Returns null if not found. */
@@ -3287,11 +3341,47 @@ export function BlockPropertiesPanel({
           {BLOCK_LABELS[block.type]}
         </span>
       </div>
+      {/* Hide on Mobile toggle */}
+      <div className="flex items-center justify-between px-5 py-2.5 border-b border-zinc-800">
+        <span className="text-sm text-zinc-400">Hide on Mobile</span>
+        <button
+          className="relative rounded-full transition-colors shrink-0"
+          style={{ width: '28px', height: '14px', backgroundColor: block.hideOnMobile ? '#3ECF8E' : 'var(--border)' }}
+          onClick={() => u({ hideOnMobile: !block.hideOnMobile })}
+        >
+          <span className="absolute bg-white rounded-full shadow-sm transition-all"
+            style={{ width: '10px', height: '10px', top: '2px', left: block.hideOnMobile ? 'calc(100% - 12px)' : '2px' }} />
+        </button>
+      </div>
       {contentSection}
       {typoSection}
       {colorsSection}
       {borderSection}
       {spacingSection}
+      {/* Block Border section */}
+      <Section label="Block Border" defaultOpen={false}>
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <div className={`flex items-center ${PILL_FULL} overflow-hidden`} style={{ height: '28px' }}>
+              <span className="text-[10px] text-muted-foreground/60 shrink-0 px-2">Top</span>
+              <input type="number" min={0} max={8} value={block.blockBorderTop ?? 0}
+                onChange={e => u({ blockBorderTop: Number(e.target.value) })}
+                className="flex-1 bg-transparent text-xs text-zinc-200 outline-none" />
+              <span className="text-[10px] text-zinc-500 pr-1.5">px</span>
+            </div>
+            <div className={`flex items-center ${PILL_FULL} overflow-hidden`} style={{ height: '28px' }}>
+              <span className="text-[10px] text-muted-foreground/60 shrink-0 px-2">Bottom</span>
+              <input type="number" min={0} max={8} value={block.blockBorderBottom ?? 0}
+                onChange={e => u({ blockBorderBottom: Number(e.target.value) })}
+                className="flex-1 bg-transparent text-xs text-zinc-200 outline-none" />
+              <span className="text-[10px] text-zinc-500 pr-1.5">px</span>
+            </div>
+          </div>
+          {(block.blockBorderTop || block.blockBorderBottom) ? (
+            <ColorRow label="Color" value={block.blockBorderColor || '#3f3f46'} onChange={v => u({ blockBorderColor: v })} />
+          ) : null}
+        </div>
+      </Section>
       {/* Email background — always accessible even when a block is selected */}
       {onEmailBgChange && (
         <Section label="Email Background" defaultOpen={false}>

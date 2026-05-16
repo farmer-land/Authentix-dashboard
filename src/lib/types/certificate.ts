@@ -80,6 +80,14 @@ export interface CertificateField {
   locked?: boolean;           // Prevents drag/resize when true
   zIndex?: number;            // Layer order (higher = on top)
   lockAspectRatio?: boolean;  // For image fields: keep width/height proportional
+
+  // Rotation
+  rotation?: number;          // degrees, 0-359
+
+  // Background padding & corner radius (text fields)
+  bgPaddingH?: number;        // horizontal bg padding px
+  bgPaddingV?: number;        // vertical bg padding px
+  bgCornerRadius?: number;    // corner radius for text background
 }
 
 // Template configuration

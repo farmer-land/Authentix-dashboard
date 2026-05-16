@@ -479,11 +479,18 @@ interface RightPanelProps {
   onSnapToggle?: () => void;
   pdfWidth?: number;
   pdfHeight?: number;
+  // Align to canvas
+  onAlignField?: (alignment: 'left' | 'center-h' | 'right' | 'top' | 'center-v' | 'bottom') => void;
+  // Z-order
+  onBringForward?: () => void;
+  onSendBackward?: () => void;
+  // Variable mapping
+  columnHeaders?: string[];
 }
 
 type EffectType = 'none' | 'drop_shadow' | 'layer_blur' | 'background_blur';
 
-export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale, onScaleChange, onFitToScreen, snapToGrid, onSnapToggle, pdfWidth, pdfHeight }: RightPanelProps) {
+export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale, onScaleChange, onFitToScreen, snapToGrid, onSnapToggle, pdfWidth, pdfHeight, onAlignField, onBringForward, onSendBackward, columnHeaders }: RightPanelProps) {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<ColorTarget>('main');
   const [pickerInitialPos, setPickerInitialPos] = useState({ x: 0, y: 0 });
@@ -802,7 +809,53 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           <NumBox label="X" value={selectedField.x} onChange={(v) => onFieldUpdate({ x: v })} icon={<MoveHorizontal className="w-3.5 h-3.5" />} />
           <NumBox label="Y" value={selectedField.y} onChange={(v) => onFieldUpdate({ y: v })} icon={<MoveVertical className="w-3.5 h-3.5" />} />
         </div>
+        <div className="flex items-center gap-2">
+          <NumBox label="Rotation" value={selectedField.rotation ?? 0} min={-360} max={360} unit="°"
+            onChange={(v) => onFieldUpdate({ rotation: ((v % 360) + 360) % 360 })} className="flex-1" />
+          <button title="Rotate -90°" className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors text-xs font-mono"
+            onClick={() => onFieldUpdate({ rotation: (((selectedField.rotation ?? 0) - 90) % 360 + 360) % 360 })}>-90°</button>
+          <button title="Rotate +90°" className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors text-xs font-mono"
+            onClick={() => onFieldUpdate({ rotation: ((selectedField.rotation ?? 0) + 90) % 360 })}>+90°</button>
+          <button title="Reset rotation" className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+            onClick={() => onFieldUpdate({ rotation: 0 })}>
+            <RefreshCw className="w-3 h-3" />
+          </button>
+        </div>
       </Section>
+
+      {/* ── Align to Canvas ── */}
+      {selectedField && (
+        <Section label="Align to Canvas" defaultOpen={false}>
+          <div className="space-y-2">
+            <p className="text-[9px] text-muted-foreground/50 select-none">Horizontal</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('left')}>Left</button>
+              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('center-h')}>Center H</button>
+              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('right')}>Right</button>
+            </div>
+            <p className="text-[9px] text-muted-foreground/50 select-none">Vertical</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('top')}>Top</button>
+              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('center-v')}>Center V</button>
+              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('bottom')}>Bottom</button>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* ── Arrange ── */}
+      {selectedField && (
+        <Section label="Arrange" defaultOpen={false}>
+          <div className="flex items-center gap-2">
+            <button className={`${btn(false)} flex-1 text-xs gap-1.5 flex items-center justify-center`} onClick={onBringForward}>
+              <span>▲</span> Bring Forward
+            </button>
+            <button className={`${btn(false)} flex-1 text-xs gap-1.5 flex items-center justify-center`} onClick={onSendBackward}>
+              <span>▼</span> Send Backward
+            </button>
+          </div>
+        </Section>
+      )}
 
       {/* ── Canvas controls (always visible) ── */}
       {canvasControls}
@@ -1209,6 +1262,21 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
               </div>
             </div>
 
+            {/* Background padding + corner radius */}
+            {selectedField.backgroundColor && (
+              <div className="space-y-2">
+                <p className="text-[9px] text-muted-foreground/50 select-none">Background Padding</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumBox label="Horiz" value={selectedField.bgPaddingH ?? 8} min={0} max={60}
+                    onChange={(v) => onFieldUpdate({ bgPaddingH: v })} unit="px" />
+                  <NumBox label="Vert" value={selectedField.bgPaddingV ?? 4} min={0} max={60}
+                    onChange={(v) => onFieldUpdate({ bgPaddingV: v })} unit="px" />
+                </div>
+                <NumBox label="Corner Radius" value={selectedField.bgCornerRadius ?? 0} min={0} max={100}
+                  onChange={(v) => onFieldUpdate({ bgCornerRadius: v })} unit="px" className="w-full" />
+              </div>
+            )}
+
             {/* Text shadow */}
             <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1375,6 +1443,34 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       {/* ── Content ── */}
       <Section label="Content">
         <div className="space-y-2">
+          {/* Data Column (variable mapping) */}
+          <div>
+            <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Data Column</p>
+            {columnHeaders && columnHeaders.length > 0 ? (
+              <div className={`flex items-center ${INP} overflow-hidden`} style={{ height: '28px' }}>
+                <select
+                  value={selectedField.dataKey ?? ''}
+                  onChange={(e) => onFieldUpdate({ dataKey: e.target.value || undefined })}
+                  className="flex-1 min-w-0 bg-transparent text-xs outline-none text-foreground px-2"
+                >
+                  <option value="">— auto-detect —</option>
+                  {columnHeaders.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className={`flex items-center gap-1 ${INP} h-7 px-2`}>
+                <input
+                  value={selectedField.dataKey ?? ''}
+                  onChange={(e) => onFieldUpdate({ dataKey: e.target.value || undefined })}
+                  className="flex-1 min-w-0 bg-transparent text-xs outline-none"
+                  placeholder="Column name from spreadsheet"
+                />
+              </div>
+            )}
+            <p className="text-[9px] text-muted-foreground/40 mt-1 select-none">Override which column populates this field</p>
+          </div>
           {isDateField && (
             <Select
               value={selectedField.dateFormat || 'MMMM dd, yyyy'}

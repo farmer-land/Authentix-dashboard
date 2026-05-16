@@ -114,6 +114,17 @@ export default function EmailTemplateEditorPage() {
   // Configured delivery integrations for sender name dropdown
   const [senderOptions, setSenderOptions] = useState<{ name: string; email: string; isDefault?: boolean }[]>([]);
 
+  // Feature 6: Preheader text
+  const [preheader, setPreheader] = useState('');
+
+  // Feature 7: Reply-To Address (stored in state only, not sent to backend)
+  const [replyTo, setReplyTo] = useState('');
+
+  // Feature 10: UTM parameters
+  const [utmSource, setUtmSource] = useState('');
+  const [utmMedium, setUtmMedium] = useState('email');
+  const [utmCampaign, setUtmCampaign] = useState('');
+
   // Right panel for block properties
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(288);
@@ -335,11 +346,11 @@ export default function EmailTemplateEditorPage() {
     updateHistoryFlags();
 
     setBlocks(newBlocks);
-    const html = blocksToHtml(newBlocks, emailBg);
+    const html = blocksToHtml(newBlocks, emailBg, preheader, { source: utmSource, medium: utmMedium, campaign: utmCampaign });
     setBody(html);
     syncVariables(html, subject);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, syncVariables, emailBg]);
+  }, [subject, syncVariables, emailBg, preheader, utmSource, utmMedium, utmCampaign]);
 
   const undo = useCallback(() => {
     const h = historyRef.current;
@@ -347,12 +358,12 @@ export default function EmailTemplateEditorPage() {
     const prev = h.past.pop()!;
     h.future.unshift([...blocksRef.current]);
     updateHistoryFlags();
-    const html = blocksToHtml(prev, emailBg);
+    const html = blocksToHtml(prev, emailBg, preheader, { source: utmSource, medium: utmMedium, campaign: utmCampaign });
     setBlocks(prev);
     setBody(html);
     syncVariables(html, subject);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, syncVariables, emailBg]);
+  }, [subject, syncVariables, emailBg, preheader, utmSource, utmMedium, utmCampaign]);
 
   const redo = useCallback(() => {
     const h = historyRef.current;
@@ -360,12 +371,12 @@ export default function EmailTemplateEditorPage() {
     const next = h.future.shift()!;
     h.past.push([...blocksRef.current]);
     updateHistoryFlags();
-    const html = blocksToHtml(next, emailBg);
+    const html = blocksToHtml(next, emailBg, preheader, { source: utmSource, medium: utmMedium, campaign: utmCampaign });
     setBlocks(next);
     setBody(html);
     syncVariables(html, subject);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, syncVariables]);
+  }, [subject, syncVariables, emailBg, preheader, utmSource, utmMedium, utmCampaign]);
 
   const addBlock = useCallback((type: BlockType) => {
     const b = defaultBlock(type);
@@ -379,7 +390,7 @@ export default function EmailTemplateEditorPage() {
       if (h.past.length > 60) h.past.shift();
       h.future = [];
       updateHistoryFlags();
-      const html = blocksToHtml(newBlocks, emailBg);
+      const html = blocksToHtml(newBlocks, emailBg, preheader, { source: utmSource, medium: utmMedium, campaign: utmCampaign });
       setBody(html);
       syncVariables(html, subject);
       return newBlocks;
@@ -389,11 +400,11 @@ export default function EmailTemplateEditorPage() {
       document.getElementById("block-canvas")?.scrollTo({ top: 99999, behavior: "smooth" });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, syncVariables]);
+  }, [subject, syncVariables, emailBg, preheader, utmSource, utmMedium, utmCampaign]);
 
   const handleStartFresh = () => {
     const starters = STARTER_BLOCKS.map(b => ({ ...b, id: nanoid(8) }));
-    const html = blocksToHtml(starters, emailBg);
+    const html = blocksToHtml(starters, emailBg, preheader, { source: utmSource, medium: utmMedium, campaign: utmCampaign });
     const h = historyRef.current;
     h.past.push([...blocksRef.current]);
     h.future = [];
@@ -704,6 +715,46 @@ export default function EmailTemplateEditorPage() {
                           </button>
                         ))}
                       </div>
+                    </div>
+
+                    {/* Preheader Text */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Preheader Text</p>
+                      <input
+                        value={preheader}
+                        onChange={e => setPreheader(e.target.value)}
+                        placeholder="Preview text shown in inbox below the subject…"
+                        maxLength={200}
+                        className="w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+                      />
+                      <p className="text-[9px] text-muted-foreground/60">Max 200 chars. Fills inbox preview line without showing in the email body.</p>
+                    </div>
+
+                    {/* Reply-To Address */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Reply-To Address</p>
+                      <input
+                        value={replyTo}
+                        onChange={e => setReplyTo(e.target.value)}
+                        type="email"
+                        placeholder="support@yourcompany.com"
+                        className="w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40"
+                      />
+                      <p className="text-[9px] text-muted-foreground/60">Where replies go. Defaults to integration reply-to setting.</p>
+                    </div>
+
+                    {/* UTM Tracking */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">UTM Tracking</p>
+                      <div className="space-y-1.5">
+                        <input value={utmSource} onChange={e => setUtmSource(e.target.value)} placeholder="Source (e.g. authentix)"
+                          className="w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40" />
+                        <input value={utmMedium} onChange={e => setUtmMedium(e.target.value)} placeholder="Medium (e.g. email)"
+                          className="w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40" />
+                        <input value={utmCampaign} onChange={e => setUtmCampaign(e.target.value)} placeholder="Campaign name"
+                          className="w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40" />
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/60">Appended to all links in this email.</p>
                     </div>
 
                     {/* Template toggles */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { JSONContent } from "@tiptap/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -168,11 +168,13 @@ function CampaignWizard({
   const [sending, setSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [integrationOptions, setIntegrationOptions] = useState<{ id: string; name: string; email: string; replyTo: string }[]>([]);
+  const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>('');
 
   const [w, setW] = useState<WizardState>({
     name: "",
     email_type: "lifecycle",
-    from_name: "DigiCertificates",
+    from_name: "",
     from_email: "",
     reply_to: "",
     recipient_mode: "csv",
@@ -188,6 +190,29 @@ function CampaignWizard({
 
   const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setW(prev => ({ ...prev, [key]: value }));
+
+  // Load configured email integrations and auto-populate sender fields
+  useEffect(() => {
+    api.delivery.listIntegrations().then(list => {
+      const active = list.filter(i => i.channel === 'email' && i.is_active);
+      if (active.length === 0) return;
+      const opts = active.map(i => ({
+        id: i.id,
+        name: i.from_name ?? i.display_name,
+        email: i.from_email ?? '',
+        replyTo: i.reply_to ?? '',
+      }));
+      setIntegrationOptions(opts);
+      const def = active.find(i => i.is_default) ?? active[0]!;
+      setSelectedIntegrationId(def.id);
+      setW(prev => ({
+        ...prev,
+        from_name: def.from_name ?? def.display_name,
+        from_email: def.from_email ?? '',
+        reply_to: def.reply_to ?? '',
+      }));
+    }).catch(() => {});
+  }, []);
 
   // ── File upload ────────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file: File) => {
@@ -359,19 +384,52 @@ function CampaignWizard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>From name <span className="text-red-500">*</span></Label>
-          <Input value={w.from_name} onChange={e => set("from_name", e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>From email <span className="text-red-500">*</span></Label>
-          <Input
-            placeholder="hello@yourdomain.com"
-            value={w.from_email}
-            onChange={e => set("from_email", e.target.value)}
-          />
-        </div>
+      <div className="space-y-1.5">
+        <Label>Send From <span className="text-red-500">*</span></Label>
+        {integrationOptions.length > 0 ? (
+          <Select
+            value={selectedIntegrationId}
+            onValueChange={(id) => {
+              const opt = integrationOptions.find(o => o.id === id);
+              if (!opt) return;
+              setSelectedIntegrationId(id);
+              setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
+            }}
+          >
+            <SelectTrigger className="text-sm">
+              <SelectValue placeholder="Select sender…" />
+            </SelectTrigger>
+            <SelectContent>
+              {integrationOptions.map(opt => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <span className="flex items-center gap-2">
+                    <span>{opt.name}</span>
+                    <span className="text-xs text-muted-foreground">{opt.email}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              placeholder="Sender name"
+              value={w.from_name}
+              onChange={e => set("from_name", e.target.value)}
+            />
+            <Input
+              placeholder="hello@yourdomain.com"
+              value={w.from_email}
+              onChange={e => set("from_email", e.target.value)}
+            />
+          </div>
+        )}
+        {integrationOptions.length === 0 && (
+          <p className="text-[11px] text-muted-foreground">No email integrations configured. <a href="../settings/delivery" className="underline">Set one up</a> to auto-fill this.</p>
+        )}
+        {w.from_email && (
+          <p className="text-[11px] text-muted-foreground">Sending as: <span className="font-medium text-foreground">{w.from_name} &lt;{w.from_email}&gt;</span></p>
+        )}
       </div>
 
       <div className="space-y-1.5">

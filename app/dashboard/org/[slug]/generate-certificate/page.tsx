@@ -1865,6 +1865,22 @@ export default function GenerateCertificatePage() {
                     onSnapToggle={() => setSnapToGrid(v => !v)}
                     pdfWidth={template?.pdfWidth}
                     pdfHeight={template?.pdfHeight}
+                    onAlignField={(alignment) => {
+                      if (!selectedField || !template) return;
+                      const { width, height } = selectedField;
+                      const { pdfWidth, pdfHeight } = template;
+                      const updates: Partial<CertificateField> = {};
+                      if (alignment === 'left') updates.x = 0;
+                      else if (alignment === 'center-h') updates.x = (pdfWidth - width) / 2;
+                      else if (alignment === 'right') updates.x = pdfWidth - width;
+                      else if (alignment === 'top') updates.y = 0;
+                      else if (alignment === 'center-v') updates.y = (pdfHeight - height) / 2;
+                      else if (alignment === 'bottom') updates.y = pdfHeight - height;
+                      if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
+                    }}
+                    onBringForward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'front')}
+                    onSendBackward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'back')}
+                    columnHeaders={importedData?.headers}
                   />
                 </div>
               </div>
