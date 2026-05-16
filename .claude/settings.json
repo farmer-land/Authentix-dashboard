@@ -42,12 +42,19 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,'=',v\\) for k,v in d.items\\(\\) if 'SERVICE' in k]\")",
       "WebFetch(domain:razorpay.com)",
       "Bash(git cherry-pick *)",
-      "Bash(find /Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/broadcasts -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\))"
+      "Bash(find /Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/broadcasts -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\))",
+      "Bash(grep -v \"zinc-\\\\|muted\\\\|border-\\\\|rounded-\\\\|bg-white\\\\|bg-zinc\\\\|primary/\\\\|text-xs\\\\|text-sm\\\\|text-\\\\[0-9\\\\]\\\\|className\\\\|px-\\\\|py-\\\\|gap-\\\\|h-[0-9]\\\\|w-[0-9]\\\\|font-\\\\|tracking-\\\\|uppercase\\\\|leading\\\\|shrink-\\\\|select-none\\\\|transition\\\\|hover:\\\\|group\\\\|flex items\\\\|justify\\\\|space-y\\\\|mt-\\\\|mb-\\\\|ml-\\\\|mr-\\\\|pt-\\\\|pb-\\\\|pl-\\\\|pr-\\\\|overflow\\\\|cursor-\\\\|shadow\\\\|ring-\\\\|opacity\\\\|animate\\\\|block\\\\s*$\\\\|absolute\\\\|relative\\\\|fixed\\\\|sticky\\\\|inset\\\\|top-\\\\|bottom-\\\\|left-\\\\|right-\\\\|z-\\\\|col-\\\\|row-\\\\|grid\\\\|flex-\\\\|order-\\\\|aspect-\\\\|sr-only\\\\|not-sr\\\\|min-\\\\|max-\")",
+      "Bash(md5)",
+      "Bash(git show *)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/**)",
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-dashboard status)"
     ],
     "additionalDirectories": [
       "/Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/generate-certificate/components",
       "/Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/email-templates/[id]",
-      "/Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/settings"
+      "/Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/settings",
+      "/private/tmp"
     ]
   }
 }

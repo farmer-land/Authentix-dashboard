@@ -684,7 +684,7 @@ export default function TemplatesPage() {
                           return (
                             <span
                               className={cn(
-                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate inline-flex items-center",
+                                "text-xs border rounded-md px-1.5 py-0.5 max-w-30 truncate inline-flex items-center",
                                 categoryColors.bg,
                                 categoryColors.text,
                                 categoryColors.border
@@ -706,7 +706,7 @@ export default function TemplatesPage() {
                           return (
                             <span
                               className={cn(
-                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate inline-flex items-center",
+                                "text-xs border rounded-md px-1.5 py-0.5 max-w-30 truncate inline-flex items-center",
                                 subcategoryColors.bg,
                                 subcategoryColors.text,
                                 subcategoryColors.border
