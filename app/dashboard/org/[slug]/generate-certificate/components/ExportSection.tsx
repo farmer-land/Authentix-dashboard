@@ -840,6 +840,35 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
               </div>
             </div>
 
+            {/* Variable resolution warning — shown when template vars won't resolve for all recipients */}
+            {(() => {
+              const SYSTEM_VARS = new Set([
+                'recipient_name', 'organization_name', 'issue_date',
+                'verification_url', 'verification_url_encoded', 'certificate_image_url',
+              ]);
+              const normalizeKey = (k: string) => k.toLowerCase().replace(/\s+/g, '_');
+              const csvKeys = new Set([
+                ...(certFieldHeaders ?? []).map(normalizeKey),
+                ...(certFieldHeaders ?? []),
+              ]);
+              const unresolved = (selectedTemplate.variables ?? []).filter(
+                v => !SYSTEM_VARS.has(v) && !csvKeys.has(v),
+              );
+              if (unresolved.length === 0) return null;
+              return (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/50">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Variables may not resolve</p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                      {unresolved.map(v => <code key={v} className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded mr-1">{`{{${v}}}`}</code>)}
+                      {unresolved.length === 1 ? 'is' : 'are'} not in your CSV — {unresolved.length === 1 ? 'it' : 'they'} will appear literally in the email.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Advanced overrides toggle */}
             <button
               type="button"
@@ -994,22 +1023,28 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
                       <tr>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Recipient</th>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Reason</th>
                       </tr>
                     </thead>
                     <tbody>
                       {deliveryMessages.map(msg => (
                         <tr key={msg.id} className="border-t">
-                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[200px]">{msg.to_email ?? '—'}</td>
+                          <td className="px-3 py-2 text-muted-foreground truncate max-w-40">{msg.to_email ?? '—'}</td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${
                               msg.status === 'delivered' || msg.status === 'sent' || msg.status === 'read'
-                                ? 'bg-green-500/10 text-green-700'
+                                ? 'bg-green-500/10 text-green-700 dark:text-green-400'
                                 : msg.status === 'failed'
                                 ? 'bg-destructive/10 text-destructive'
                                 : 'bg-muted text-muted-foreground'
                             }`}>
                               {msg.status}
                             </span>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground/70 max-w-40 truncate" title={msg.error_message ?? undefined}>
+                            {msg.error_message ? (
+                              <span className="text-destructive/80">{msg.error_message.slice(0, 60)}{msg.error_message.length > 60 ? '…' : ''}</span>
+                            ) : '—'}
                           </td>
                         </tr>
                       ))}
