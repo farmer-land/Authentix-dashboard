@@ -1959,40 +1959,46 @@ const QUICK_COLORS = ["#ffffff","#f8fafc","#e5e7eb","#3ECF8E","#22c55e","#3b82f6
 function Section({ label, children, defaultOpen = true }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-border/30">
+    <div className="border-t border-zinc-800 first:border-t-0">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left group"
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left"
       >
-        <p className="text-xs font-semibold text-foreground/75 select-none group-hover:text-foreground transition-colors">
+        <p className="text-sm font-bold text-white select-none">
           {label}
         </p>
-        <ChevronRight className={cn("w-3 h-3 text-muted-foreground/40 transition-transform duration-150", open && "rotate-90")} />
+        <ChevronRight className={cn("w-3.5 h-3.5 text-zinc-600 transition-transform duration-150", open && "rotate-90")} />
       </button>
-      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+      {open && <div className="px-5 pb-5 space-y-3">{children}</div>}
     </div>
   );
 }
 
 // ── NumBox: compact labelled number input ─────────────────────────────────────
 
-function NumBox({ label, value, onChange, unit, min, max, step = 1, className = "" }: {
-  label: string; value: number; onChange: (v: number) => void;
-  unit?: string; min?: number; max?: number; step?: number; className?: string;
+function NumBox({ label, value, onChange, unit, min, max, step = 1, className = "", icon }: {
+  label?: string; value: number; onChange: (v: number) => void;
+  unit?: string; min?: number; max?: number; step?: number; className?: string; icon?: React.ReactNode;
 }) {
   return (
-    <div className={cn("flex items-center bg-muted/50 border border-border/50 rounded-lg h-8 px-2.5 gap-1.5", className)}>
-      <span className="text-[10px] text-muted-foreground/60 shrink-0 select-none">{label}</span>
+    <div className={cn("flex items-center bg-zinc-800/80 rounded-full px-3.5 gap-2 h-9", className)}>
+      {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}
+      {label && <span className="text-xs text-zinc-500 shrink-0 select-none">{label}</span>}
       <input
         type="number" value={value} min={min} max={max} step={step}
         onChange={e => onChange(parseFloat(e.target.value) || 0)}
-        className="flex-1 min-w-0 bg-transparent text-xs outline-none text-foreground"
+        className="flex-1 min-w-0 bg-transparent text-sm text-zinc-200 outline-none"
       />
-      {unit && <span className="text-[9px] text-muted-foreground/50 shrink-0 select-none">{unit}</span>}
+      {unit && <span className="text-sm text-zinc-500 shrink-0 select-none">{unit}</span>}
     </div>
   );
 }
+
+// Label | Pill row layout
+const MROW = "flex items-center gap-3";
+const MLABEL = "text-sm text-zinc-400 shrink-0 select-none" as const;
+const PILL_FULL = "flex items-center bg-zinc-800/80 rounded-full px-3.5 gap-2.5 h-9 flex-1 min-w-0" as const;
 
 // ── Background image position + size controls ────────────────────────────────
 
@@ -2254,10 +2260,11 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
   const [pickerPos, setPickerPos] = useState({ x: 0, y: 0 });
   const swatchRef = useRef<HTMLButtonElement>(null);
 
+  const displayHex = /^#[0-9a-fA-F]{3,8}$/.test(value) ? value.toUpperCase() : value || "#000000";
+
   const openPicker = () => {
     if (swatchRef.current) {
       const rect = swatchRef.current.getBoundingClientRect();
-      // Position picker to the LEFT of the right panel (232px wide + 12px gap)
       const pickerW = 240;
       const x = Math.max(8, rect.left - pickerW - 8);
       const y = Math.max(8, Math.min(rect.top - 24, window.innerHeight - 360));
@@ -2267,19 +2274,17 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
   };
 
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-foreground/70 select-none flex-1 min-w-0 truncate">{label}</span>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] font-mono text-muted-foreground/40 uppercase hidden">{value}</span>
-        <button
-          ref={swatchRef}
-          type="button"
-          onClick={openPicker}
-          className="w-6 h-6 rounded-lg border border-border/50 shadow-sm hover:ring-2 hover:ring-[#3ECF8E]/40 transition-all shrink-0"
-          style={{ background: value || "#ffffff" }}
-          title={`${label}: ${value}`}
-        />
-      </div>
+    <div className={MROW}>
+      <span className={cn(MLABEL, "w-[90px]")}>{label}</span>
+      <button
+        ref={swatchRef}
+        type="button"
+        onClick={openPicker}
+        className="flex items-center bg-zinc-800 rounded-full px-3 gap-2.5 h-9 flex-1 hover:bg-zinc-700 transition-colors"
+      >
+        <div className="w-5 h-5 rounded-[4px] shrink-0 border border-zinc-600" style={{ background: value || "#000000" }} />
+        <span className="text-sm text-zinc-200 font-mono uppercase truncate">{displayHex}</span>
+      </button>
       {pickerOpen && createPortal(
         <FloatingColorPicker
           color={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff"}
@@ -2438,7 +2443,7 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
     return q ? allFonts.filter(f => f.label.toLowerCase().includes(q)) : allFonts;
   }, [search, allFonts]);
 
-  const currentLabel = allFonts.find(f => f.value === value)?.label ?? (value ? value.split(",")[0] : "System");
+  const currentLabel = allFonts.find(f => f.value === value)?.label ?? (value ? value.split(",")[0]! : "System");
 
   const loadGoogleFont = (family: string) => {
     const id = `gf-${family.replace(/\s+/g, '-')}`;
@@ -2452,16 +2457,16 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
 
   return (
     <div className="relative" ref={ref}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] text-muted-foreground font-medium shrink-0">Font</span>
+      <div className={MROW}>
+        <span className={cn(MLABEL, "w-[90px]")}>Font</span>
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="text-[11px] border border-border/50 rounded-lg px-1.5 py-0.5 bg-muted/50 text-foreground focus:outline-none hover:border-[#3ECF8E]/60 transition-colors flex-1 min-w-0 text-left flex items-center justify-between gap-1"
+          className="flex items-center justify-between gap-2 bg-zinc-800 rounded-full px-3.5 h-9 flex-1 min-w-0 hover:bg-zinc-700 transition-colors"
           style={{ fontFamily: value || "inherit" }}
         >
-          <span className="truncate">{currentLabel}</span>
-          <ChevronDown className="w-2.5 h-2.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-sm text-zinc-200">{currentLabel}</span>
+          <ChevronDown className="w-3 h-3 shrink-0 text-zinc-500" />
         </button>
       </div>
       {open && createPortal(
@@ -2528,17 +2533,17 @@ export function BlockPropertiesPanel({
   if (!block) {
     return (
       <div className="flex flex-col min-h-0">
-        <div className="px-4 py-3 border-b border-border/20 bg-muted/20 shrink-0">
-          <p className="text-xs font-semibold text-foreground/75">Canvas</p>
+        <div className="px-5 py-3 border-b border-zinc-800 shrink-0">
+          <p className="text-sm font-bold text-white">Canvas</p>
         </div>
         <Section label="Email Background">
-          <div className="space-y-2">
-            <div className="flex border border-border/60 rounded-md overflow-hidden text-xs">
+          <div className="space-y-3">
+            <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9">
               {(["solid", "gradient", "image"] as const).map(v => (
                 <button key={v} type="button"
                   onClick={() => onEmailBgChange?.({ ...emailBg, type: v })}
-                  className={cn("flex-1 h-7 capitalize transition-colors",
-                    (emailBg?.type || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+                  className={cn("flex-1 h-full text-sm capitalize transition-colors",
+                    (emailBg?.type || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}
                 >{v}</button>
               ))}
             </div>
@@ -2549,7 +2554,15 @@ export function BlockPropertiesPanel({
               <>
                 <ColorRow label="Start" value={emailBg.color || "#18181b"} onChange={v => onEmailBgChange?.({ ...emailBg, color: v })} />
                 <ColorRow label="End" value={emailBg.gradientEnd || "#111111"} onChange={v => onEmailBgChange?.({ ...emailBg, gradientEnd: v })} />
-                <NumBox label="Angle" value={emailBg.gradientAngle ?? 135} onChange={v => onEmailBgChange?.({ ...emailBg, gradientAngle: v })} unit="°" min={0} max={360} />
+                <div className={MROW}>
+                  <span className={cn(MLABEL, "w-[90px]")}>Angle</span>
+                  <div className={PILL_FULL}>
+                    <input type="number" min={0} max={360} value={emailBg.gradientAngle ?? 135}
+                      onChange={e => onEmailBgChange?.({ ...emailBg, gradientAngle: Number(e.target.value) })}
+                      className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+                    <span className="text-sm text-zinc-500 shrink-0">°</span>
+                  </div>
+                </div>
               </>
             )}
             {emailBg?.type === "image" && (
@@ -2557,7 +2570,7 @@ export function BlockPropertiesPanel({
                 <MediaUploader url={emailBg.imageUrl || ""} onUrlChange={v => onEmailBgChange?.({ ...emailBg, imageUrl: v })} />
                 {emailBg.imageUrl && (
                   <>
-                    <div className="rounded-lg overflow-hidden border border-border/30 mt-1">
+                    <div className="rounded-lg overflow-hidden border border-zinc-800 mt-1">
                       <img src={emailBg.imageUrl} alt="Background preview" className="w-full object-cover" style={{ maxHeight: 140 }} />
                     </div>
                     <BgPositionPicker
@@ -2577,8 +2590,8 @@ export function BlockPropertiesPanel({
           </div>
         </Section>
         <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-          <SlidersHorizontal className="w-4 h-4 text-muted-foreground/30" />
-          <p className="text-[10px] text-muted-foreground/40 leading-relaxed">Select a block<br/>to edit its properties</p>
+          <SlidersHorizontal className="w-4 h-4 text-zinc-700" />
+          <p className="text-[11px] text-zinc-600 leading-relaxed">Select a block<br/>to edit its properties</p>
         </div>
       </div>
     );
@@ -2587,35 +2600,35 @@ export function BlockPropertiesPanel({
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
-  const INP = "w-full text-xs bg-muted/50 border border-border/50 rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
-  const NUM = "w-16 text-xs bg-muted/50 border border-border/50 rounded-lg px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
+  const INP = "w-full text-sm bg-zinc-800/80 rounded-full px-4 py-2 text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
+  const NUM = "w-16 text-sm bg-zinc-800/80 rounded-full px-3 py-1.5 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
 
   // ── Spacing section (all blocks that have padding) ─────────────────────────
   const hasSpacing = !["cert_image", "divider"].includes(type);
   const spacingSection = hasSpacing ? (
     <Section label="Spacing" defaultOpen={false}>
+      {/* Padding — 2×2 grid with direction icons */}
+      <div className={MROW}>
+        <span className={cn(MLABEL, "w-[90px]")}>Padding</span>
+        <span className="text-xs text-zinc-600">Top / Bottom · Left / Right</span>
+      </div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Top / Bottom</label>
-          <div className="flex items-center gap-1">
-            <input type="number" min={0} max={120} value={block.paddingV ?? (type === "header" ? 44 : type === "spacer" ? 0 : 16)} onChange={e => u({ paddingV: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
-          </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Left / Right</label>
-          <div className="flex items-center gap-1">
-            <input type="number" min={0} max={120} value={block.paddingH ?? 32} onChange={e => u({ paddingH: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
-          </div>
-        </div>
+        <NumBox
+          icon={<svg viewBox="0 0 14 14" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="1" width="12" height="12" rx="1"/><line x1="1" y1="4" x2="13" y2="4"/></svg>}
+          value={block.paddingV ?? (type === "header" ? 44 : 16)} onChange={v => u({ paddingV: v })} unit="px" min={0} max={120}
+        />
+        <NumBox
+          icon={<svg viewBox="0 0 14 14" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="1" width="12" height="12" rx="1"/><line x1="4" y1="1" x2="4" y2="13"/></svg>}
+          value={block.paddingH ?? 32} onChange={v => u({ paddingH: v })} unit="px" min={0} max={120}
+        />
       </div>
       {type === "spacer" && (
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-foreground/70">Height</span>
-          <div className="flex items-center gap-1.5">
-            <input type="number" min={4} max={200} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Height</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={4} max={200} value={block.height ?? 24} onChange={e => u({ height: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
           </div>
         </div>
       )}
@@ -2641,31 +2654,38 @@ export function BlockPropertiesPanel({
     if (type === "image") return (
       <Section label="Image">
         <MediaUploader url={block.imageUrl || ""} onUrlChange={v => u({ imageUrl: v })} />
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Alt text</label>
+        <div className="space-y-1.5">
+          <p className="text-xs text-zinc-500 select-none">Alt text</p>
           <input value={block.imageAlt ?? ""} onChange={e => u({ imageAlt: e.target.value })} placeholder="Descriptive text for screen readers" className={INP} />
         </div>
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Link URL (optional)</label>
-          <input value={block.imageLinkUrl ?? ""} onChange={e => u({ imageLinkUrl: e.target.value })} placeholder="https://example.com" className={`${INP} font-mono text-[10px]`} />
+        <div className="space-y-1.5">
+          <p className="text-xs text-zinc-500 select-none">Link URL (optional)</p>
+          <input value={block.imageLinkUrl ?? ""} onChange={e => u({ imageLinkUrl: e.target.value })} placeholder="https://example.com" className={`${INP} font-mono`} />
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Width (%)</span>
-          <input type="number" min={10} max={100} value={block.imageWidth ?? 100} onChange={e => u({ imageWidth: Number(e.target.value) })} className={NUM} />
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Border radius</span>
-          <div className="flex items-center gap-1">
-            <input type="number" min={0} max={60} value={block.imageBorderRadius ?? 8} onChange={e => u({ imageBorderRadius: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Width</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={10} max={100} value={block.imageWidth ?? 100} onChange={e => u({ imageWidth: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">%</span>
           </div>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Alignment</span>
-          <div className="flex border border-border rounded-md overflow-hidden">
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Corner radius</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={0} max={60} value={block.imageBorderRadius ?? 8} onChange={e => u({ imageBorderRadius: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
+          </div>
+        </div>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Align</span>
+          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
             {ALIGN_OPTIONS.map(a => (
               <button key={a.value} type="button" onClick={() => u({ imageAlign: a.value as EmailBlock["imageAlign"] })}
-                className={cn("w-8 h-7 flex items-center justify-center transition-colors", (block.imageAlign || "center") === a.value ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                className={cn("flex-1 h-full flex items-center justify-center transition-colors",
+                  (block.imageAlign || "center") === a.value ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}
+                title={`Align ${a.value}`}>
                 {a.icon}
               </button>
             ))}
@@ -2763,46 +2783,40 @@ export function BlockPropertiesPanel({
 
     if (type === "cta_button") return (
       <Section label="Button">
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Label</label>
+        <div className="space-y-1.5">
+          <p className="text-xs text-zinc-500 select-none">Label</p>
           <input value={block.btnLabel ?? ""} onChange={e => u({ btnLabel: e.target.value })} placeholder="View & Verify Certificate" className={INP} />
         </div>
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">URL</label>
+        <div className="space-y-1.5">
+          <p className="text-xs text-zinc-500 select-none">URL</p>
           <input value={block.btnUrl ?? ""} onChange={e => u({ btnUrl: e.target.value })} placeholder="{{verification_url}}" className={`${INP} font-mono`} />
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Width</span>
-          <div className="flex border border-border rounded-md overflow-hidden text-xs">
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Width</span>
+          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
             {(["auto", "full"] as const).map(v => (
               <button key={v} type="button" onClick={() => u({ btnWidth: v })}
-                className={cn("px-2.5 h-7 transition-colors capitalize", (block.btnWidth || "auto") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                className={cn("flex-1 h-full text-sm capitalize transition-colors",
+                  (block.btnWidth || "auto") === v ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
                 {v}
               </button>
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <label className="text-[10px] text-muted-foreground/70 select-none">H padding</label>
-            <div className="flex items-center gap-1">
-              <input type="number" min={4} max={80} value={block.btnPaddingH ?? 32} onChange={e => u({ btnPaddingH: Number(e.target.value) })} className={NUM} />
-              <span className="text-[9px] text-muted-foreground/50">px</span>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] text-muted-foreground/70 select-none">V padding</label>
-            <div className="flex items-center gap-1">
-              <input type="number" min={4} max={40} value={block.btnPaddingV ?? 13} onChange={e => u({ btnPaddingV: Number(e.target.value) })} className={NUM} />
-              <span className="text-[9px] text-muted-foreground/50">px</span>
-            </div>
-          </div>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Padding</span>
+          <span className="text-xs text-zinc-600">H · V</span>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Radius</span>
-          <div className="flex items-center gap-1">
-            <input type="number" min={0} max={40} value={block.btnRadius ?? 8} onChange={e => u({ btnRadius: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
+        <div className="grid grid-cols-2 gap-2">
+          <NumBox value={block.btnPaddingH ?? 32} onChange={v => u({ btnPaddingH: v })} unit="px" min={4} max={80} label="H" />
+          <NumBox value={block.btnPaddingV ?? 13} onChange={v => u({ btnPaddingV: v })} unit="px" min={4} max={40} label="V" />
+        </div>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Corner radius</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={0} max={40} value={block.btnRadius ?? 8} onChange={e => u({ btnRadius: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
           </div>
         </div>
       </Section>
@@ -2810,29 +2824,32 @@ export function BlockPropertiesPanel({
 
     if (type === "divider") return (
       <Section label="Divider">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Style</span>
-          <div className="flex border border-border rounded-md overflow-hidden text-xs">
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Style</span>
+          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
             {(["solid", "dashed", "dotted"] as const).map(v => (
               <button key={v} type="button" onClick={() => u({ dividerStyle: v })}
-                className={cn("px-2 h-7 capitalize transition-colors", (block.dividerStyle || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
+                className={cn("flex-1 h-full text-sm capitalize transition-colors",
+                  (block.dividerStyle || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
                 {v}
               </button>
             ))}
           </div>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Thickness</span>
-          <div className="flex items-center gap-1">
-            <input type="number" min={1} max={8} value={block.dividerThickness ?? 1} onChange={e => u({ dividerThickness: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Thickness</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={1} max={8} value={block.dividerThickness ?? 1} onChange={e => u({ dividerThickness: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
           </div>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Width</span>
-          <div className="flex items-center gap-1">
-            <input type="number" min={10} max={100} value={block.dividerWidth ?? 100} onChange={e => u({ dividerWidth: Number(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">%</span>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Width</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={10} max={100} value={block.dividerWidth ?? 100} onChange={e => u({ dividerWidth: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">%</span>
           </div>
         </div>
         <ColorRow label="Color" value={block.dividerColor || "#333333"} onChange={v => u({ dividerColor: v })} />
@@ -3041,25 +3058,29 @@ export function BlockPropertiesPanel({
     <Section label="Colors">
       {/* Header: background type picker */}
       {type === "header" && (
-        <div className="space-y-2">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Background type</label>
-          <div className="flex border border-border rounded-md overflow-hidden text-xs">
-            {(["gradient", "solid", "image"] as const).map(v => (
-              <button key={v} type="button" onClick={() => u({ bgType: v })}
-                className={cn("flex-1 h-7 capitalize transition-colors", (block.bgType || "gradient") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
-                {v}
-              </button>
-            ))}
+        <div className="space-y-3">
+          <div className={MROW}>
+            <span className={cn(MLABEL, "w-[90px]")}>Bg type</span>
+            <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
+              {(["gradient", "solid", "image"] as const).map(v => (
+                <button key={v} type="button" onClick={() => u({ bgType: v })}
+                  className={cn("flex-1 h-full text-sm capitalize transition-colors",
+                    (block.bgType || "gradient") === v ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}>
+                  {v}
+                </button>
+              ))}
+            </div>
           </div>
           {(block.bgType === "gradient" || !block.bgType) && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <ColorRow label="Start color" value={block.bgColor || "#3ECF8E"} onChange={v => u({ bgColor: v })} />
               <ColorRow label="End color" value={block.gradientEnd || darken(block.bgColor || "#3ECF8E")} onChange={v => u({ gradientEnd: v })} />
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground/70">Angle</span>
-                <div className="flex items-center gap-1">
-                  <input type="number" min={0} max={360} value={block.gradientAngle ?? 135} onChange={e => u({ gradientAngle: Number(e.target.value) })} className={NUM} />
-                  <span className="text-[9px] text-muted-foreground/50">°</span>
+              <div className={MROW}>
+                <span className={cn(MLABEL, "w-[90px]")}>Angle</span>
+                <div className={PILL_FULL}>
+                  <input type="number" min={0} max={360} value={block.gradientAngle ?? 135} onChange={e => u({ gradientAngle: Number(e.target.value) })}
+                    className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+                  <span className="text-sm text-zinc-500 shrink-0">°</span>
                 </div>
               </div>
             </div>
@@ -3130,42 +3151,48 @@ export function BlockPropertiesPanel({
     <Section label="Typography" defaultOpen={typoOpenByDefault}>
       {/* Font family */}
       {!["image"].includes(type) && (
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground/70 select-none">Font family</label>
-          <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
-        </div>
+        <FontPickerControl value={block.fontFamily || ""} onChange={v => u({ fontFamily: v })} />
       )}
       {/* Font size */}
       {["header", "text", "greeting", "footer", "cta_button", "markdown"].includes(type) && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-foreground/70 shrink-0">Font size</span>
-          <div className="w-24">
-            <FontSizeInput value={block.fontSize || (type === "header" ? 28 : type === "greeting" ? 16 : type === "footer" ? 12 : 15)} onChange={v => u({ fontSize: v })} />
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Size</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={8} max={96}
+              value={block.fontSize || (type === "header" ? 28 : type === "greeting" ? 16 : type === "footer" ? 12 : 15)}
+              onChange={e => u({ fontSize: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
           </div>
         </div>
       )}
       {/* Font weight */}
       {["header", "text", "greeting", "footer", "cta_button", "linkedin"].includes(type) && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Weight</span>
-          <div className="flex border border-border rounded-md overflow-hidden text-xs">
-            {[["normal","Regular"],["600","Semi"],["700","Bold"],["800","Extra"]] .map(([v, label]) => (
-              <button key={v} type="button" onClick={() => u({ fontWeight: v, ...(type === "cta_button" ? { btnFontWeight: v } : {}) })}
-                className={cn("px-1.5 h-7 transition-colors", (type === "cta_button" ? (block.btnFontWeight || "600") : (block.fontWeight || "normal")) === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}>
-                {label}
-              </button>
-            ))}
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Weight</span>
+          <div className="relative flex-1">
+            <select
+              value={type === "cta_button" ? (block.btnFontWeight || "600") : (block.fontWeight || "normal")}
+              onChange={e => u({ fontWeight: e.target.value, ...(type === "cta_button" ? { btnFontWeight: e.target.value } : {}) })}
+              className="w-full h-9 bg-zinc-800 rounded-full px-3.5 text-sm text-zinc-200 outline-none appearance-none cursor-pointer"
+            >
+              {[["normal","Regular"],["500","Medium"],["600","Semi Bold"],["700","Bold"],["800","Extra Bold"]].map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
           </div>
         </div>
       )}
       {/* Alignment */}
       {["text", "greeting", "header", "footer", "linkedin", "cta_button"].includes(type) && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-foreground/70">Alignment</span>
-          <div className="flex border border-border rounded-md overflow-hidden">
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Align</span>
+          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
             {ALIGN_OPTIONS.map(a => (
               <button key={a.value} type="button" onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
-                className={cn("w-8 h-7 flex items-center justify-center transition-colors", (block.textAlign || "left") === a.value ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+                className={cn("flex-1 h-full flex items-center justify-center transition-colors",
+                  (block.textAlign || "left") === a.value ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}
                 title={`Align ${a.value}`}>
                 {a.icon}
               </button>
@@ -3175,18 +3202,25 @@ export function BlockPropertiesPanel({
       )}
       {/* Line height */}
       {["text", "greeting", "footer", "markdown"].includes(type) && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-foreground/70 shrink-0">Line height</span>
-          <input type="number" min={1} max={3} step={0.1} value={block.lineHeight ?? 1.7} onChange={e => u({ lineHeight: parseFloat(e.target.value) })} className={`${NUM} w-20`} />
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Height</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={1} max={3} step={0.1} value={block.lineHeight ?? 1.7}
+              onChange={e => u({ lineHeight: parseFloat(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">×</span>
+          </div>
         </div>
       )}
       {/* Letter spacing */}
       {["header", "text", "greeting", "footer"].includes(type) && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-foreground/70 shrink-0">Letter spacing</span>
-          <div className="flex items-center gap-1">
-            <input type="number" min={-2} max={10} step={0.5} value={block.letterSpacing ?? 0} onChange={e => u({ letterSpacing: parseFloat(e.target.value) })} className={NUM} />
-            <span className="text-[9px] text-muted-foreground/50">px</span>
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Spacing</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={-2} max={10} step={0.5} value={block.letterSpacing ?? 0}
+              onChange={e => u({ letterSpacing: parseFloat(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
           </div>
         </div>
       )}
@@ -3196,10 +3230,10 @@ export function BlockPropertiesPanel({
   return (
     <div className="flex flex-col min-h-0">
       {/* Block type badge */}
-      <div className="px-4 py-2.5 border-b border-[#3ECF8E]/15 bg-[#3ECF8E]/5 shrink-0">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-[#3ECF8E]/80">
+      <div className="px-5 py-3 border-b border-zinc-800 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#3ECF8E]/80 bg-[#3ECF8E]/10 px-2.5 py-1 rounded-full select-none">
           {BLOCK_LABELS[block.type]}
-        </p>
+        </span>
       </div>
       {contentSection}
       {typoSection}
@@ -3208,13 +3242,13 @@ export function BlockPropertiesPanel({
       {/* Email background — always accessible even when a block is selected */}
       {onEmailBgChange && (
         <Section label="Email Background" defaultOpen={false}>
-          <div className="space-y-2">
-            <div className="flex border border-border/60 rounded-md overflow-hidden text-xs">
+          <div className="space-y-3">
+            <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9">
               {(["solid", "gradient", "image"] as const).map(v => (
                 <button key={v} type="button"
                   onClick={() => onEmailBgChange({ ...emailBg, type: v })}
-                  className={cn("flex-1 h-7 capitalize transition-colors",
-                    (emailBg?.type || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-muted-foreground hover:bg-muted")}
+                  className={cn("flex-1 h-full text-sm capitalize transition-colors",
+                    (emailBg?.type || "solid") === v ? "bg-[#3ECF8E] text-white" : "text-zinc-400 hover:text-zinc-200")}
                 >{v}</button>
               ))}
             </div>

@@ -33,7 +33,7 @@ function normalizeFontWeight(w: string): FontWeight {
 }
 
 const CHECKER = 'repeating-conic-gradient(#c0c0c0 0% 25%, #fff 0% 50%) 0 0 / 8px 8px';
-const INP = 'bg-muted/50 border border-border/50 rounded-lg text-xs';
+const INP = 'bg-zinc-800/80 border border-zinc-700/50 rounded-full text-sm text-zinc-200';
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 
@@ -56,17 +56,15 @@ function rgbaToHex({ r, g, b }: { r: number; g: number; b: number }) {
 function Section({ label, children, defaultOpen = true }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-border/30">
+    <div className="border-t border-zinc-800">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left group"
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left"
       >
-        <p className="text-xs font-semibold text-foreground/75 select-none group-hover:text-foreground transition-colors">
-          {label}
-        </p>
-        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground/40 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
+        <p className="text-sm font-bold text-white select-none">{label}</p>
+        <ChevronRight className={`w-3.5 h-3.5 text-zinc-600 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
       </button>
-      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+      {open && <div className="px-5 pb-5 space-y-3">{children}</div>}
     </div>
   );
 }
@@ -79,16 +77,16 @@ function NumBox({
   icon?: React.ReactNode; className?: string;
 }) {
   return (
-    <div className={`flex items-center ${INP} h-8 px-2.5 gap-1.5 ${className}`}>
-      <span className="text-[10px] text-muted-foreground/60 shrink-0 select-none">{label}</span>
+    <div className={`flex items-center bg-zinc-800/80 rounded-full px-3.5 gap-2 h-9 ${className}`}>
+      {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}
+      <span className="text-xs text-zinc-500 shrink-0 select-none">{label}</span>
       <input
         type="number" value={Math.round(value * 100) / 100}
         min={min} max={max} step={step}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="flex-1 min-w-0 bg-transparent text-xs outline-none text-foreground"
+        className="flex-1 min-w-0 bg-transparent text-sm text-zinc-200 outline-none"
       />
-      {unit && <span className="text-[9px] text-muted-foreground/50 shrink-0 select-none">{unit}</span>}
-      {icon && <span className="shrink-0 text-muted-foreground/35 ml-0.5">{icon}</span>}
+      {unit && <span className="text-sm text-zinc-500 shrink-0 select-none">{unit}</span>}
     </div>
   );
 }
@@ -203,8 +201,8 @@ function FloatingColorPicker({
       <div className="p-3 cp-compact">
         <RgbaColorPicker color={color} onChange={onChange} style={{ width: '100%' }} />
       </div>
-      <div className="px-3 pb-3 pt-0.5 border-t border-border/30">
-        <p className="text-[9px] text-muted-foreground/60 mb-1.5 select-none pt-2">Presets</p>
+      <div className="px-3 pb-3 pt-0.5 border-t border-zinc-800">
+        <p className="text-[9px] text-zinc-500 mb-1.5 select-none pt-2">Presets</p>
         <div className="flex flex-wrap gap-1.5">
           {PRESET_COLORS.map((preset) => (
             <button key={preset.value} title={preset.name}
@@ -612,15 +610,15 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
   // Always-visible canvas controls (zoom + snap + template dims)
   const canvasControls = (
     <>
-      <div className="px-4 py-3 border-t border-border/30">
-        <p className="text-xs font-semibold text-foreground/75 mb-3 select-none">Canvas</p>
+      <div className="px-5 py-3.5 border-t border-zinc-800">
+        <p className="text-sm font-bold text-white mb-3 select-none">Canvas</p>
         <div className="space-y-3">
           {/* Zoom controls */}
           <div>
-            <p className="text-[10px] text-muted-foreground/50 mb-2 select-none">Zoom</p>
+            <p className="text-xs text-zinc-500 mb-2 select-none">Zoom</p>
             <div className="flex items-center gap-2">
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) - 0.1))}
                 title="Zoom out"
               >
@@ -630,7 +628,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 <select
                   value={ZOOM_STEPS.includes(scale ?? 1) ? (scale ?? 1) : ''}
                   onChange={(e) => e.target.value && onScaleChange?.(parseFloat(e.target.value))}
-                  className="w-full h-8 bg-muted/50 border border-border/50 rounded-lg text-xs text-center outline-none cursor-pointer appearance-none"
+                  className="w-full h-8 bg-zinc-800/80 border border-zinc-700/50 rounded-full text-sm text-zinc-200 text-center outline-none cursor-pointer appearance-none"
                   title="Zoom presets"
                 >
                   {!ZOOM_STEPS.includes(scale ?? 1) && (
@@ -645,14 +643,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </span>
               </div>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) + 0.1))}
                 title="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 onClick={onFitToScreen}
                 title="Fit to screen"
               >
@@ -665,7 +663,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Magnet className="w-3.5 h-3.5 text-muted-foreground/50" />
-              <p className="text-xs text-foreground/70 select-none">Snap to Grid</p>
+              <p className="text-sm text-zinc-400 select-none">Snap to Grid</p>
             </div>
             <button
               className="relative rounded-full transition-colors shrink-0"
@@ -681,15 +679,15 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
 
       {/* Template dimensions */}
       {(pdfWidth || pdfHeight) && (
-        <div className="px-4 py-3 border-t border-border/30">
-          <p className="text-xs font-semibold text-foreground/75 mb-2 select-none">Template</p>
+        <div className="px-5 py-3.5 border-t border-zinc-800">
+          <p className="text-sm font-bold text-white mb-2 select-none">Template</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center bg-muted/50 border border-border/50 rounded-lg h-8 px-2.5 gap-1.5">
+            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded-full h-9 px-3.5 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">W</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfWidth ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
-            <div className="flex items-center bg-muted/50 border border-border/50 rounded-lg h-8 px-2.5 gap-1.5">
+            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded-full h-9 px-3.5 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">H</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfHeight ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
@@ -706,10 +704,10 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         {canvasControls}
         {/* Tip */}
         <div className="px-4 py-6 flex flex-col items-center gap-2 text-center">
-          <div className="w-8 h-8 rounded-lg bg-muted/60 flex items-center justify-center">
-            <MousePointer2 className="w-4 h-4 text-muted-foreground/50" />
+          <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
+            <MousePointer2 className="w-4 h-4 text-zinc-600" />
           </div>
-          <p className="text-[11px] text-muted-foreground/60 leading-relaxed max-w-[160px]">
+          <p className="text-[11px] text-zinc-600 leading-relaxed max-w-40">
             Click a field on the canvas to edit its properties
           </p>
         </div>
@@ -751,17 +749,17 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
     if (clean.length === 6) onFieldUpdate({ color: `#${clean}` });
   };
 
-  const selCls = `h-8 text-xs ${INP}`;
-  const activeBtn = 'bg-primary/15 text-primary border-primary/30';
-  const inactiveBtn = `bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground`;
-  const btn = (active: boolean) => `h-8 flex items-center justify-center rounded-lg border transition-colors ${active ? activeBtn : inactiveBtn}`;
+  const selCls = `h-9 ${INP}`;
+  const activeBtn = 'bg-[#3ECF8E] text-white border-transparent';
+  const inactiveBtn = `bg-zinc-800/80 border-zinc-700/50 text-zinc-400 hover:text-zinc-200`;
+  const btn = (active: boolean) => `h-9 flex items-center justify-center rounded-full border transition-colors ${active ? activeBtn : inactiveBtn}`;
 
   return (
     <div className="flex flex-col">
 
       {/* ── Field type + label ── */}
       <div className="px-3 pt-2.5 pb-1 flex items-center gap-2 shrink-0">
-        <span className="text-[8px] font-bold uppercase tracking-widest bg-primary/10 text-primary px-1.5 py-0.5 rounded select-none shrink-0">
+        <span className="text-[9px] font-bold uppercase tracking-widest bg-[#3ECF8E]/10 text-[#3ECF8E]/80 px-2 py-1 rounded-full select-none shrink-0">
           {typeLabel}
         </span>
         <input
@@ -782,10 +780,10 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             onFieldUpdate({ label: final });
           }}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          className={`flex-1 bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground min-w-0 ${
+          className={`flex-1 bg-transparent text-sm font-medium outline-none min-w-0 ${
             (allFieldLabels ?? []).some(l => l.toLowerCase() === labelDraft.trim().toLowerCase())
-              ? 'text-destructive'
-              : 'text-foreground'
+              ? 'text-red-400'
+              : 'text-zinc-200'
           }`}
           placeholder="Field label"
         />

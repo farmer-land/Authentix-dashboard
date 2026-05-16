@@ -1855,16 +1855,16 @@ export default function GenerateCertificatePage() {
             {/* ── Right properties panel — floating over canvas ── */}
             {selectedField && rightPanelVisible && !previewOpen && (
               <div
-                className="absolute z-40 right-4 top-4 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+                className="absolute z-40 right-4 top-4 w-80 flex flex-col bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden"
                 style={{ height: 'calc(100% - 32px)' }}
               >
                 {/* Header */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/40 shrink-0 rounded-t-xl">
-                  <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-medium text-foreground flex-1">Properties</span>
+                <div className="flex items-center gap-2 px-4 py-3 bg-zinc-900 border-b border-zinc-800 shrink-0 rounded-t-xl">
+                  <Palette className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                  <span className="text-sm font-bold text-white flex-1">Properties</span>
                   <button
                     onClick={() => setRightPanelVisible(false)}
-                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+                    className="text-zinc-500 hover:text-white rounded p-0.5 hover:bg-zinc-800 transition-colors"
                     title="Hide panel"
                   >
                     <X className="w-3.5 h-3.5" />
