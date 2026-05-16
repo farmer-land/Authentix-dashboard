@@ -185,12 +185,12 @@ export const templatesApi = {
    */
   create: async (
     file: File,
-    params: { title: string; category_id: string; subcategory_id: string },
+    params: { title: string; category_id?: string; subcategory_id?: string },
   ): Promise<{
     id: string;
     title: string;
-    category_id: string;
-    subcategory_id: string;
+    category_id: string | null;
+    subcategory_id: string | null;
     template?: { id: string; title: string; status: string };
     version?: { id: string; version_number: number };
     source_file?: { id: string; file_name: string; file_type: string };
@@ -198,18 +198,12 @@ export const templatesApi = {
     if (!params.title || !params.title.trim()) {
       throw new ApiError("VALIDATION_ERROR", "Title is required");
     }
-    if (!params.category_id) {
-      throw new ApiError("VALIDATION_ERROR", "Category is required");
-    }
-    if (!params.subcategory_id) {
-      throw new ApiError("VALIDATION_ERROR", "Subcategory is required");
-    }
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("title", params.title.trim());
-    formData.append("category_id", params.category_id);
-    formData.append("subcategory_id", params.subcategory_id);
+    if (params.category_id) formData.append("category_id", params.category_id);
+    if (params.subcategory_id) formData.append("subcategory_id", params.subcategory_id);
 
     const uploadController = new AbortController();
     const uploadTimeoutId = setTimeout(() => {

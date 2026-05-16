@@ -221,42 +221,7 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
       return;
     }
 
-    // Validate category - required
-    if (!categoryId) {
-      console.warn('[TemplateUploadDialog] Category validation failed:', { categoryId });
-      setError("Please select a category");
-      return;
-    }
-
-    // Validate subcategory - required per schema
-    if (!subcategoryId) {
-      // If we're still loading, wait
-      if (subcategoriesLoading) {
-        setError("Please wait for subcategories to load");
-        return;
-      }
-      // If subcategories exist but none selected, require selection
-      if (subcategories.length > 0) {
-        console.warn('[TemplateUploadDialog] Subcategory validation failed:', { 
-          subcategoryId, 
-          subcategoriesCount: subcategories.length 
-        });
-        setError("Please select a subcategory");
-        return;
-      }
-      // If no subcategories available but we have an error, show error
-      if (subcategoriesError) {
-        setError("Failed to load subcategories. Please retry.");
-        return;
-      }
-      // Per requirements, assume both required
-      console.warn('[TemplateUploadDialog] Subcategory validation failed (no subcategories available):', { 
-        subcategoryId,
-        subcategoriesCount: subcategories.length 
-      });
-      setError("Please select a subcategory");
-      return;
-    }
+    // Category and subcategory are optional — templates can be categorized later
 
     setUploading(true);
     setError("");
@@ -484,7 +449,7 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
               {/* Category Dropdown with Grouping */}
               <div className="space-y-2">
                 <Label htmlFor="category">
-                  Category <span className="text-destructive">*</span>
+                  Category <span className="text-muted-foreground text-xs">(optional)</span>
                 </Label>
                 <Select 
                   value={categoryId} 
@@ -549,7 +514,7 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
               {categoryId && (
                 <div className="space-y-2">
                   <Label htmlFor="subcategory">
-                    Subcategory <span className="text-destructive">*</span>
+                    Subcategory <span className="text-muted-foreground text-xs">(optional)</span>
                   </Label>
                   <Select 
                     value={subcategoryId} 
@@ -648,13 +613,9 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
             <Button
               type="submit"
               disabled={
-                uploading || 
-                !file || 
-                !title.trim() || 
-                !categoryId ||
-                !subcategoryId ||
-                categoriesLoading ||
-                subcategoriesLoading
+                uploading ||
+                !file ||
+                !title.trim()
               }
               className="gap-2"
             >

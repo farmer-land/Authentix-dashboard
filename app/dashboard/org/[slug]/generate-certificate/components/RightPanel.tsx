@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { CertificateField, FontWeight, CERTIFICATE_FONTS, PRESET_COLORS, DATE_FORMATS } from '@/lib/types/certificate';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough } from 'lucide-react';
 import { RgbaColorPicker } from 'react-colorful';
 import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { api } from '@/lib/api/client';
@@ -33,7 +33,7 @@ function normalizeFontWeight(w: string): FontWeight {
 }
 
 const CHECKER = 'repeating-conic-gradient(#c0c0c0 0% 25%, #fff 0% 50%) 0 0 / 8px 8px';
-const INP = 'bg-zinc-800/80 border border-zinc-700/50 rounded-full text-sm text-zinc-200';
+const INP = 'bg-zinc-800/80 border border-zinc-700/50 rounded text-sm text-zinc-200';
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
     <div className="border-t border-zinc-800">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left"
+        className="w-full flex items-center justify-between px-5 py-2.5 text-left"
       >
         <p className="text-sm font-bold text-white select-none">{label}</p>
         <ChevronRight className={`w-3.5 h-3.5 text-zinc-600 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
@@ -77,7 +77,7 @@ function NumBox({
   icon?: React.ReactNode; className?: string;
 }) {
   return (
-    <div className={`flex items-center bg-zinc-800/80 rounded-full px-3.5 gap-2 h-9 ${className}`}>
+    <div className={`flex items-center bg-zinc-800/80 rounded px-3 gap-2 h-8 ${className}`}>
       {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}
       <span className="text-xs text-zinc-500 shrink-0 select-none">{label}</span>
       <input
@@ -149,7 +149,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 // ── Floating colour picker ─────────────────────────────────────────────────────
 
-type ColorTarget = 'main' | 'shadow' | 'stroke' | 'gradStart' | 'gradEnd';
+type ColorTarget = 'main' | 'shadow' | 'stroke' | 'gradStart' | 'gradEnd' | 'bg';
 
 function FloatingColorPicker({
   color, label, initialPos, onClose, onChange,
@@ -618,7 +618,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             <p className="text-xs text-zinc-500 mb-2 select-none">Zoom</p>
             <div className="flex items-center gap-2">
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) - 0.1))}
                 title="Zoom out"
               >
@@ -628,7 +628,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 <select
                   value={ZOOM_STEPS.includes(scale ?? 1) ? (scale ?? 1) : ''}
                   onChange={(e) => e.target.value && onScaleChange?.(parseFloat(e.target.value))}
-                  className="w-full h-8 bg-zinc-800/80 border border-zinc-700/50 rounded-full text-sm text-zinc-200 text-center outline-none cursor-pointer appearance-none"
+                  className="w-full h-8 bg-zinc-800/80 border border-zinc-700/50 rounded text-sm text-zinc-200 text-center outline-none cursor-pointer appearance-none"
                   title="Zoom presets"
                 >
                   {!ZOOM_STEPS.includes(scale ?? 1) && (
@@ -643,14 +643,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </span>
               </div>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) + 0.1))}
                 title="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 onClick={onFitToScreen}
                 title="Fit to screen"
               >
@@ -682,12 +682,12 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         <div className="px-5 py-3.5 border-t border-zinc-800">
           <p className="text-sm font-bold text-white mb-2 select-none">Template</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded-full h-9 px-3.5 gap-2">
+            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded h-8 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">W</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfWidth ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
-            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded-full h-9 px-3.5 gap-2">
+            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded h-8 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">H</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfHeight ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
@@ -739,6 +739,8 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       onFieldUpdate({ gradientStartColor: rgbaToHex(c), gradientStartOpacity: Math.round(c.a * 100) });
     } else if (pickerTarget === 'gradEnd') {
       onFieldUpdate({ gradientEndColor: rgbaToHex(c), gradientEndOpacity: Math.round(c.a * 100) });
+    } else if (pickerTarget === 'bg') {
+      onFieldUpdate({ backgroundColor: rgbaToHex(c) });
     } else {
       onFieldUpdate({ color: rgbaToHex(c), opacity: Math.round(c.a * 100) });
     }
@@ -749,17 +751,17 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
     if (clean.length === 6) onFieldUpdate({ color: `#${clean}` });
   };
 
-  const selCls = `h-9 ${INP}`;
+  const selCls = `h-8 ${INP}`;
   const activeBtn = 'bg-[#3ECF8E] text-white border-transparent';
   const inactiveBtn = `bg-zinc-800/80 border-zinc-700/50 text-zinc-400 hover:text-zinc-200`;
-  const btn = (active: boolean) => `h-9 flex items-center justify-center rounded-full border transition-colors ${active ? activeBtn : inactiveBtn}`;
+  const btn = (active: boolean) => `h-8 flex items-center justify-center rounded border transition-colors ${active ? activeBtn : inactiveBtn}`;
 
   return (
     <div className="flex flex-col">
 
       {/* ── Field type + label ── */}
       <div className="px-3 pt-2.5 pb-1 flex items-center gap-2 shrink-0">
-        <span className="text-[9px] font-bold uppercase tracking-widest bg-[#3ECF8E]/10 text-[#3ECF8E]/80 px-2 py-1 rounded-full select-none shrink-0">
+        <span className="text-[9px] font-bold uppercase tracking-widest bg-[#3ECF8E]/10 text-[#3ECF8E]/80 px-2 py-0.5 rounded select-none shrink-0">
           {typeLabel}
         </span>
         <input
@@ -958,6 +960,31 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                   </button>
                 ))}
               </div>
+              <p className="text-[10px] text-muted-foreground/50 select-none">Decoration</p>
+              <div className="flex items-center gap-2">
+                <button title="Underline"
+                  className={`${btn(selectedField.textDecoration === 'underline' || selectedField.textDecoration === 'underline line-through')} flex-1`}
+                  onClick={() => {
+                    const cur = selectedField.textDecoration ?? 'none';
+                    if (cur === 'underline') onFieldUpdate({ textDecoration: 'none' });
+                    else if (cur === 'line-through') onFieldUpdate({ textDecoration: 'underline line-through' });
+                    else if (cur === 'underline line-through') onFieldUpdate({ textDecoration: 'line-through' });
+                    else onFieldUpdate({ textDecoration: 'underline' });
+                  }}>
+                  <Underline className="w-3.5 h-3.5" />
+                </button>
+                <button title="Strikethrough"
+                  className={`${btn(selectedField.textDecoration === 'line-through' || selectedField.textDecoration === 'underline line-through')} flex-1`}
+                  onClick={() => {
+                    const cur = selectedField.textDecoration ?? 'none';
+                    if (cur === 'line-through') onFieldUpdate({ textDecoration: 'none' });
+                    else if (cur === 'underline') onFieldUpdate({ textDecoration: 'underline line-through' });
+                    else if (cur === 'underline line-through') onFieldUpdate({ textDecoration: 'underline' });
+                    else onFieldUpdate({ textDecoration: 'line-through' });
+                  }}>
+                  <Strikethrough className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
           </div>
@@ -1034,6 +1061,20 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 <span className="absolute bg-white rounded-full shadow-sm transition-all"
                   style={{ width: '10px', height: '10px', top: '2px', left: selectedField.qrTransparentBg ? 'calc(100% - 12px)' : '2px' }} />
               </button>
+            </div>
+            {/* Error correction level */}
+            <div>
+              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Error Correction</p>
+              <div className="flex items-center gap-1">
+                {(['L', 'M', 'Q', 'H'] as const).map((lvl) => (
+                  <button key={lvl}
+                    className={`${btn((selectedField.qrErrorCorrection ?? 'M') === lvl)} flex-1 text-[10px] font-mono`}
+                    title={{ L: 'Low (7%)', M: 'Medium (15%)', Q: 'Quartile (25%)', H: 'High (30%)' }[lvl]}
+                    onClick={() => onFieldUpdate({ qrErrorCorrection: lvl })}>
+                    {lvl}
+                  </button>
+                ))}
+              </div>
             </div>
             {/* Logo upload (logo style only) */}
             {selectedField.qrStyle === 'logo' && (
@@ -1138,6 +1179,35 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </div>
               </div>
             )}
+
+            {/* Background highlight */}
+            <div>
+              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Background</p>
+              <div className={`flex items-stretch ${INP} overflow-hidden`} style={{ height: '30px' }}>
+                <button title="Pick background colour"
+                  className="w-9 shrink-0 flex items-center justify-center border-r border-border/50 hover:opacity-80 transition-opacity"
+                  onClick={(e) => openPicker('bg', e.currentTarget)}>
+                  <span className="relative w-5 h-5 rounded-[3px] overflow-hidden" style={{ background: CHECKER }}>
+                    <span className="absolute inset-0" style={{ backgroundColor: selectedField.backgroundColor ?? 'transparent' }} />
+                  </span>
+                </button>
+                <span className="text-[10px] text-muted-foreground/50 flex items-center px-1 shrink-0">#</span>
+                <input
+                  value={(selectedField.backgroundColor ?? '').replace('#', '')}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9a-fA-F]/g, '');
+                    if (v.length === 6) onFieldUpdate({ backgroundColor: '#' + v });
+                    else if (v === '') onFieldUpdate({ backgroundColor: undefined });
+                  }}
+                  placeholder="none"
+                  className="flex-1 min-w-0 bg-transparent text-xs font-mono uppercase outline-none"
+                  maxLength={6} spellCheck={false} />
+                {selectedField.backgroundColor && (
+                  <button className="px-2 text-muted-foreground/40 hover:text-muted-foreground text-[10px]"
+                    onClick={() => onFieldUpdate({ backgroundColor: undefined })}>✕</button>
+                )}
+              </div>
+            </div>
 
             {/* Text shadow */}
             <div>
@@ -1356,6 +1426,8 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
               ? hexToRgba(selectedField.gradientStartColor ?? selectedField.color, selectedField.gradientStartOpacity ?? 100)
               : pickerTarget === 'gradEnd'
               ? hexToRgba(selectedField.gradientEndColor ?? '#ffffff', selectedField.gradientEndOpacity ?? 100)
+              : pickerTarget === 'bg'
+              ? hexToRgba(selectedField.backgroundColor ?? '#ffffff', 100)
               : hexToRgba(selectedField.color, opacity)
           }
           label={
@@ -1363,6 +1435,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             : pickerTarget === 'stroke' ? 'Stroke Color'
             : pickerTarget === 'gradStart' ? 'Start Color'
             : pickerTarget === 'gradEnd' ? 'End Color'
+            : pickerTarget === 'bg' ? 'Background'
             : 'Color'
           }
           initialPos={pickerInitialPos}

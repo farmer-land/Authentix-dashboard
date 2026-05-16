@@ -80,6 +80,8 @@ interface InfiniteCanvasProps {
   fitTrigger?: number;
   // Left panel width in px so the toolbar clamp avoids it
   leftPanelWidth?: number;
+  // Right panel width in px so toolbar + fit-to-screen account for it
+  rightPanelWidth?: number;
 }
 
 const SNAP_SIZE = 8;
@@ -164,6 +166,7 @@ export function InfiniteCanvas({
   onSnapToggle,
   fitTrigger,
   leftPanelWidth = 0,
+  rightPanelWidth = 0,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -249,10 +252,8 @@ export function InfiniteCanvas({
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-    // Center the template in the area to the right of the left panel so the
-    // toolbar's CSS default (calc(50% + leftPanelWidth/2)) aligns with it.
     const padding = 120;
-    const availableWidth = cw - leftPanelWidth;
+    const availableWidth = cw - leftPanelWidth - rightPanelWidth;
     const fitScale = clamp(
       Math.min((availableWidth - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
       MIN_SCALE,
@@ -263,7 +264,7 @@ export function InfiniteCanvas({
     onScaleChange(fitScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
-  }, [pdfWidth, pdfHeight, onScaleChange, leftPanelWidth]);
+  }, [pdfWidth, pdfHeight, onScaleChange, leftPanelWidth, rightPanelWidth]);
 
   // Run auto-fit whenever the template dimensions change
   const prevDimsRef = useRef({ w: 0, h: 0 });
@@ -945,7 +946,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: 16, left: `calc(50% + ${leftPanelWidth / 2}px)`, transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: 16, left: `calc(50% + ${(leftPanelWidth - rightPanelWidth) / 2}px)`, transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >

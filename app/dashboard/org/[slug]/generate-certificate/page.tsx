@@ -1667,6 +1667,7 @@ export default function GenerateCertificatePage() {
                 onSnapToggle={() => setSnapToGrid(v => !v)}
                 fitTrigger={fitTrigger}
                 leftPanelWidth={leftPanelVisible ? 288 : 0}
+                rightPanelWidth={rightPanelVisible && !!selectedField && !previewOpen ? 336 : 0}
               />
               </ErrorBoundary>
             ) : (

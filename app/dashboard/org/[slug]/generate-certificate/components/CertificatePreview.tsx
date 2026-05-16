@@ -156,6 +156,8 @@ export function CertificatePreview({ template, fields, currentPage }: Certificat
                 fontWeight: field.fontWeight,
                 fontStyle: field.fontStyle,
                 textAlign: field.textAlign,
+                padding: '4px 8px',
+                backgroundColor: field.backgroundColor || undefined,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent:
@@ -173,6 +175,7 @@ export function CertificatePreview({ template, fields, currentPage }: Certificat
                   letterSpacing: field.letterSpacing ? `${field.letterSpacing * scale}px` : undefined,
                   opacity: (field.opacity ?? 100) / 100,
                   textTransform: (field.textTransform ?? 'none') as React.CSSProperties['textTransform'],
+                  textDecoration: field.textDecoration && field.textDecoration !== 'none' ? field.textDecoration : undefined,
                   textShadow: field.textShadow
                     ? `${field.textShadow.offsetX}px ${field.textShadow.offsetY}px ${field.textShadow.blur}px ${field.textShadow.color}`
                     : undefined,

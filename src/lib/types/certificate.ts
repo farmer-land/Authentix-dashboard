@@ -39,6 +39,8 @@ export interface CertificateField {
   letterSpacing?: number; // px in design space
   lineHeight?: number; // unitless multiplier (default 1.2)
   textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  textDecoration?: 'none' | 'underline' | 'line-through' | 'underline line-through';
+  backgroundColor?: string; // hex — background highlight behind text field
 
   // Color / gradient
   colorMode?: 'solid' | 'linear' | 'radial'; // defaults to 'solid'
@@ -55,6 +57,7 @@ export interface CertificateField {
   qrStyle?: 'standard' | 'rounded' | 'dots' | 'classy' | 'logo'; // QR visual style (default 'standard')
   qrTransparentBg?: boolean; // Remove white background (default false)
   qrLogoUrl?: string; // Logo image URL to display in centre (used when qrStyle === 'logo')
+  qrErrorCorrection?: 'L' | 'M' | 'Q' | 'H'; // Error correction level (default 'M')
 
   // Image field
   imageUrl?: string; // For image-type fields

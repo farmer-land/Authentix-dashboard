@@ -553,7 +553,7 @@ function blockToHtml(block: EmailBlock): string {
       const ta = block.textAlign || "left";
       const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
       return `<div style="padding:${pV}px ${pH}px;min-height:64px;display:flex;align-items:center;justify-content:${ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start"};${block.bgColor ? `background:${block.bgColor};` : ""}">
-  <p style="font-size:${block.fontSize || 16}px;color:${block.textColor || "#e5e7eb"};margin:0;text-align:${ta};line-height:${block.lineHeight || 1.7};letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};${ff}">${block.content || "Hi {{recipient_name}},"}</p>
+  <p style="font-size:${block.fontSize || 16}px;color:${block.textColor || "#e5e7eb"};margin:0;text-align:${ta};line-height:${block.lineHeight || 1.7};letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};font-style:${block.fontStyle || "normal"};${ff}">${block.content || "Hi {{recipient_name}},"}</p>
 </div>`;
     }
 
@@ -561,7 +561,7 @@ function blockToHtml(block: EmailBlock): string {
       const ta = block.textAlign || "left";
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       return `<div style="padding:${pV}px ${pH}px;text-align:${ta};${block.bgColor ? `background:${block.bgColor};` : ""}">
-  <p style="font-size:${block.fontSize || 15}px;color:${block.textColor || "#d1d5db"};line-height:${block.lineHeight || 1.7};margin:0;letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};${ff}">${block.content || ""}</p>
+  <p style="font-size:${block.fontSize || 15}px;color:${block.textColor || "#d1d5db"};line-height:${block.lineHeight || 1.7};margin:0;letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};font-style:${block.fontStyle || "normal"};${ff}">${block.content || ""}</p>
 </div>`;
     }
 
@@ -636,7 +636,7 @@ ${cells}
 
     case "linkedin": {
       const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
-      return `<div style="padding:${pV}px ${pH}px;text-align:center;${block.bgColor ? `background:${block.bgColor};` : ""}"><p style="font-size:14px;color:${block.textColor || "#9ca3af"};margin:0;${ff}">${block.content || "🎓 Share your achievement on LinkedIn and inspire others!"}</p></div>`;
+      return `<div style="padding:${pV}px ${pH}px;text-align:center;${block.bgColor ? `background:${block.bgColor};` : ""}"><p style="font-size:14px;color:${block.textColor || "#9ca3af"};margin:0;font-style:${block.fontStyle || "normal"};${ff}">${block.content || "🎓 Share your achievement on LinkedIn and inspire others!"}</p></div>`;
     }
 
     case "social": {
@@ -664,7 +664,7 @@ ${cells}
     case "footer": {
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       return `<div style="padding:${pV}px ${pH}px;text-align:center;border-top:1px solid #2d2d2d;${block.bgColor ? `background:${block.bgColor};` : ""}">
-  <p style="font-size:${block.fontSize || 12}px;color:${block.textColor || "#6b7280"};margin:0;line-height:${block.lineHeight || 1.6};${ff}">${block.content || "© {{organization_name}} · Powered by Authentix"}</p>
+  <p style="font-size:${block.fontSize || 12}px;color:${block.textColor || "#6b7280"};margin:0;line-height:${block.lineHeight || 1.6};font-style:${block.fontStyle || "normal"};${ff}">${block.content || "© {{organization_name}} · Powered by Authentix"}</p>
 </div>`;
     }
 
@@ -714,7 +714,17 @@ const BLOCKS_JSON_MARKER = "__blocks_v1__";
 
 export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground): string {
   if (!blocks.length) return "";
-  const inner = blocks.map(blockToHtml).join("\n");
+  const inner = blocks.map(block => {
+    const html = blockToHtml(block);
+    const bw = block.borderWidth ?? 0;
+    const br = block.borderRadius ?? 0;
+    if (bw > 0 || br > 0) {
+      const bStr = bw > 0 ? `border:${bw}px solid ${block.borderColor || '#3f3f46'};` : '';
+      const rStr = br > 0 ? `border-radius:${br}px;overflow:hidden;` : '';
+      return `<div style="${bStr}${rStr}">${html}</div>`;
+    }
+    return html;
+  }).join("\n");
   const wrapperBg = (() => {
     if (!emailBg || !emailBg.type || emailBg.type === "solid")
       return `background:${emailBg?.color || "#ffffff"};`;
@@ -1963,7 +1973,7 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left"
+        className="w-full flex items-center justify-between px-5 py-2.5 text-left"
       >
         <p className="text-sm font-bold text-white select-none">
           {label}
@@ -1982,7 +1992,7 @@ function NumBox({ label, value, onChange, unit, min, max, step = 1, className = 
   unit?: string; min?: number; max?: number; step?: number; className?: string; icon?: React.ReactNode;
 }) {
   return (
-    <div className={cn("flex items-center bg-zinc-800/80 rounded-full px-3.5 gap-2 h-9", className)}>
+    <div className={cn("flex items-center bg-zinc-800/80 rounded px-3 gap-2 h-8", className)}>
       {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}
       {label && <span className="text-xs text-zinc-500 shrink-0 select-none">{label}</span>}
       <input
@@ -1998,7 +2008,7 @@ function NumBox({ label, value, onChange, unit, min, max, step = 1, className = 
 // Label | Pill row layout
 const MROW = "flex items-center gap-3";
 const MLABEL = "text-sm text-zinc-400 shrink-0 select-none" as const;
-const PILL_FULL = "flex items-center bg-zinc-800/80 rounded-full px-3.5 gap-2.5 h-9 flex-1 min-w-0" as const;
+const PILL_FULL = "flex items-center bg-zinc-800/80 rounded px-3 gap-2.5 h-8 flex-1 min-w-0" as const;
 
 // ── Background image position + size controls ────────────────────────────────
 
@@ -2280,7 +2290,7 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
         ref={swatchRef}
         type="button"
         onClick={openPicker}
-        className="flex items-center bg-zinc-800 rounded-full px-3 gap-2.5 h-9 flex-1 hover:bg-zinc-700 transition-colors"
+        className="flex items-center bg-zinc-800 rounded px-3 gap-2.5 h-8 flex-1 hover:bg-zinc-700 transition-colors"
       >
         <div className="w-5 h-5 rounded-[4px] shrink-0 border border-zinc-600" style={{ background: value || "#000000" }} />
         <span className="text-sm text-zinc-200 font-mono uppercase truncate">{displayHex}</span>
@@ -2462,7 +2472,7 @@ function FontPickerControl({ value, onChange }: { value: string; onChange: (v: s
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="flex items-center justify-between gap-2 bg-zinc-800 rounded-full px-3.5 h-9 flex-1 min-w-0 hover:bg-zinc-700 transition-colors"
+          className="flex items-center justify-between gap-2 bg-zinc-800 rounded px-3 h-8 flex-1 min-w-0 hover:bg-zinc-700 transition-colors"
           style={{ fontFamily: value || "inherit" }}
         >
           <span className="truncate text-sm text-zinc-200">{currentLabel}</span>
@@ -2538,7 +2548,7 @@ export function BlockPropertiesPanel({
         </div>
         <Section label="Email Background">
           <div className="space-y-3">
-            <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9">
+            <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8">
               {(["solid", "gradient", "image"] as const).map(v => (
                 <button key={v} type="button"
                   onClick={() => onEmailBgChange?.({ ...emailBg, type: v })}
@@ -2600,8 +2610,8 @@ export function BlockPropertiesPanel({
   const u = (patch: Partial<EmailBlock>) => onChange({ ...block, ...patch });
   const { type } = block;
 
-  const INP = "w-full text-sm bg-zinc-800/80 rounded-full px-4 py-2 text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
-  const NUM = "w-16 text-sm bg-zinc-800/80 rounded-full px-3 py-1.5 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
+  const INP = "w-full text-sm bg-zinc-800/80 rounded px-3 py-1.5 text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40";
+  const NUM = "w-16 text-sm bg-zinc-800/80 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#3ECF8E]/40 text-right";
 
   // ── Spacing section (all blocks that have padding) ─────────────────────────
   const hasSpacing = !["cert_image", "divider"].includes(type);
@@ -2680,7 +2690,7 @@ export function BlockPropertiesPanel({
         </div>
         <div className={MROW}>
           <span className={cn(MLABEL, "w-[90px]")}>Align</span>
-          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
+          <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8 flex-1">
             {ALIGN_OPTIONS.map(a => (
               <button key={a.value} type="button" onClick={() => u({ imageAlign: a.value as EmailBlock["imageAlign"] })}
                 className={cn("flex-1 h-full flex items-center justify-center transition-colors",
@@ -2793,7 +2803,7 @@ export function BlockPropertiesPanel({
         </div>
         <div className={MROW}>
           <span className={cn(MLABEL, "w-[90px]")}>Width</span>
-          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
+          <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8 flex-1">
             {(["auto", "full"] as const).map(v => (
               <button key={v} type="button" onClick={() => u({ btnWidth: v })}
                 className={cn("flex-1 h-full text-sm capitalize transition-colors",
@@ -2826,7 +2836,7 @@ export function BlockPropertiesPanel({
       <Section label="Divider">
         <div className={MROW}>
           <span className={cn(MLABEL, "w-[90px]")}>Style</span>
-          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
+          <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8 flex-1">
             {(["solid", "dashed", "dotted"] as const).map(v => (
               <button key={v} type="button" onClick={() => u({ dividerStyle: v })}
                 className={cn("flex-1 h-full text-sm capitalize transition-colors",
@@ -3061,7 +3071,7 @@ export function BlockPropertiesPanel({
         <div className="space-y-3">
           <div className={MROW}>
             <span className={cn(MLABEL, "w-[90px]")}>Bg type</span>
-            <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
+            <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8 flex-1">
               {(["gradient", "solid", "image"] as const).map(v => (
                 <button key={v} type="button" onClick={() => u({ bgType: v })}
                   className={cn("flex-1 h-full text-sm capitalize transition-colors",
@@ -3166,7 +3176,7 @@ export function BlockPropertiesPanel({
           </div>
         </div>
       )}
-      {/* Font weight */}
+      {/* Font weight + italic */}
       {["header", "text", "greeting", "footer", "cta_button", "linkedin"].includes(type) && (
         <div className={MROW}>
           <span className={cn(MLABEL, "w-[90px]")}>Weight</span>
@@ -3174,7 +3184,7 @@ export function BlockPropertiesPanel({
             <select
               value={type === "cta_button" ? (block.btnFontWeight || "600") : (block.fontWeight || "normal")}
               onChange={e => u({ fontWeight: e.target.value, ...(type === "cta_button" ? { btnFontWeight: e.target.value } : {}) })}
-              className="w-full h-9 bg-zinc-800 rounded-full px-3.5 text-sm text-zinc-200 outline-none appearance-none cursor-pointer"
+              className="w-full h-8 bg-zinc-800 rounded px-3 text-sm text-zinc-200 outline-none appearance-none cursor-pointer"
             >
               {[["normal","Regular"],["500","Medium"],["600","Semi Bold"],["700","Bold"],["800","Extra Bold"]].map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
@@ -3182,13 +3192,26 @@ export function BlockPropertiesPanel({
             </select>
             <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
           </div>
+          {type !== "cta_button" && (
+            <button
+              type="button"
+              title="Italic"
+              onClick={() => u({ fontStyle: block.fontStyle === "italic" ? "normal" : "italic" })}
+              className={cn("w-8 h-8 shrink-0 flex items-center justify-center rounded border transition-colors italic font-semibold text-sm",
+                block.fontStyle === "italic"
+                  ? "bg-[#3ECF8E] text-white border-transparent"
+                  : "border-zinc-700 text-zinc-400 hover:text-zinc-200 bg-zinc-800")}
+            >
+              I
+            </button>
+          )}
         </div>
       )}
       {/* Alignment */}
       {["text", "greeting", "header", "footer", "linkedin", "cta_button"].includes(type) && (
         <div className={MROW}>
           <span className={cn(MLABEL, "w-[90px]")}>Align</span>
-          <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9 flex-1">
+          <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8 flex-1">
             {ALIGN_OPTIONS.map(a => (
               <button key={a.value} type="button" onClick={() => u({ textAlign: a.value as EmailBlock["textAlign"] })}
                 className={cn("flex-1 h-full flex items-center justify-center transition-colors",
@@ -3227,6 +3250,35 @@ export function BlockPropertiesPanel({
     </Section>
   ) : null;
 
+  const showBorder = !["cert_image", "spacer", "divider"].includes(type);
+  const borderSection = showBorder ? (
+    <Section label="Border" defaultOpen={false}>
+      <div className="space-y-3">
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Thickness</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={0} max={20} value={block.borderWidth ?? 0}
+              onChange={e => u({ borderWidth: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
+          </div>
+        </div>
+        {(block.borderWidth ?? 0) > 0 && (
+          <ColorRow label="Border color" value={block.borderColor || "#3f3f46"} onChange={v => u({ borderColor: v })} />
+        )}
+        <div className={MROW}>
+          <span className={cn(MLABEL, "w-[90px]")}>Radius</span>
+          <div className={PILL_FULL}>
+            <input type="number" min={0} max={40} value={block.borderRadius ?? 0}
+              onChange={e => u({ borderRadius: Number(e.target.value) })}
+              className="flex-1 bg-transparent text-sm text-zinc-200 outline-none" />
+            <span className="text-sm text-zinc-500 shrink-0">px</span>
+          </div>
+        </div>
+      </div>
+    </Section>
+  ) : null;
+
   return (
     <div className="flex flex-col min-h-0">
       {/* Block type badge */}
@@ -3238,12 +3290,13 @@ export function BlockPropertiesPanel({
       {contentSection}
       {typoSection}
       {colorsSection}
+      {borderSection}
       {spacingSection}
       {/* Email background — always accessible even when a block is selected */}
       {onEmailBgChange && (
         <Section label="Email Background" defaultOpen={false}>
           <div className="space-y-3">
-            <div className="flex items-center bg-zinc-800 rounded-full overflow-hidden h-9">
+            <div className="flex items-center bg-zinc-800 rounded overflow-hidden h-8">
               {(["solid", "gradient", "image"] as const).map(v => (
                 <button key={v} type="button"
                   onClick={() => onEmailBgChange({ ...emailBg, type: v })}
@@ -3416,12 +3469,18 @@ function SortableBlockCard({ block, isSelected, onSelect, onRemove, onDuplicate,
       }}
     >
       {/* Card — full-width, Figma-style selection ring */}
-      <div className={cn(
-        "relative overflow-hidden transition-all duration-100",
-        isSelected
-          ? "outline outline-2 outline-[#3ECF8E] shadow-[0_0_0_4px_rgba(62,207,142,0.12)]"
-          : "outline outline-0 outline-transparent hover:outline hover:outline-1 hover:outline-[#3ECF8E]/25",
-      )}>
+      <div
+        className={cn(
+          "relative overflow-hidden transition-all duration-100",
+          isSelected
+            ? "outline outline-2 outline-[#3ECF8E] shadow-[0_0_0_4px_rgba(62,207,142,0.12)]"
+            : "outline outline-0 outline-transparent hover:outline hover:outline-1 hover:outline-[#3ECF8E]/25",
+        )}
+        style={{
+          border: (block.borderWidth ?? 0) > 0 ? `${block.borderWidth}px solid ${block.borderColor || '#3f3f46'}` : undefined,
+          borderRadius: (block.borderRadius ?? 0) > 0 ? `${block.borderRadius}px` : undefined,
+        }}
+      >
         {/* Drag handle — slim left edge overlay, visible on hover */}
         <div
           {...attributes}
