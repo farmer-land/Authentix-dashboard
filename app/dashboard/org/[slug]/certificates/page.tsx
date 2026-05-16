@@ -42,11 +42,11 @@ import {
   X,
   SlidersHorizontal,
 } from "lucide-react";
-import { api, type Certificate } from "@/lib/api/client";
+import { type Certificate } from "@/lib/api/client";
 import { useCertificates } from "@/lib/hooks/queries/certificates";
 import { useCatalogCategories, useCatalogSubcategories } from "@/lib/hooks/queries/catalog";
 import { cn } from "@/lib/utils";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 
 interface FilterState {
   search: string;
@@ -123,8 +123,21 @@ export default function CertificatesPage() {
 
   const handleDownload = async (certificate: Certificate) => {
     try {
-      const result = await api.certificates.getDownloadUrl(certificate.id);
-      window.open(result.url, "_blank");
+      const url = certificate.download_url;
+      if (!url) {
+        alert("Download URL not available for this certificate");
+        return;
+      }
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${certificate.certificate_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Error downloading certificate:", err);
       alert("Failed to download certificate");
@@ -344,8 +357,8 @@ export default function CertificatesPage() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium">{cert.recipient_name}</p>
-                        {cert.template?.subcategory?.name && (
-                          <p className="text-xs text-muted-foreground">{cert.template.subcategory.name}</p>
+                        {cert.subcategory?.name && (
+                          <p className="text-xs text-muted-foreground">{cert.subcategory.name}</p>
                         )}
                       </div>
                     </td>
@@ -375,17 +388,17 @@ export default function CertificatesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
-                        {cert.template?.category?.name && (
+                        {cert.category?.name && (
                           <Badge variant="outline" className="text-xs w-fit">
-                            {cert.template.category.name}
+                            {cert.category.name}
                           </Badge>
                         )}
-                        {cert.template?.subcategory?.name && (
+                        {cert.subcategory?.name && (
                           <span className="text-xs text-muted-foreground">
-                            {cert.template.subcategory.name}
+                            {cert.subcategory.name}
                           </span>
                         )}
-                        {!cert.template?.category?.name && (
+                        {!cert.category?.name && (
                           <span className="text-xs text-muted-foreground">-</span>
                         )}
                       </div>

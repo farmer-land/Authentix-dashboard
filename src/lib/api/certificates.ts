@@ -32,12 +32,8 @@ export interface Certificate {
   // Computed/joined fields
   download_url: string | null;
   preview_url: string | null;
-  template?: {
-    id: string;
-    title: string;
-    category?: { id: string; name: string };
-    subcategory?: { id: string; name: string };
-  } | null;
+  category?: { id: string; name: string } | null;
+  subcategory?: { id: string; name: string } | null;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
