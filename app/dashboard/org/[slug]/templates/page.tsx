@@ -682,17 +682,16 @@ export default function TemplatesPage() {
                           if (!categoryName) return null;
                           const categoryColors = getColorForText(categoryName);
                           return (
-                            <Badge
-                              variant="outline"
+                            <span
                               className={cn(
-                                "text-xs border max-w-30 truncate block",
+                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate block",
                                 categoryColors.bg,
                                 categoryColors.text,
                                 categoryColors.border
                               )}
                             >
                               {categoryName}
-                            </Badge>
+                            </span>
                           );
                         })()}
                         {/* Check for subcategory name in multiple possible locations (prioritize subcategory_name from backend) */}
@@ -705,17 +704,16 @@ export default function TemplatesPage() {
                           if (!subcategoryName) return null;
                           const subcategoryColors = getColorForText(subcategoryName);
                           return (
-                            <Badge
-                              variant="outline"
+                            <span
                               className={cn(
-                                "text-xs border max-w-30 truncate block",
+                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate block",
                                 subcategoryColors.bg,
                                 subcategoryColors.text,
                                 subcategoryColors.border
                               )}
                             >
                               {subcategoryName}
-                            </Badge>
+                            </span>
                           );
                         })()}
                       </div>

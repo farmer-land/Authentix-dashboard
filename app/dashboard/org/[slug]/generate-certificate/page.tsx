@@ -1618,145 +1618,15 @@ export default function GenerateCertificatePage() {
       {currentStep === 'design' && template && (
         <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-background flex flex-col">
 
-          {/* Canvas area + optional preview — flex row */}
-          <div className="flex-1 flex overflow-hidden border-t border-border/20">
+          {/* Canvas area + optional preview — flex row, fills all space */}
+          <div className="flex-1 flex overflow-hidden">
 
-          {/* ── Left panel — flex push (pill or expanded) ── */}
-          {!previewOpen && (
-            leftPanelVisible ? (
-              <div className="w-72 shrink-0 flex flex-col bg-card border-x border-border/40 overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-semibold text-foreground flex-1">Layers</span>
-                  <button
-                    onClick={() => setLeftPanelVisible(false)}
-                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Template switcher — multi mode only */}
-                {templateMode === 'multi' && templateConfigs.length > 1 && (
-                  <div className="shrink-0 border-b border-border/30 px-3 py-2">
-                    <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Templates</p>
-                    <div className="space-y-0.5">
-                      {templateConfigs.map((cfg, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSwitchActiveTemplate(idx)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${
-                            idx === activeTemplateIndex
-                              ? 'bg-primary text-primary-foreground font-medium'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`}
-                        >
-                          <span className={`w-4 h-4 rounded-full border text-[9px] flex items-center justify-center shrink-0 font-bold ${
-                            idx === activeTemplateIndex ? 'border-primary-foreground/50' : 'border-current'
-                          }`}>
-                            {idx + 1}
-                          </span>
-                          <span className="truncate">{cfg.template.templateName || `Template ${idx + 1}`}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Scrollable tab content */}
-                <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
-                    <div className="px-3 pt-2 pb-1 shrink-0">
-                      <div className="flex items-center bg-muted rounded-lg p-1 gap-1 h-8">
-                        <button
-                          onClick={() => setActiveTab('fields')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
-                            activeTab === 'fields' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          <Layers className="w-3 h-3" />
-                          Fields
-                        </button>
-                        <button
-                          onClick={() => setActiveTab('assets')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
-                            activeTab === 'assets' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          <ImageIcon className="w-3 h-3" />
-                          Assets
-                        </button>
-                      </div>
-                    </div>
-
-                    <TabsContent value="fields" className="p-3 mt-0 space-y-5">
-                      <div>
-                        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Fields</p>
-                        <FieldTypeSelector
-                          onAddField={handleAddField}
-                          onAddImageField={handleAddAssetField}
-                          onAddImageFile={handleAddImageFile}
-                          pdfWidth={template.pdfWidth}
-                          pdfHeight={template.pdfHeight}
-                          currentPage={currentPage}
-                        />
-                      </div>
-                      <div className="pb-4">
-                        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Layers</p>
-                        <ErrorBoundary fallbackLabel="Layers panel error">
-                        <FieldLayersList
-                          fields={fields}
-                          selectedFieldId={selectedFieldId}
-                          hiddenFields={hiddenFields}
-                          onFieldSelect={handleFieldSelect}
-                          onFieldDelete={handleDeleteField}
-                          onToggleVisibility={handleToggleVisibility}
-                          onFieldReorder={handleFieldLayerReorder}
-                          onFieldLock={handleFieldLock}
-                          onFieldRename={handleFieldRename}
-                          onFieldDuplicate={handleFieldDuplicate}
-                        />
-                        </ErrorBoundary>
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="assets" className="p-3 mt-0">
-                      <AssetLibrary
-                        assets={libraryAssets}
-                        onAssetsChange={setLibraryAssets}
-                        onAddAsset={handleAddAssetField}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              </div>
-            ) : (
-              /* Collapsed left pill */
-              <div
-                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-x border-border/30 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors select-none py-4"
-                onClick={() => setLeftPanelVisible(true)}
-                title="Expand layers panel"
-              >
-                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
-                <span
-                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
-                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                >
-                  Layers
-                </span>
-                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
-              </div>
-            )
-          )}
-
-          {/* Editing canvas — fills remaining width */}
+          {/* Editing canvas — always fills full width; panels float as absolute overlays */}
           <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
             {useInfiniteCanvas ? (
               <ErrorBoundary fallbackLabel="Canvas failed to load">
               <InfiniteCanvas
                 fileUrl={template.fileUrl}
-
                 pdfWidth={template.pdfWidth}
                 pdfHeight={template.pdfHeight}
                 fields={fields.filter(f => (f.pageNumber ?? 0) === currentPage)}
@@ -1802,7 +1672,6 @@ export default function GenerateCertificatePage() {
               <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8">
                 <CertificateCanvas
                   fileUrl={template.fileUrl}
-
                   pdfWidth={template.pdfWidth}
                   pdfHeight={template.pdfHeight}
                   fields={fields}
@@ -1817,13 +1686,160 @@ export default function GenerateCertificatePage() {
                 />
               </div>
             )}
-          </div>{/* end editing canvas */}
 
-          {/* ── Right panel — flex push (pill or expanded) ── */}
-          {selectedField && !previewOpen && (
-            rightPanelVisible ? (
-              <div className="w-80 shrink-0 flex flex-col bg-card border-l border-border/50 overflow-hidden">
-                {/* Header */}
+            {/* ── Left pill (collapsed) — floating, left:12 keeps gap from nav ── */}
+            {!leftPanelVisible && !previewOpen && (
+              <div
+                className="absolute z-40 flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                style={{ left: 12, top: '50%', transform: 'translateY(-50%)', width: 40 }}
+                onClick={() => setLeftPanelVisible(true)}
+                title="Expand layers panel"
+              >
+                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
+                <span
+                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                >
+                  Layers
+                </span>
+                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+              </div>
+            )}
+
+            {/* ── Left panel (expanded) — floating overlay ── */}
+            {leftPanelVisible && !previewOpen && (
+              <div
+                className="absolute z-40 w-72 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+                style={{ left: 12, top: 60, height: 'calc(100% - 140px)' }}
+              >
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-semibold text-foreground flex-1">Layers</span>
+                  <button
+                    onClick={() => setLeftPanelVisible(false)}
+                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {templateMode === 'multi' && templateConfigs.length > 1 && (
+                  <div className="shrink-0 border-b border-border/30 px-3 py-2">
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Templates</p>
+                    <div className="space-y-0.5">
+                      {templateConfigs.map((cfg, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSwitchActiveTemplate(idx)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${
+                            idx === activeTemplateIndex
+                              ? 'bg-primary text-primary-foreground font-medium'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                        >
+                          <span className={`w-4 h-4 rounded-full border text-[9px] flex items-center justify-center shrink-0 font-bold ${
+                            idx === activeTemplateIndex ? 'border-primary-foreground/50' : 'border-current'
+                          }`}>
+                            {idx + 1}
+                          </span>
+                          <span className="truncate">{cfg.template.templateName || `Template ${idx + 1}`}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
+                    <div className="px-3 pt-2 pb-1 shrink-0">
+                      <div className="flex items-center bg-muted rounded-lg p-1 gap-1 h-8">
+                        <button
+                          onClick={() => setActiveTab('fields')}
+                          className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
+                            activeTab === 'fields' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <Layers className="w-3 h-3" />
+                          Fields
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('assets')}
+                          className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
+                            activeTab === 'assets' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <ImageIcon className="w-3 h-3" />
+                          Assets
+                        </button>
+                      </div>
+                    </div>
+                    <TabsContent value="fields" className="p-3 mt-0 space-y-5">
+                      <div>
+                        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Fields</p>
+                        <FieldTypeSelector
+                          onAddField={handleAddField}
+                          onAddImageField={handleAddAssetField}
+                          onAddImageFile={handleAddImageFile}
+                          pdfWidth={template.pdfWidth}
+                          pdfHeight={template.pdfHeight}
+                          currentPage={currentPage}
+                        />
+                      </div>
+                      <div className="pb-4">
+                        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Layers</p>
+                        <ErrorBoundary fallbackLabel="Layers panel error">
+                        <FieldLayersList
+                          fields={fields}
+                          selectedFieldId={selectedFieldId}
+                          hiddenFields={hiddenFields}
+                          onFieldSelect={handleFieldSelect}
+                          onFieldDelete={handleDeleteField}
+                          onToggleVisibility={handleToggleVisibility}
+                          onFieldReorder={handleFieldLayerReorder}
+                          onFieldLock={handleFieldLock}
+                          onFieldRename={handleFieldRename}
+                          onFieldDuplicate={handleFieldDuplicate}
+                        />
+                        </ErrorBoundary>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="assets" className="p-3 mt-0">
+                      <AssetLibrary
+                        assets={libraryAssets}
+                        onAssetsChange={setLibraryAssets}
+                        onAddAsset={handleAddAssetField}
+                      />
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              </div>
+            )}
+
+            {/* ── Right pill (collapsed) ── */}
+            {selectedField && !rightPanelVisible && !previewOpen && (
+              <div
+                className="absolute z-40 flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                style={{ right: 12, top: '50%', transform: 'translateY(-50%)', width: 40 }}
+                onClick={() => setRightPanelVisible(true)}
+                title="Expand properties panel"
+              >
+                <Palette className="w-4 h-4 text-muted-foreground/70" />
+                <span
+                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                >
+                  Props
+                </span>
+                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+              </div>
+            )}
+
+            {/* ── Right panel (expanded) — floating overlay ── */}
+            {selectedField && rightPanelVisible && !previewOpen && (
+              <div
+                className="absolute z-40 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+                style={{ right: 12, top: 60, height: 'calc(100% - 140px)' }}
+              >
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                   <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
@@ -1835,7 +1851,6 @@ export default function GenerateCertificatePage() {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
                   <RightPanel
                     selectedField={selectedField}
@@ -1853,24 +1868,31 @@ export default function GenerateCertificatePage() {
                   />
                 </div>
               </div>
-            ) : (
-              /* Collapsed right pill — same style as left pill */
-              <div
-                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-l border-border/40 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors select-none py-4"
-                onClick={() => setRightPanelVisible(true)}
-                title="Expand properties panel"
-              >
-                <Palette className="w-4 h-4 text-muted-foreground/70" />
-                <span
-                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
-                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+            )}
+
+            {/* ── Stepper — transparent overlay at bottom of canvas ── */}
+            <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none">
+              <div className="flex items-center px-4 py-2 gap-2 pointer-events-auto">
+                <div className="flex-1 flex justify-center">
+                  {stepperExpanded ? (
+                    stepperContent
+                  ) : (
+                    <span className="text-xs font-medium text-muted-foreground select-none">
+                      {steps.find(s => s.id === currentStep)?.label ?? 'Design Fields'}
+                    </span>
+                  )}
+                </div>
+                <button
+                  className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
+                  onClick={() => setStepperExpanded(v => !v)}
+                  title={stepperExpanded ? 'Collapse steps' : 'Expand steps'}
                 >
-                  Props
-                </span>
-                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+                  {stepperExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                </button>
               </div>
-            )
-          )}
+            </div>
+
+          </div>{/* end editing canvas */}
 
           {/* ── Preview panel ── */}
           {previewOpen && (
@@ -1902,28 +1924,6 @@ export default function GenerateCertificatePage() {
           )}
 
           </div>{/* end flex row */}
-
-          {/* ── Stepper bottom bar ── */}
-          <div className="shrink-0 border-t border-border/20">
-            <div className="flex items-center px-4 py-2 gap-2">
-              <div className="flex-1 flex justify-center">
-                {stepperExpanded ? (
-                  stepperContent
-                ) : (
-                  <span className="text-xs font-medium text-muted-foreground select-none">
-                    {steps.find(s => s.id === currentStep)?.label ?? 'Design Fields'}
-                  </span>
-                )}
-              </div>
-              <button
-                className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                onClick={() => setStepperExpanded(v => !v)}
-                title={stepperExpanded ? 'Collapse steps' : 'Expand steps'}
-              >
-                {stepperExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
 
         </div>
       )}
