@@ -25,7 +25,7 @@ import {
   useDuplicateDeliveryTemplate,
 } from "@/lib/hooks/queries/delivery";
 import { useOrg } from "@/lib/org";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PREDEFINED_TEMPLATES, type PredefinedTemplate } from "./PREDEFINED_TEMPLATES";
 import { cn } from "@/lib/utils";
 
@@ -432,6 +432,8 @@ function TemplateCard({
 export default function EmailTemplatesPage() {
   const { orgPath, slug } = useOrg();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnToSend = searchParams.get("returnToSend") === "1";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sample chooser
@@ -492,7 +494,7 @@ export default function EmailTemplatesPage() {
       onSuccess: (created) => {
         toast.success(isFromSample ? `"${name}" created from sample` : `"${name}" created`);
         setPendingCreate(null);
-        router.push(orgPath(`/email-templates/${created.id}`));
+        router.push(orgPath(`/email-templates/${created.id}${returnToSend ? "?returnToSend=1" : ""}`));
       },
       onError: (err) => {
         toast.error(err instanceof Error ? err.message : "Failed to create template");
@@ -610,7 +612,7 @@ export default function EmailTemplatesPage() {
                     key={template.id}
                     template={template}
                     isDraft={false}
-                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}`))}
+                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
@@ -636,7 +638,7 @@ export default function EmailTemplatesPage() {
                     key={template.id}
                     template={template}
                     isDraft
-                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}`))}
+                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}

@@ -323,7 +323,7 @@ interface SendEmailModalProps {
   onEmailSent?: (statuses: Record<string, string>) => void;
 }
 
-type SendModalStep = 'checking' | 'no_template' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
+type SendModalStep = 'checking' | 'no_template' | 'no_integration' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
 
 function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
@@ -368,9 +368,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
       setSelectedTemplateId(defaultTpl.id);
 
       if (activeIntegrations.length === 0) {
-        // No custom integration — auto-use platform default, go to template selection first
-        setUsePlatformDefault(true);
-        setStep('select_template');
+        setStep('no_integration');
         return;
       }
 
@@ -571,7 +569,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                           certFieldHeaders: certFieldHeaders ?? [],
                         }));
                       } catch { /* storage unavailable */ }
-                      router.push(orgPath('/email-templates'));
+                      router.push(orgPath('/email-templates?returnToSend=1'));
                     }}
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -585,7 +583,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
         <>
         <DialogTitle className="flex items-center gap-2">
           <Mail className="w-5 h-5 text-primary" />
-          {step === 'select_template' ? 'Choose Email Template' : 'Send via Email'}
+          {step === 'select_template' ? 'Choose Email Template' : step === 'no_integration' ? 'Choose How to Send' : 'Send via Email'}
         </DialogTitle>
 
         {/* Checking */}
@@ -618,11 +616,67 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                       certFieldHeaders: certFieldHeaders ?? [],
                     }));
                   } catch { /* storage unavailable */ }
-                  router.push(orgPath('/email-templates'));
+                  router.push(orgPath('/email-templates?returnToSend=1'));
                 }}
               >
                 Create Template <ExternalLink className="w-3.5 h-3.5" />
               </Button>
+            </div>
+          </div>
+        )}
+
+        {/* No integration — user picks platform default or sets up their own */}
+        {step === 'no_integration' && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              No custom email integration is connected. Choose how you'd like to send certificates:
+            </p>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => { setUsePlatformDefault(true); setStep('select_template'); }}
+                className="w-full text-left p-4 rounded-lg border-2 border-[#3ECF8E]/30 bg-[#3ECF8E]/5 hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/10 transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-md bg-[#3ECF8E]/10 shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-[#3ECF8E]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">Use Authentix Default Email</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Send from our verified sender — no setup required.</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem('pendingSendJob', JSON.stringify({
+                      jobId,
+                      recipientCount,
+                      certPreviewUrl: certPreviewUrl ?? null,
+                      certFieldHeaders: certFieldHeaders ?? [],
+                    }));
+                  } catch { /* storage unavailable */ }
+                  router.push(orgPath('/settings/delivery'));
+                }}
+                className="w-full text-left p-4 rounded-lg border-2 border-border hover:border-border/60 hover:bg-muted/30 transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-md bg-muted shrink-0">
+                    <Settings2 className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">Set Up My Own Email</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Connect your own email provider for full control over sender identity.</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={onClose} className="text-muted-foreground">Cancel</Button>
             </div>
           </div>
         )}
@@ -694,7 +748,9 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               })}
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={onClose} className="shrink-0">Cancel</Button>
+              <Button variant="outline" onClick={integrations.length === 0 ? () => setStep('no_integration') : onClose} className="shrink-0 gap-1.5">
+                {integrations.length === 0 ? <><ChevronLeft className="w-4 h-4" />Back</> : 'Cancel'}
+              </Button>
               <Button
                 onClick={() => setStep('confirm')}
                 className="flex-1 gap-2"
@@ -724,7 +780,14 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               {usePlatformDefault ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-[#3ECF8E]/5 border-[#3ECF8E]/20 text-sm">
                   <Mail className="w-3.5 h-3.5 text-[#3ECF8E] shrink-0" />
-                  <span className="truncate text-[#3ECF8E] font-medium">Authentix Default Email</span>
+                  <span className="truncate text-[#3ECF8E] font-medium flex-1">Authentix Default Email</span>
+                  <button
+                    type="button"
+                    onClick={() => setStep('no_integration')}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0 transition-colors"
+                  >
+                    Change
+                  </button>
                 </div>
               ) : integrations.length === 1 ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-muted/30 text-sm">
@@ -806,7 +869,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
             )}
 
             <p className="text-xs text-muted-foreground">
-              Certificates will be attached as PDF files to each email.
+              Certificates will be attached as PNG images to each email.
             </p>
 
             <div className="flex gap-2">
@@ -1267,6 +1330,7 @@ export function ExportSection({
 
   // Email setup pre-check (soft warning before generating)
   const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean; hasIntegration: boolean } | null>(null);
+  const [emailBannerDismissed, setEmailBannerDismissed] = useState(false);
   useEffect(() => {
     Promise.all([api.delivery.listTemplates(), api.delivery.listIntegrations()])
       .then(([tplList, intList]) => {
@@ -2169,12 +2233,22 @@ export function ExportSection({
           </Card>
 
           {/* Soft email setup warning */}
-          {emailSetup && !emailSetup.hasTemplate && (
+          {emailSetup && !emailSetup.hasTemplate && !emailBannerDismissed && (
             <Alert className="border-amber-500/30 bg-amber-500/5">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-sm text-amber-800 flex items-center justify-between gap-2">
-                <span>No email template set up — create one so you can send certificates by email after generating.</span>
-                <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap shrink-0 font-medium">Create template →</Link>
+                <span>No email template set up — create one to send certificates by email after generating.</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap font-medium">Create template →</Link>
+                  <button
+                    type="button"
+                    onClick={() => setEmailBannerDismissed(true)}
+                    className="text-amber-600/60 hover:text-amber-700 transition-colors"
+                    title="Dismiss"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
