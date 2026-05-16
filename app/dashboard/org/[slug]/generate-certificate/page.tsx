@@ -1619,12 +1619,12 @@ export default function GenerateCertificatePage() {
         <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-background flex flex-col">
 
           {/* Canvas area + optional preview — flex row */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden border-t border-border/20">
 
           {/* ── Left panel — flex push (pill or expanded) ── */}
           {!previewOpen && (
             leftPanelVisible ? (
-              <div className="w-72 shrink-0 flex flex-col bg-card border-r border-border/50 overflow-hidden">
+              <div className="w-72 shrink-0 flex flex-col bg-card border-x border-border/40 overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -1734,7 +1734,7 @@ export default function GenerateCertificatePage() {
             ) : (
               /* Collapsed left pill */
               <div
-                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-r border-border/40 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors select-none py-4"
+                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-x border-border/30 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors select-none py-4"
                 onClick={() => setLeftPanelVisible(true)}
                 title="Expand layers panel"
               >
@@ -1822,14 +1822,14 @@ export default function GenerateCertificatePage() {
           {/* ── Right panel — flex push (pill or expanded) ── */}
           {selectedField && !previewOpen && (
             rightPanelVisible ? (
-              <div className="w-80 shrink-0 flex flex-col bg-zinc-950 border-l border-zinc-800 overflow-hidden">
+              <div className="w-80 shrink-0 flex flex-col bg-card border-l border-border/50 overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 border-b border-zinc-800 shrink-0">
-                  <Palette className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                  <span className="text-sm font-bold text-white flex-1">Properties</span>
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
+                  <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
                   <button
                     onClick={() => setRightPanelVisible(false)}
-                    className="text-zinc-500 hover:text-white rounded p-0.5 hover:bg-zinc-800 transition-colors"
+                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                     title="Hide panel"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1854,20 +1854,20 @@ export default function GenerateCertificatePage() {
                 </div>
               </div>
             ) : (
-              /* Collapsed right pill */
+              /* Collapsed right pill — same style as left pill */
               <div
-                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-l border-zinc-800 bg-zinc-950 cursor-pointer hover:bg-zinc-900 transition-colors select-none py-4"
+                className="w-10 shrink-0 flex flex-col items-center justify-center gap-3 border-l border-border/40 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors select-none py-4"
                 onClick={() => setRightPanelVisible(true)}
                 title="Expand properties panel"
               >
-                <Palette className="w-4 h-4 text-zinc-500" />
+                <Palette className="w-4 h-4 text-muted-foreground/70" />
                 <span
-                  className="text-[9px] font-semibold text-zinc-600 tracking-widest uppercase"
+                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
                   style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                 >
-                  Properties
+                  Props
                 </span>
-                <Maximize2 className="w-3 h-3 text-zinc-700" />
+                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
               </div>
             )
           )}
