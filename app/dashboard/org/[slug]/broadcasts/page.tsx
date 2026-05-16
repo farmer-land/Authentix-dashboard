@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
 import {
   useEmailBroadcasts, useCreateBroadcast, useUpdateBroadcast,
-  useSendBroadcast, useDeleteBroadcast,
+  useSendBroadcast, useDeleteBroadcast, useDeliveryIntegrations,
 } from "@/lib/hooks/queries/delivery";
 import { useEmailSegments } from "@/lib/hooks/queries/delivery";
 import type { EmailBroadcast, BroadcastStatus, CreateBroadcastDto } from "@/lib/api/client";
@@ -163,13 +163,22 @@ function CampaignWizard({
 }) {
   const { segments } = useEmailSegments();
   const createMutation = useCreateBroadcast();
+  const { integrations: rawIntegrations } = useDeliveryIntegrations();
   const [step, setStep] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [integrationOptions, setIntegrationOptions] = useState<{ id: string; name: string; email: string; replyTo: string }[]>([]);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>('');
+  const didAutoSelect = useRef(false);
+
+  const activeIntegrations = rawIntegrations.filter(i => i.channel === 'email' && i.is_active);
+  const integrationOptions = activeIntegrations.map(i => ({
+    id: i.id,
+    name: i.from_name ?? i.display_name,
+    email: i.from_email ?? '',
+    replyTo: i.reply_to ?? '',
+  }));
 
   const [w, setW] = useState<WizardState>({
     name: "",
@@ -191,28 +200,19 @@ function CampaignWizard({
   const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setW(prev => ({ ...prev, [key]: value }));
 
-  // Load configured email integrations and auto-populate sender fields
+  // Auto-select default integration once integrations load
   useEffect(() => {
-    api.delivery.listIntegrations().then(list => {
-      const active = list.filter(i => i.channel === 'email' && i.is_active);
-      if (active.length === 0) return;
-      const opts = active.map(i => ({
-        id: i.id,
-        name: i.from_name ?? i.display_name,
-        email: i.from_email ?? '',
-        replyTo: i.reply_to ?? '',
-      }));
-      setIntegrationOptions(opts);
-      const def = active.find(i => i.is_default) ?? active[0]!;
-      setSelectedIntegrationId(def.id);
-      setW(prev => ({
-        ...prev,
-        from_name: def.from_name ?? def.display_name,
-        from_email: def.from_email ?? '',
-        reply_to: def.reply_to ?? '',
-      }));
-    }).catch(() => {});
-  }, []);
+    if (didAutoSelect.current || activeIntegrations.length === 0) return;
+    didAutoSelect.current = true;
+    const def = activeIntegrations.find(i => i.is_default) ?? activeIntegrations[0]!;
+    setSelectedIntegrationId(def.id);
+    setW(prev => ({
+      ...prev,
+      from_name: def.from_name ?? def.display_name,
+      from_email: def.from_email ?? '',
+      reply_to: def.reply_to ?? '',
+    }));
+  }, [activeIntegrations]);
 
   // ── File upload ────────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file: File) => {
