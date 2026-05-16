@@ -249,20 +249,21 @@ export function InfiniteCanvas({
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-    // Larger padding (120px each side) gives landscape templates breathing room
-    // so the right properties panel doesn't overlap the certificate edge.
+    // Center the template in the area to the right of the left panel so the
+    // toolbar's CSS default (calc(50% + leftPanelWidth/2)) aligns with it.
     const padding = 120;
+    const availableWidth = cw - leftPanelWidth;
     const fitScale = clamp(
-      Math.min((cw - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
+      Math.min((availableWidth - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
       MIN_SCALE,
       MAX_SCALE,
     );
-    const centeredX = (cw - pdfWidth * fitScale) / 2;
+    const centeredX = leftPanelWidth + (availableWidth - pdfWidth * fitScale) / 2;
     const centeredY = (ch - pdfHeight * fitScale) / 2;
     onScaleChange(fitScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
-  }, [pdfWidth, pdfHeight, onScaleChange]);
+  }, [pdfWidth, pdfHeight, onScaleChange, leftPanelWidth]);
 
   // Run auto-fit whenever the template dimensions change
   const prevDimsRef = useRef({ w: 0, h: 0 });
@@ -279,10 +280,12 @@ export function InfiniteCanvas({
 
   // External fit-to-screen trigger (e.g. right panel open/close changes available width).
   // setTimeout lets the DOM finish reflowing before we measure the container.
+  // Also reset toolbar to CSS default so it re-centers in the new layout.
   const prevFitTrigger = useRef(fitTrigger ?? 0);
   useEffect(() => {
     if (fitTrigger !== undefined && fitTrigger !== prevFitTrigger.current) {
       prevFitTrigger.current = fitTrigger;
+      setToolbarPos(null);
       setTimeout(fitToScreen, 80);
     }
   }, [fitTrigger, fitToScreen]);

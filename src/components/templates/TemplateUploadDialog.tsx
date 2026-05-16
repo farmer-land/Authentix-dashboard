@@ -20,9 +20,10 @@ interface TemplateUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  initialFile?: File;
 }
 
-export function TemplateUploadDialog({ open, onOpenChange, onSuccess }: TemplateUploadDialogProps) {
+export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFile }: TemplateUploadDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -70,6 +71,14 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess }: Template
 
   // Find selected subcategory for display
   const selectedSubcategory = subcategories.find((item) => item.id === subcategoryId);
+
+  // Pre-load file if provided (e.g. from page-level drag-and-drop)
+  useEffect(() => {
+    if (open && initialFile) {
+      handleFileSelected(initialFile);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialFile]);
 
   // Reset subcategory when category changes
   useEffect(() => {

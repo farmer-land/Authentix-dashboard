@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+
 import {
   Mail, CheckCircle2, AlertCircle, Loader2, Plus, Trash2,
   Info, ArrowRight, Edit2, LayoutTemplate, Server, ExternalLink,
-  ChevronDown, ChevronUp, Pencil, Check,
+  ChevronDown, ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, type DeliveryIntegration, type DeliveryProviderType } from "@/lib/api/client";
@@ -521,40 +522,18 @@ export default function EmailDeliverySettingsPage() {
     togglingId,
     deletingId,
     error,
-    defaultSenderName,
-    editingDefaultName,
-    defaultNameDraft,
-    platformDefaultEnabled,
-    setIntegrations,
     setError,
     setShowAddForm,
     setEditingId,
     setSaving,
     setTogglingId,
     setDeletingId,
-    setDefaultSenderName,
-    setEditingDefaultName,
-    setDefaultNameDraft,
-    setPlatformDefaultEnabled,
     onLoadSuccess,
     onLoadError,
     updateIntegrationActive,
-    dispatch,
   } = useDeliverySettingsState();
 
   useEffect(() => { load(); }, []);
-
-  const saveDefaultName = () => {
-    const v = defaultNameDraft.trim() || "Authentix";
-    setDefaultSenderName(v);
-    setEditingDefaultName(false);
-    toast.success("Sender name saved");
-  };
-
-  const togglePlatformDefault = (enabled: boolean) => {
-    setPlatformDefaultEnabled(enabled);
-    toast.success(enabled ? "Authentix default enabled" : "Authentix default disabled");
-  };
 
   const load = async () => {
     try {
@@ -664,7 +643,7 @@ export default function EmailDeliverySettingsPage() {
 
   const activeDefault = integrations.find(i => i.is_default && i.is_active) ?? integrations.find(i => i.is_active);
   const hasActiveIntegration = integrations.filter(i => i.is_active).length > 0;
-  const usingPlatformDefault = !hasActiveIntegration && platformDefaultEnabled;
+  const usingPlatformDefault = !hasActiveIntegration;
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -803,7 +782,7 @@ export default function EmailDeliverySettingsPage() {
       </Card>
 
       {/* ── Authentix Default (fallback) ────────────────────────────────────── */}
-      <Card className={usingPlatformDefault ? "border-[#3ECF8E]/40 shadow-sm" : "opacity-80"}>
+      <Card className={usingPlatformDefault ? "border-[#3ECF8E]/40 shadow-sm" : ""}>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg shrink-0 ${usingPlatformDefault ? "bg-[#3ECF8E]/10" : "bg-muted"}`}>
@@ -812,66 +791,32 @@ export default function EmailDeliverySettingsPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-base">Authentix Default Email</CardTitle>
-                {usingPlatformDefault && (
+                {usingPlatformDefault ? (
                   <Badge className="bg-[#3ECF8E]/10 text-[#3ECF8E] border-[#3ECF8E]/30 hover:bg-[#3ECF8E]/10 text-xs">
                     <CheckCircle2 className="w-3 h-3 mr-1" />
                     Currently In Use
                   </Badge>
-                )}
-                {!platformDefaultEnabled && (
-                  <Badge variant="secondary" className="text-xs">Disabled</Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">Fallback Available</Badge>
                 )}
               </div>
               <CardDescription className="mt-0.5 text-xs">
-                Fallback sender managed by Authentix — used when no custom integration is active.
+                {usingPlatformDefault
+                  ? "Sending from Authentix's verified domain. Add your own integration above to send from your domain."
+                  : "Your custom integration is active. Authentix default is available as a fallback if your integration is disabled."}
               </CardDescription>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Switch
-                checked={platformDefaultEnabled}
-                onCheckedChange={togglePlatformDefault}
-                className="data-[state=checked]:bg-[#3ECF8E]"
-              />
             </div>
           </div>
         </CardHeader>
-        {platformDefaultEnabled && (
-          <CardContent className="space-y-3">
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Sender Email</p>
-                  <p className="text-sm font-mono font-medium">{PLATFORM_DEFAULT_EMAIL}</p>
-                </div>
-                <Badge variant="outline" className="text-xs">Managed by Authentix</Badge>
-              </div>
-              <Separator />
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Sender Name</p>
-                {editingDefaultName ? (
-                  <div className="flex items-center gap-2">
-                    <Input value={defaultNameDraft} onChange={e => setDefaultNameDraft(e.target.value)}
-                      className="h-8 text-sm flex-1" placeholder="Authentix" autoFocus
-                      onKeyDown={e => { if (e.key === "Enter") saveDefaultName(); if (e.key === "Escape") setEditingDefaultName(false); }} />
-                    <Button size="sm" className="h-8 gap-1 bg-[#3ECF8E] hover:bg-[#34b87a] text-white shrink-0" onClick={saveDefaultName}>
-                      <Check className="w-3 h-3" /> Save
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingDefaultName(false)}>✕</Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium flex-1">{defaultSenderName}</p>
-                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => { setDefaultNameDraft(defaultSenderName); setEditingDefaultName(true); }}>
-                      <Pencil className="w-3 h-3" /> Edit
-                    </Button>
-                  </div>
-                )}
-                <p className="text-[11px] text-muted-foreground">Recipients will see this as the "From" name in their inbox.</p>
-              </div>
+        <CardContent className="pt-0">
+          <div className="rounded-lg border bg-muted/20 p-3 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Sender Email</p>
+              <p className="text-sm font-mono font-medium">{PLATFORM_DEFAULT_EMAIL}</p>
             </div>
-          </CardContent>
-        )}
+            <Badge variant="outline" className="text-xs shrink-0">Managed by Authentix</Badge>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Templates shortcut */}

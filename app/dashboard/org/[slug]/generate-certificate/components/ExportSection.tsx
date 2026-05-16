@@ -313,6 +313,8 @@ function applyTemplatePreview(html: string, vars: Record<string, string>): strin
 
 interface SendEmailModalProps {
   jobId: string;
+  /** All cert-generation job IDs (one per template config × import file). Used for multi-template / multi-file email send. */
+  allCertJobIds?: string[];
   recipientCount: number;
   certPreviewUrl?: string | null;
   firstRecipientRow?: Record<string, any> | null;
@@ -323,9 +325,9 @@ interface SendEmailModalProps {
   onEmailSent?: (statuses: Record<string, string>) => void;
 }
 
-type SendModalStep = 'checking' | 'no_integration' | 'no_template' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
+type SendModalStep = 'checking' | 'no_template' | 'no_integration' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
 
-function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
+function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
   const [step, setStep] = useState<SendModalStep>('checking');
   const [integrations, setIntegrations] = useState<DeliveryIntegration[]>([]);
@@ -368,9 +370,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
       setSelectedTemplateId(defaultTpl.id);
 
       if (activeIntegrations.length === 0) {
-        // No custom integration — auto-use platform default, go to template selection first
-        setUsePlatformDefault(true);
-        setStep('select_template');
+        setStep('no_integration');
         return;
       }
 
@@ -387,28 +387,37 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
     if (!selectedTemplate) return;
     if (!usePlatformDefault && !selectedIntegration) return;
     setStep('sending');
+    // Send emails for every cert-gen job ID (covers multi-template and multi-file batches).
+    // Fall back to the primary jobId if allCertJobIds is empty or not provided.
+    const jobIds = allCertJobIds && allCertJobIds.length > 0 ? allCertJobIds : [jobId];
     try {
-      const result = await api.delivery.sendJobEmails({
-        generation_job_id: jobId,
-        integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
-        template_id: selectedTemplate.id,
-        subject_override: subjectOverride.trim() || undefined,
-        from_name_override: fromNameOverride.trim() || undefined,
-        use_platform_default: usePlatformDefault || undefined,
-      });
-      setSendResult({ sent: result.sent, failed: result.failed });
+      let totalSent = 0;
+      let totalFailed = 0;
+      const allMessages: Array<{ to_email?: string; status: string }> = [];
+      for (const cjId of jobIds) {
+        const result = await api.delivery.sendJobEmails({
+          generation_job_id: cjId,
+          integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
+          template_id: selectedTemplate.id,
+          subject_override: subjectOverride.trim() || undefined,
+          from_name_override: fromNameOverride.trim() || undefined,
+          use_platform_default: usePlatformDefault || undefined,
+        });
+        totalSent += result.sent;
+        totalFailed += result.failed;
+        if (result.messages) allMessages.push(...result.messages);
+      }
+      setSendResult({ sent: totalSent, failed: totalFailed });
       setStep('done');
-      toast.success(`${result.sent} email${result.sent !== 1 ? 's' : ''} sent!`);
-      // Build status map keyed by recipient email (cert.recipient_id is not
-      // populated in GeneratedCertificateInfo, so use email as the stable key)
-      if (onEmailSent && result.messages) {
+      toast.success(`${totalSent} email${totalSent !== 1 ? 's' : ''} sent!`);
+      if (onEmailSent) {
         const statuses: Record<string, string> = {};
-        for (const m of result.messages) {
+        for (const m of allMessages) {
           if (m.to_email) statuses[m.to_email] = m.status;
         }
         onEmailSent(statuses);
       }
-      // Fetch per-recipient delivery report (best effort)
+      // Fetch per-recipient delivery report for the primary job (best effort)
       try {
         const report = await api.delivery.listMessagesByJob(jobId);
         setDeliveryMessages(report.messages ?? []);
@@ -425,11 +434,11 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
     try {
       await api.delivery.testSend({
         test_email: testEmail.trim(),
-        integration_id: selectedIntegrationId || undefined,
+        integration_id: usePlatformDefault ? undefined : (selectedIntegrationId || undefined),
         template_id: selectedTemplateId || undefined,
         subject_override: subjectOverride.trim() || undefined,
         from_name_override: fromNameOverride.trim() || undefined,
-        use_platform_default: !selectedIntegrationId || undefined,
+        use_platform_default: usePlatformDefault || undefined,
       });
       toast.success(`Test email sent to ${testEmail}`);
     } catch (err: any) {
@@ -559,12 +568,24 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                     <ExternalLink className="w-3.5 h-3.5" />
                     Edit This Template
                   </Button>
-                  <Link href={orgPath('/email-templates')} className="block">
-                    <Button variant="outline" className="w-full gap-2 text-muted-foreground">
-                      <Plus className="w-3.5 h-3.5" />
-                      Create New Template
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 text-muted-foreground"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem('pendingSendJob', JSON.stringify({
+                          jobId,
+                          recipientCount,
+                          certPreviewUrl: certPreviewUrl ?? null,
+                          certFieldHeaders: certFieldHeaders ?? [],
+                        }));
+                      } catch { /* storage unavailable */ }
+                      router.push(orgPath('/email-templates?returnToSend=1'));
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Create New Template
+                  </Button>
                 </div>
               </div>
             </div>
@@ -573,7 +594,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
         <>
         <DialogTitle className="flex items-center gap-2">
           <Mail className="w-5 h-5 text-primary" />
-          {step === 'select_template' ? 'Choose Email Template' : 'Send via Email'}
+          {step === 'select_template' ? 'Choose Email Template' : step === 'no_integration' ? 'Choose How to Send' : 'Send via Email'}
         </DialogTitle>
 
         {/* Checking */}
@@ -581,49 +602,6 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
           <div className="flex items-center gap-3 py-6 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin shrink-0" />
             <span>Checking email configuration…</span>
-          </div>
-        )}
-
-        {/* No integration */}
-        {step === 'no_integration' && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">No custom email integration is configured yet. Choose how you'd like to send:</p>
-            <div className="grid gap-3">
-              {/* Option 1: Authentix default */}
-              <button
-                type="button"
-                onClick={() => {
-                  setUsePlatformDefault(true);
-                  // Check if templates exist before proceeding
-                  if (templates.length === 0) { setStep('no_template'); return; }
-                  const defaultTpl = templates.find(t => t.is_default) ?? templates[0]!;
-                  setSelectedTemplateId(defaultTpl.id);
-                  setStep('select_template');
-                }}
-                className="flex items-start gap-3 p-4 rounded-lg border-2 border-border hover:border-[#3ECF8E] hover:bg-[#3ECF8E]/5 text-left transition-all group"
-              >
-                <div className="p-2 rounded-full bg-[#3ECF8E]/10 shrink-0 mt-0.5">
-                  <Mail className="w-4 h-4 text-[#3ECF8E]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold group-hover:text-[#3ECF8E] transition-colors">Use Authentix Default Email</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Send from Authentix's verified domain — no setup needed.</p>
-                </div>
-              </button>
-              {/* Option 2: Set up your own */}
-              <Link href={orgPath('/settings/delivery')} className="block">
-                <div className="flex items-start gap-3 p-4 rounded-lg border-2 border-border hover:border-border/60 text-left transition-all group">
-                  <div className="p-2 rounded-full bg-muted shrink-0 mt-0.5">
-                    <Settings2 className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">Set Up My Own Email</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Connect AWS SES or Gmail/Outlook SMTP to send from your domain.</p>
-                  </div>
-                </div>
-              </Link>
-            </div>
-            <Button variant="ghost" size="sm" onClick={onClose} className="w-full text-muted-foreground">Cancel</Button>
           </div>
         )}
 
@@ -638,9 +616,78 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
             </Alert>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-              <Link href={orgPath('/email-templates')} className="flex-1">
-                <Button className="w-full gap-2">Create Template <ExternalLink className="w-3.5 h-3.5" /></Button>
-              </Link>
+              <Button
+                className="flex-1 gap-2"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem('pendingSendJob', JSON.stringify({
+                      jobId,
+                      recipientCount,
+                      certPreviewUrl: certPreviewUrl ?? null,
+                      certFieldHeaders: certFieldHeaders ?? [],
+                    }));
+                  } catch { /* storage unavailable */ }
+                  router.push(orgPath('/email-templates?returnToSend=1'));
+                }}
+              >
+                Create Template <ExternalLink className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* No integration — user picks platform default or sets up their own */}
+        {step === 'no_integration' && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              No custom email integration is connected. Choose how you'd like to send certificates:
+            </p>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => { setUsePlatformDefault(true); setStep('select_template'); }}
+                className="w-full text-left p-4 rounded-lg border-2 border-[#3ECF8E]/30 bg-[#3ECF8E]/5 hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/10 transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-md bg-[#3ECF8E]/10 shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-[#3ECF8E]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">Use Authentix Default Email</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Send from our verified sender — no setup required.</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem('pendingSendJob', JSON.stringify({
+                      jobId,
+                      recipientCount,
+                      certPreviewUrl: certPreviewUrl ?? null,
+                      certFieldHeaders: certFieldHeaders ?? [],
+                    }));
+                  } catch { /* storage unavailable */ }
+                  router.push(orgPath('/settings/delivery'));
+                }}
+                className="w-full text-left p-4 rounded-lg border-2 border-border hover:border-border/60 hover:bg-muted/30 transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-md bg-muted shrink-0">
+                    <Settings2 className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">Set Up My Own Email</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Connect your own email provider for full control over sender identity.</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={onClose} className="text-muted-foreground">Cancel</Button>
             </div>
           </div>
         )}
@@ -712,7 +759,9 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               })}
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={onClose} className="shrink-0">Cancel</Button>
+              <Button variant="outline" onClick={integrations.length === 0 ? () => setStep('no_integration') : onClose} className="shrink-0 gap-1.5">
+                {integrations.length === 0 ? <><ChevronLeft className="w-4 h-4" />Back</> : 'Cancel'}
+              </Button>
               <Button
                 onClick={() => setStep('confirm')}
                 className="flex-1 gap-2"
@@ -742,7 +791,14 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               {usePlatformDefault ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-[#3ECF8E]/5 border-[#3ECF8E]/20 text-sm">
                   <Mail className="w-3.5 h-3.5 text-[#3ECF8E] shrink-0" />
-                  <span className="truncate text-[#3ECF8E] font-medium">Authentix Default Email</span>
+                  <span className="truncate text-[#3ECF8E] font-medium flex-1">Authentix Default Email</span>
+                  <button
+                    type="button"
+                    onClick={() => setStep('no_integration')}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0 transition-colors"
+                  >
+                    Change
+                  </button>
                 </div>
               ) : integrations.length === 1 ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-muted/30 text-sm">
@@ -784,6 +840,35 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
               </div>
             </div>
 
+            {/* Variable resolution warning — shown when template vars won't resolve for all recipients */}
+            {(() => {
+              const SYSTEM_VARS = new Set([
+                'recipient_name', 'organization_name', 'issue_date',
+                'verification_url', 'verification_url_encoded', 'certificate_image_url',
+              ]);
+              const normalizeKey = (k: string) => k.toLowerCase().replace(/\s+/g, '_');
+              const csvKeys = new Set([
+                ...(certFieldHeaders ?? []).map(normalizeKey),
+                ...(certFieldHeaders ?? []),
+              ]);
+              const unresolved = (selectedTemplate.variables ?? []).filter(
+                v => !SYSTEM_VARS.has(v) && !csvKeys.has(v),
+              );
+              if (unresolved.length === 0) return null;
+              return (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/50">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Variables may not resolve</p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                      {unresolved.map(v => <code key={v} className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded mr-1">{`{{${v}}}`}</code>)}
+                      {unresolved.length === 1 ? 'is' : 'are'} not in your CSV — {unresolved.length === 1 ? 'it' : 'they'} will appear literally in the email.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Advanced overrides toggle */}
             <button
               type="button"
@@ -824,7 +909,7 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
             )}
 
             <p className="text-xs text-muted-foreground">
-              Certificates will be attached as PDF files to each email.
+              Certificates will be attached as PNG images to each email.
             </p>
 
             <div className="flex gap-2">
@@ -938,22 +1023,28 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                       <tr>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Recipient</th>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Reason</th>
                       </tr>
                     </thead>
                     <tbody>
                       {deliveryMessages.map(msg => (
                         <tr key={msg.id} className="border-t">
-                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[200px]">{msg.to_email ?? '—'}</td>
+                          <td className="px-3 py-2 text-muted-foreground truncate max-w-40">{msg.to_email ?? '—'}</td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${
                               msg.status === 'delivered' || msg.status === 'sent' || msg.status === 'read'
-                                ? 'bg-green-500/10 text-green-700'
+                                ? 'bg-green-500/10 text-green-700 dark:text-green-400'
                                 : msg.status === 'failed'
                                 ? 'bg-destructive/10 text-destructive'
                                 : 'bg-muted text-muted-foreground'
                             }`}>
                               {msg.status}
                             </span>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground/70 max-w-40 truncate" title={msg.error_message ?? undefined}>
+                            {msg.error_message ? (
+                              <span className="text-destructive/80">{msg.error_message.slice(0, 60)}{msg.error_message.length > 60 ? '…' : ''}</span>
+                            ) : '—'}
                           </td>
                         </tr>
                       ))}
@@ -1218,9 +1309,25 @@ export function ExportSection({
               });
             }
           }
-          const firstJobId = result?.first_job_id as string | null | undefined;
-          if (firstJobId) setCertGenJobId(firstJobId);
-          setTotalGenerated(total);
+          // Collect all cert-gen job IDs: one per template config in this background job's results
+          const certJobIds = (resultsArr ?? [])
+            .map((r: any) => r.job_id as string | null | undefined)
+            .filter((id): id is string => !!id);
+          if (certJobIds.length > 0) {
+            setCertGenJobId(certJobIds[0]!);
+            setAllCertJobIds(prev => {
+              const merged = Array.from(new Set([...prev, ...certJobIds]));
+              return merged;
+            });
+          } else {
+            // Fallback: use first_job_id if results didn't include per-entry job IDs
+            const firstJobId = result?.first_job_id as string | null | undefined;
+            if (firstJobId) {
+              setCertGenJobId(prev => prev ?? firstJobId);
+              setAllCertJobIds(prev => prev.includes(firstJobId) ? prev : [...prev, firstJobId]);
+            }
+          }
+          setTotalGenerated(prev => prev + total);
           setDownloadUrl(url ?? null);
           setGeneratedCertificates(allCerts);
           if (summary.length > 0) setGenerationSummary(summary);
@@ -1247,7 +1354,6 @@ export function ExportSection({
     timerId = setTimeout(poll, 2000);
     return () => { stopped = true; clearTimeout(timerId); };
   }, [generationJobId]); // eslint-disable-line react-hooks/exhaustive-deps
-
 
   // Expiry settings
   const [expiryType, setExpiryType] = useState<ExpiryType>('year');
@@ -1282,14 +1388,61 @@ export function ExportSection({
   const [emailStatuses, setEmailStatuses] = useState<Record<string, string> | undefined>(undefined);
   // certificate_generation_jobs.id (different from background_jobs.id = generationJobId)
   const [certGenJobId, setCertGenJobId] = useState<string | null>(null);
+  // All cert-gen job IDs collected from every background job result (multi-template × multi-file)
+  const [allCertJobIds, setAllCertJobIds] = useState<string[]>([]);
+  // Background job IDs for import files 2+ (file 1 is tracked by generationJobId)
+  const [extraGenerationJobIds, setExtraGenerationJobIds] = useState<string[]>([]);
+
+  // Poll each extra background job (files 2+) in parallel to accumulate their cert-gen job IDs and total counts.
+  // These jobs don't drive the overlay — the primary job does — but we need their cert job IDs for email send.
+  useEffect(() => {
+    if (extraGenerationJobIds.length === 0) return;
+    const cleanups: Array<() => void> = [];
+    for (const ejId of extraGenerationJobIds) {
+      let stopped = false;
+      let timerId: ReturnType<typeof setTimeout>;
+      const poll = async () => {
+        if (stopped || !isMountedRef.current) return;
+        try {
+          const status = await api.certificates.pollJobStatus(ejId);
+          if (!isMountedRef.current || stopped) return;
+          if (status.status === 'completed') {
+            stopped = true;
+            const result = status.result as Record<string, unknown> | null;
+            const resultsArr = result?.results as Array<any> | undefined;
+            const certJobIds = (resultsArr ?? [])
+              .map((r: any) => r.job_id as string | null | undefined)
+              .filter((id): id is string => !!id);
+            if (certJobIds.length > 0) {
+              setAllCertJobIds(prev => Array.from(new Set([...prev, ...certJobIds])));
+            } else {
+              const fallback = result?.first_job_id as string | null | undefined;
+              if (fallback) setAllCertJobIds(prev => prev.includes(fallback) ? prev : [...prev, fallback]);
+            }
+            const extraTotal = (result?.total_certificates as number | undefined) ?? 0;
+            if (extraTotal > 0) setTotalGenerated(prev => prev + extraTotal);
+            return;
+          }
+          if (status.status === 'failed') { stopped = true; return; }
+        } catch { /* ignore, retry */ }
+        timerId = setTimeout(poll, 4000);
+      };
+      timerId = setTimeout(poll, 3000);
+      cleanups.push(() => { stopped = true; clearTimeout(timerId); });
+    }
+    return () => cleanups.forEach(c => c());
+  }, [extraGenerationJobIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Email setup pre-check (soft warning before generating)
-  const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean } | null>(null);
+  const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean; hasIntegration: boolean } | null>(null);
+  const [emailBannerDismissed, setEmailBannerDismissed] = useState(false);
   useEffect(() => {
-    Promise.all([api.delivery.listTemplates()])
-      .then(([tplList]) => {
+    Promise.all([api.delivery.listTemplates(), api.delivery.listIntegrations()])
+      .then(([tplList, intList]) => {
         const hasTemplate = tplList.some(t => t.is_active && t.channel === 'email');
-        setEmailSetup({ hasTemplate });
+        // Platform default is always available as sender, so integration is never truly "missing"
+        const hasIntegration = intList.some(i => i.is_active && i.channel === 'email') || true;
+        setEmailSetup({ hasTemplate, hasIntegration });
       })
       .catch(() => { /* silently ignore */ });
   }, []);
@@ -1322,7 +1475,12 @@ export function ExportSection({
   const allMappedColumnsValid = !importedData || fieldMappings
     .filter(m => m.columnName)
     .every(m => importedData.headers.includes(m.columnName));
-  const canGenerate = !!(template && importedData && template.id && allMappableFieldsMapped && allMappedColumnsValid);
+  // Each additional config must also have all its mappable fields mapped
+  const allAdditionalConfigsMapped = additionalConfigs.every(cfg => {
+    const mappable = cfg.fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
+    return mappable.every(f => cfg.fieldMappings.some(m => m.fieldId === f.id));
+  });
+  const canGenerate = !!(template && importedData && template.id && allMappableFieldsMapped && allMappedColumnsValid && allAdditionalConfigsMapped);
 
   // All configs including the primary one (for unified rendering)
   const allConfigs: CertificateConfig[] = [
@@ -1465,14 +1623,10 @@ export function ExportSection({
     setGeneratedCertificates([]);
     setTotalGenerated(0);
     setGenerationSummary([]);
-
-    // Validate expiry date is in the future
-    if (expiryType === 'custom' && customExpiryDate) {
-      if (new Date(customExpiryDate) <= new Date()) {
-        toast.error('Expiry date must be in the future');
-        return;
-      }
-    }
+    // Clear stale cert-gen job IDs from any previous run
+    setCertGenJobId(null);
+    setAllCertJobIds([]);
+    setExtraGenerationJobIds([]);
 
     const options: {
       includeQR: boolean;
@@ -1527,9 +1681,9 @@ export function ExportSection({
         label: cfg.label,
       }));
 
-      const firstJobId = await (async () => {
+      const { firstJobId, restJobIds } = await (async () => {
         if (importIds) {
-          let firstId: string | null = null;
+          const allJobIds: string[] = [];
           for (let i = 0; i < importIds.length; i++) {
             const batchParams = {
               import_id: importIds[i]!,
@@ -1542,9 +1696,9 @@ export function ExportSection({
               ? `File ${i + 1}/${importIds.length}: ${Math.round(totalRows / importIds.length)} certs`
               : `${totalRows} certificate${totalRows !== 1 ? 's' : ''} — ${configsToRun[0]?.label ?? ''}`;
             addJob(job_id, fileLabel);
-            if (!firstId) firstId = job_id;
+            allJobIds.push(job_id);
           }
-          return firstId!;
+          return { firstJobId: allJobIds[0]!, restJobIds: allJobIds.slice(1) };
         }
         // Inline data fallback
         const { job_id } = await api.certificates.batchGenerate({
@@ -1553,12 +1707,13 @@ export function ExportSection({
           configs: configDefs,
         });
         addJob(job_id, `${totalRows} certificate${totalRows !== 1 ? 's' : ''} — ${configsToRun[0]?.label ?? ''}`);
-        return job_id;
+        return { firstJobId: job_id, restJobIds: [] as string[] };
       })();
 
       if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
 
       setGenerationJobId(firstJobId);
+      if (restJobIds.length > 0) setExtraGenerationJobIds(restJobIds);
       // Progress timer keeps running through polling — cleared only on completion or error
     } catch (err: any) {
       if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
@@ -2185,12 +2340,22 @@ export function ExportSection({
           </Card>
 
           {/* Soft email setup warning */}
-          {emailSetup && !emailSetup.hasTemplate && (
+          {emailSetup && !emailSetup.hasTemplate && !emailBannerDismissed && (
             <Alert className="border-amber-500/30 bg-amber-500/5">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-sm text-amber-800 flex items-center justify-between gap-2">
-                <span>No email template configured — you won't be able to send certificates by email after generation.</span>
-                <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap shrink-0">Set up →</Link>
+                <span>No email template set up — create one to send certificates by email after generating.</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap font-medium">Create template →</Link>
+                  <button
+                    type="button"
+                    onClick={() => setEmailBannerDismissed(true)}
+                    className="text-amber-600/60 hover:text-amber-700 transition-colors"
+                    title="Dismiss"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
@@ -2294,6 +2459,8 @@ export function ExportSection({
               setProgressLabel('');
               setGenerationJobId(null);
               setCertGenJobId(null);
+              setAllCertJobIds([]);
+              setExtraGenerationJobIds([]);
               setEmailStatuses(undefined);
             }}
           >
@@ -2301,9 +2468,9 @@ export function ExportSection({
           </Button>
           <Button
             className="flex-1 gap-2"
-            disabled={!generationJobId || totalGenerated === 0}
+            disabled={!generationJobId || totalGenerated === 0 || generationStatus !== 'completed'}
             onClick={() => setSendModalOpen(true)}
-            title={totalGenerated === 0 ? 'No certificates to send' : !generationJobId ? 'No job ID available' : 'Send certificates by email'}
+            title={generationStatus !== 'completed' ? 'Wait for generation to complete' : totalGenerated === 0 ? 'No certificates to send' : !generationJobId ? 'No job ID available' : 'Send certificates by email'}
           >
             <Send className="w-4 h-4" />
             Send via Email
@@ -2315,6 +2482,7 @@ export function ExportSection({
       {sendModalOpen && generationJobId && (
         <SendEmailModal
           jobId={certGenJobId ?? generationJobId}
+          allCertJobIds={allCertJobIds.length > 0 ? allCertJobIds : undefined}
           recipientCount={totalGenerated}
           certPreviewUrl={generatedCertificates[0]?.preview_url ?? null}
           firstRecipientRow={importedData?.rows[0] ?? null}

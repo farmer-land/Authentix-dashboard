@@ -334,7 +334,7 @@ export function NotificationPanel({
       {open && (
         <div
           ref={dropdownRef}
-          className="fixed bottom-16 left-52 w-72 rounded-xl border border-border bg-background shadow-xl z-100 overflow-hidden"
+          className="fixed bottom-auto top-16 left-14 w-72 rounded-xl border border-border bg-background shadow-xl z-100 overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">

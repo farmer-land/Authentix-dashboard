@@ -91,11 +91,12 @@ export default function OrganizationPage() {
   }, [organization]);
 
   // Seed user fields once profile arrives
+  // Backend returns { profile: { id, email, full_name, avatar_url }, organization, membership }
   useEffect(() => {
     if (!userProfile) return;
-    const p = userProfile as Record<string, any>;
-    setUserData({ full_name: p.full_name || "", email: p.email || "" });
-    if (p.avatar_url) setUserAvatarPreview(p.avatar_url);
+    const p = (userProfile as any)?.profile ?? (userProfile as any);
+    setUserData({ full_name: p?.full_name || "", email: p?.email || "" });
+    if (p?.avatar_url) setUserAvatarPreview(p.avatar_url);
   }, [userProfile]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,8 +151,7 @@ export default function OrganizationPage() {
       const [updatedOrganization] = await Promise.all([
         updateOrganization.mutateAsync({ data: payload, logoFile: logo || undefined }),
         updateUserProfile
-          .mutateAsync({ data: { full_name: userData.full_name }, avatarFile: userAvatar || undefined })
-          .catch((err) => console.warn("User profile update may not be implemented on backend", err)),
+          .mutateAsync({ data: { full_name: userData.full_name }, avatarFile: userAvatar || undefined }),
       ]);
 
       const updatedLogoUrl = getOrganizationLogoUrl(updatedOrganization);
@@ -160,6 +160,7 @@ export default function OrganizationPage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       setLogo(null);
+      setUserAvatar(null);
     } catch (err: any) {
       setError(err.message || "Failed to save organization profile");
     } finally {

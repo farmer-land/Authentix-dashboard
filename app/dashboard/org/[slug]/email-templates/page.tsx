@@ -25,7 +25,7 @@ import {
   useDuplicateDeliveryTemplate,
 } from "@/lib/hooks/queries/delivery";
 import { useOrg } from "@/lib/org";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PREDEFINED_TEMPLATES, type PredefinedTemplate } from "./PREDEFINED_TEMPLATES";
 import { cn } from "@/lib/utils";
 
@@ -432,14 +432,13 @@ function TemplateCard({
 export default function EmailTemplatesPage() {
   const { orgPath, slug } = useOrg();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnToSend = searchParams.get("returnToSend") === "1";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sample chooser
   const [showSamples, setShowSamples] = useState(false);
-
-  // Name dialog
-  type PendingCreate = { kind: "blank" } | { kind: "sample"; template: PredefinedTemplate };
-  const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
+  const [creating, setCreating] = useState(false);
 
   // Saved IDs from localStorage (scoped by org slug, loaded once)
   const [savedIds] = useState<Set<string>>(() => getSavedIds(slug));
@@ -460,44 +459,57 @@ export default function EmailTemplatesPage() {
   const savedTemplates = templates.filter(t => isTemplateSaved(t, savedIds));
   const draftTemplates = templates.filter(t => !isTemplateSaved(t, savedIds));
 
-  const handleSampleUse = (sample: PredefinedTemplate) => {
-    setShowSamples(false);
-    setPendingCreate({ kind: "sample", template: sample });
+  // Create directly — no name dialog. User renames inline in the editor.
+  const handleCreateBlank = () => {
+    if (creating) return;
+    setCreating(true);
+    createTemplate.mutate(
+      {
+        channel: "email" as const,
+        name: "Untitled Email Template",
+        email_subject: "Your Certificate from {{organization_name}}",
+        body: "",
+        variables: [] as string[],
+        is_default: templates.length === 0,
+        is_active: true,
+      },
+      {
+        onSuccess: (created) => {
+          router.push(orgPath(`/email-templates/${created.id}${returnToSend ? "?returnToSend=1" : ""}`));
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to create template");
+          setCreating(false);
+        },
+      },
+    );
   };
 
-  const handleNameConfirm = async (name: string) => {
-    if (!pendingCreate) return;
-    const isFromSample = pendingCreate.kind === "sample";
-    const dto = isFromSample
-      ? {
-          channel: "email" as const,
-          name,
-          email_subject: pendingCreate.template.email_subject,
-          body: pendingCreate.template.body,
-          variables: pendingCreate.template.variables,
-          is_default: templates.length === 0,
-          is_active: true,
-        }
-      : {
-          channel: "email" as const,
-          name,
-          email_subject: "Your Certificate from {{organization_name}}",
-          body: "",
-          variables: [] as string[],
-          is_default: templates.length === 0,
-          is_active: true,
-        };
-
-    createTemplate.mutate(dto, {
-      onSuccess: (created) => {
-        toast.success(isFromSample ? `"${name}" created from sample` : `"${name}" created`);
-        setPendingCreate(null);
-        router.push(orgPath(`/email-templates/${created.id}`));
+  const handleSampleUse = (sample: PredefinedTemplate) => {
+    setShowSamples(false);
+    if (creating) return;
+    setCreating(true);
+    createTemplate.mutate(
+      {
+        channel: "email" as const,
+        name: sample.name,
+        email_subject: sample.email_subject,
+        body: sample.body,
+        variables: sample.variables,
+        is_default: templates.length === 0,
+        is_active: true,
       },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : "Failed to create template");
+      {
+        onSuccess: (created) => {
+          toast.success(`"${sample.name}" created`);
+          router.push(orgPath(`/email-templates/${created.id}${returnToSend ? "?returnToSend=1" : ""}`));
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to create template");
+          setCreating(false);
+        },
       },
-    });
+    );
   };
 
   const handleDelete = (id: string) => {
@@ -515,20 +527,6 @@ export default function EmailTemplatesPage() {
     });
   };
 
-  const nameDialogProps = pendingCreate ? (
-    pendingCreate.kind === "blank"
-      ? {
-          title: "Name your template",
-          placeholder: "e.g. Course Completion Email",
-          description: "Give this template a clear name so you can find it later.",
-        }
-      : {
-          title: "Name your template",
-          placeholder: pendingCreate.template.name,
-          description: `Starting from "${pendingCreate.template.name}" — you can rename it anything.`,
-        }
-  ) : { title: "", placeholder: "", description: "" };
-
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -545,10 +543,11 @@ export default function EmailTemplatesPage() {
             Sample Email Templates
           </Button>
           <Button
-            onClick={() => setPendingCreate({ kind: "blank" })}
+            onClick={handleCreateBlank}
+            disabled={creating}
             className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
           >
-            <PenLine className="w-4 h-4 mr-2" />
+            {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
             Design from Scratch
           </Button>
         </div>
@@ -585,10 +584,11 @@ export default function EmailTemplatesPage() {
             </Button>
             <Button
               size="lg"
-              onClick={() => setPendingCreate({ kind: "blank" })}
+              onClick={handleCreateBlank}
+              disabled={creating}
               className="gap-2 bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
             >
-              <Plus className="w-4 h-4" />
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Design from Scratch
             </Button>
           </div>
@@ -610,7 +610,7 @@ export default function EmailTemplatesPage() {
                     key={template.id}
                     template={template}
                     isDraft={false}
-                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}`))}
+                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
@@ -636,7 +636,7 @@ export default function EmailTemplatesPage() {
                     key={template.id}
                     template={template}
                     isDraft
-                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}`))}
+                    onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
@@ -659,17 +659,6 @@ export default function EmailTemplatesPage() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Name dialog */}
-      <NameDialog
-        open={!!pendingCreate}
-        title={nameDialogProps.title}
-        placeholder={nameDialogProps.placeholder}
-        description={nameDialogProps.description}
-        creating={createTemplate.isPending}
-        onConfirm={handleNameConfirm}
-        onCancel={() => setPendingCreate(null)}
-      />
 
       {/* Delete confirmation */}
       <AlertDialog open={!!confirmDeleteId} onOpenChange={() => setConfirmDeleteId(null)}>

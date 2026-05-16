@@ -27,6 +27,7 @@ vi.mock('@/lib/api/client', () => ({
     },
     delivery: {
       listTemplates: vi.fn().mockResolvedValue([]),
+      listIntegrations: vi.fn().mockResolvedValue([]),
     },
   },
 }));

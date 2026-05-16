@@ -70,6 +70,7 @@ export function TemplateSelector({
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [multiSelected, setMultiSelected] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const toggleMultiSelect = (template: any) => {
     setMultiSelected(prev => {
@@ -245,10 +246,16 @@ export function TemplateSelector({
   const handleDeleteTemplate = async (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
     if (!onDeleteTemplate) return;
-    if (!window.confirm('Delete this template? This cannot be undone.')) return;
-    setDeletingId(templateId);
+    setDeleteConfirmId(templateId);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId || !onDeleteTemplate) return;
+    const id = deleteConfirmId;
+    setDeleteConfirmId(null);
+    setDeletingId(id);
     try {
-      await onDeleteTemplate(templateId);
+      await onDeleteTemplate(id);
     } finally {
       setDeletingId(null);
     }
@@ -714,6 +721,32 @@ export function TemplateSelector({
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Delete confirmation dialog ── */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDeleteConfirmId(null)}>
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="text-sm font-semibold">Delete this template?</h3>
+              <p className="text-xs text-muted-foreground mt-1.5">This action cannot be undone.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted transition-colors"
+                onClick={() => setDeleteConfirmId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1.5 text-xs rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                onClick={confirmDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

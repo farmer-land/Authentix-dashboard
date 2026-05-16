@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useDropzone } from "react-dropzone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Eye, Trash2, FileImage, FileType, Sparkles, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, FileText, Maximize2, Trash2, FileImage, FileType, Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { Badge } from "@/components/ui/badge";
 import { TemplateUploadDialog } from "@/components/templates/TemplateUploadDialog";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useOrg } from "@/lib/org";
 import { getCachedPreviewUrl, cachePreviewUrl, getPreviewCacheKey, clearPreviewCache } from "@/lib/utils/preview-url-cache";
 import { useCatalogCategories } from "@/lib/hooks/use-catalog-categories";
+import { toast } from "sonner";
 
 interface TemplatePreviewState {
   [templateId: string]: {
@@ -33,6 +35,9 @@ export default function TemplatesPage() {
   const [deleting, setDeleting] = useState(false);
   const [previewStates, setPreviewStates] = useState<TemplatePreviewState>({});
   const [retryingPreviews, setRetryingPreviews] = useState<Set<string>>(new Set());
+  // Page-level drag-and-drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [droppedFilePreview, setDroppedFilePreview] = useState<{ url: string; file: File } | null>(null);
   const router = useRouter();
   const { orgPath } = useOrg();
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,13 +72,29 @@ export default function TemplatesPage() {
   useEffect(() => {
     loadTemplates();
 
-    // Cleanup timeout on unmount
     return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      if (droppedFilePreview) URL.revokeObjectURL(droppedFilePreview.url);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Page-level drag-and-drop: accept image/pdf anywhere on the page
+  const { getRootProps: getPageRootProps, getInputProps: getPageInputProps } = useDropzone({
+    onDrop: (acceptedFiles) => {
+      const f = acceptedFiles[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      if (droppedFilePreview) URL.revokeObjectURL(droppedFilePreview.url);
+      setDroppedFilePreview({ url, file: f });
+      setIsDragOver(false);
+    },
+    onDragEnter: () => setIsDragOver(true),
+    onDragLeave: () => setIsDragOver(false),
+    accept: { 'image/jpeg': [], 'image/png': [], 'image/webp': [], 'application/pdf': [] },
+    maxFiles: 1,
+    noClick: true,
+  });
 
   // Refresh templates after upload (with delay)
   const handleUploadSuccess = useCallback(() => {
@@ -384,9 +405,10 @@ export default function TemplatesPage() {
 
       setDeleteDialogOpen(false);
       setTemplateToDelete(null);
+      toast.success('Template deleted');
     } catch (error: any) {
       console.error('[Templates] Error deleting template:', error);
-      alert(`Failed to delete template: ${error.message}`);
+      toast.error(error.message || 'Failed to delete template');
     } finally {
       setDeleting(false);
     }
@@ -419,7 +441,21 @@ export default function TemplatesPage() {
 
   return (
     <>
-      <div className="space-y-8">
+      <div className="space-y-8" {...getPageRootProps()}>
+        <input {...getPageInputProps()} />
+        {/* Page-level drag-over overlay */}
+        {isDragOver && (
+          <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+            <div className="absolute inset-0 bg-primary/10 border-4 border-dashed border-primary/50" />
+            <div className="relative flex flex-col items-center gap-3 text-center">
+              <div className="w-20 h-20 rounded-2xl bg-primary/15 border-2 border-primary/40 flex items-center justify-center shadow-xl">
+                <FileImage className="w-10 h-10 text-primary" />
+              </div>
+              <p className="text-lg font-semibold text-primary">Drop your certificate template</p>
+              <p className="text-sm text-primary/70">PDF, JPEG, or PNG</p>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -600,27 +636,23 @@ export default function TemplatesPage() {
                       </div>
                     );
                   })()}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {(previewStates[templateId]?.url || template.preview_url) && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-8 gap-1.5 shadow-lg"
-                        onClick={() => {
-                          setPreviewTemplate({
-                            ...template,
-                            preview_url: previewStates[templateId]?.url || template.preview_url,
-                          });
-                          setPreviewOpen(true);
-                        }}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        Preview
-                      </Button>
-                    )}
-                  </div>
+                  {/* Clickable overlay to open preview */}
+                  {(previewStates[templateId]?.url || template.preview_url) && (
+                    <div
+                      className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors cursor-zoom-in flex items-center justify-center"
+                      onClick={() => {
+                        setPreviewTemplate({
+                          ...template,
+                          preview_url: previewStates[templateId]?.url || template.preview_url,
+                        });
+                        setPreviewOpen(true);
+                      }}
+                    >
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 rounded-lg bg-white/20 border border-white/40 flex items-center justify-center backdrop-blur-sm">
+                        <Maximize2 className="h-5 w-5 text-white" />
+                      </div>
+                    </div>
+                  )}
 
                   {/* File Type Badge */}
                   <div className="absolute top-3 right-3">
@@ -645,7 +677,7 @@ export default function TemplatesPage() {
                       <h3 className="font-semibold truncate mb-1">
                         {template.title || template.name || "Untitled Template"}
                       </h3>
-                      <div className="flex flex-wrap gap-1 mt-1.5 min-h-[1.625rem]">
+                      <div className="flex flex-wrap gap-1 mt-1.5 min-h-13 overflow-hidden">
                         {/* Check for category name in multiple possible locations (prioritize category_name from backend) */}
                         {(() => {
                           const categoryName = 
@@ -736,9 +768,68 @@ export default function TemplatesPage() {
       {/* Upload Dialog */}
       <TemplateUploadDialog
         open={uploadDialogOpen}
-        onOpenChange={setUploadDialogOpen}
+        onOpenChange={(open) => {
+          setUploadDialogOpen(open);
+          if (!open && droppedFilePreview) {
+            URL.revokeObjectURL(droppedFilePreview.url);
+            setDroppedFilePreview(null);
+          }
+        }}
         onSuccess={handleUploadSuccess}
+        initialFile={droppedFilePreview?.file}
       />
+
+      {/* Dropped-file preview modal */}
+      <Dialog
+        open={!!droppedFilePreview && !uploadDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && droppedFilePreview) {
+            URL.revokeObjectURL(droppedFilePreview.url);
+            setDroppedFilePreview(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Template Preview</DialogTitle>
+            <DialogDescription>
+              {droppedFilePreview?.file.name}
+            </DialogDescription>
+          </DialogHeader>
+          {droppedFilePreview && (
+            <div className="space-y-4">
+              <div className="w-full bg-muted rounded-lg overflow-hidden flex items-center justify-center" style={{ maxHeight: '60vh' }}>
+                <img
+                  src={droppedFilePreview.url}
+                  alt="Template preview"
+                  className="max-w-full max-h-full w-auto h-auto object-contain"
+                  style={{ maxHeight: '60vh' }}
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    URL.revokeObjectURL(droppedFilePreview.url);
+                    setDroppedFilePreview(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    setUploadDialogOpen(true);
+                  }}
+                  className="gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Generate Certificate
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -810,7 +901,7 @@ export default function TemplatesPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Template</DialogTitle>
             <DialogDescription>

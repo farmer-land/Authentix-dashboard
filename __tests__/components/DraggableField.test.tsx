@@ -15,7 +15,7 @@
  * delta (1px each) rather than a single stale delta from the first position.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DraggableField } from '@/app/dashboard/org/[slug]/generate-certificate/components/DraggableField';
 import type { CertificateField } from '@/lib/types/certificate';
@@ -29,6 +29,18 @@ vi.mock('qrcode', () => ({
     })),
   },
 }));
+
+// ── RAF stub ──────────────────────────────────────────────────────────────────
+// The component uses requestAnimationFrame to throttle onDrag/onResize calls.
+// In jsdom, RAF is asynchronous; stub it to fire synchronously so assertions
+// can follow fireEvent calls without needing act()/flush mechanics.
+beforeEach(() => {
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0; });
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

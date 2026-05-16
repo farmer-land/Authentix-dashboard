@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { format, isValid } from 'date-fns';
-import { Calendar, Clock, Infinity as InfinityIcon, AlertCircle, ChevronDown } from 'lucide-react';
+import { Calendar, Clock, Infinity as InfinityIcon, AlertCircle, ChevronDown, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type ExpiryType = 'day' | 'week' | 'month' | 'year' | '5_years' | 'never' | 'custom';
@@ -175,6 +175,21 @@ export function ExpiryDateSelector({
             <span className="text-green-600 font-medium">Certificates will never expire</span>
           </div>
         )}
+
+        {/* DPDP Act 2023 data retention notice */}
+        <div className="flex items-start gap-2 text-[11px] pt-2 border-t text-muted-foreground/80">
+          <Shield className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-500/70" />
+          <span>
+            Under the <strong className="font-medium">DPDP Act 2023</strong>, recipient data (names, emails, custom fields)
+            will be permanently deleted
+            {value === 'never'
+              ? ' when no longer required for certificate verification'
+              : previewDate
+                ? ` after ${previewDate}`
+                : ' after the selected expiry date'
+            }. Import data is removed within 7 days of upload.
+          </span>
+        </div>
       </div>
     </Card>
   );
