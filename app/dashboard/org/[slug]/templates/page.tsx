@@ -671,7 +671,7 @@ export default function TemplatesPage() {
                       <h3 className="font-semibold truncate mb-1">
                         {template.title || template.name || "Untitled Template"}
                       </h3>
-                      <div className="flex flex-wrap gap-1 mt-1.5 min-h-11">
+                      <div className="flex flex-wrap gap-1 mt-1.5">
                         {/* Check for category name in multiple possible locations (prioritize category_name from backend) */}
                         {(() => {
                           const categoryName = 
@@ -684,7 +684,7 @@ export default function TemplatesPage() {
                           return (
                             <span
                               className={cn(
-                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate block",
+                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate inline-flex items-center",
                                 categoryColors.bg,
                                 categoryColors.text,
                                 categoryColors.border
@@ -706,7 +706,7 @@ export default function TemplatesPage() {
                           return (
                             <span
                               className={cn(
-                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate block",
+                                "text-xs border rounded-md px-1.5 py-0.5 max-w-20 truncate inline-flex items-center",
                                 subcategoryColors.bg,
                                 subcategoryColors.text,
                                 subcategoryColors.border

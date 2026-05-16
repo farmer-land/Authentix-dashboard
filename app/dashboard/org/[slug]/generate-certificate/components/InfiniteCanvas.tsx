@@ -943,7 +943,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >

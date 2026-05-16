@@ -1710,7 +1710,7 @@ export default function GenerateCertificatePage() {
             {leftPanelVisible && !previewOpen && (
               <div
                 className="absolute z-40 w-72 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-                style={{ left: 12, top: 60, height: 'calc(100% - 140px)' }}
+                style={{ left: 12, top: 48, height: 'calc(100% - 108px)' }}
               >
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -1838,7 +1838,7 @@ export default function GenerateCertificatePage() {
             {selectedField && rightPanelVisible && !previewOpen && (
               <div
                 className="absolute z-40 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-                style={{ right: 12, top: 60, height: 'calc(100% - 140px)' }}
+                style={{ right: 12, top: 48, height: 'calc(100% - 108px)' }}
               >
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                   <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

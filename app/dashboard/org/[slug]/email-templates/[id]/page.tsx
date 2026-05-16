@@ -34,6 +34,7 @@ import {
 import { nanoid } from "nanoid";
 import { cn } from "@/lib/utils";
 import { useEmailEditorState } from "./state/useEmailEditorState";
+import { useDeliveryIntegrations } from "@/lib/hooks/queries/delivery";
 
 // ── Keyboard shortcut legend ──────────────────────────────────────────────────
 
@@ -112,7 +113,10 @@ export default function EmailTemplateEditorPage() {
   } = useEmailEditorState();
 
   // Configured delivery integrations for sender name dropdown
-  const [senderOptions, setSenderOptions] = useState<{ name: string; email: string; isDefault?: boolean }[]>([]);
+  const { integrations: rawIntegrations } = useDeliveryIntegrations();
+  const senderOptions = (rawIntegrations ?? [])
+    .filter(i => i.channel === "email" && i.is_active && i.from_name)
+    .map(i => ({ name: i.from_name!, email: i.from_email ?? "", isDefault: i.is_default }));
 
   // Feature 6: Preheader text
   const [preheader, setPreheader] = useState('');
@@ -190,21 +194,15 @@ export default function EmailTemplateEditorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
-  // Load configured sender identities for the sender dropdown
+  // Auto-select the default integration when integrations load
+  const didAutoSelectSender = useRef(false);
   useEffect(() => {
-    api.delivery.listIntegrations().then(integrations => {
-      const email = integrations
-        .filter(i => i.channel === "email" && i.is_active && i.from_name)
-        .map(i => ({ name: i.from_name!, email: i.from_email ?? "", isDefault: i.is_default }));
-      if (email.length > 0) {
-        setSenderOptions(email);
-        // Auto-select the default integration's from_name if senderName is still the default placeholder
-        const def = email.find(o => o.isDefault) ?? email[0];
-        if (def) setSenderName(def.name);
-      }
-    }).catch(() => {});
+    if (didAutoSelectSender.current || senderOptions.length === 0) return;
+    didAutoSelectSender.current = true;
+    const def = senderOptions.find(o => o.isDefault) ?? senderOptions[0];
+    if (def) setSenderName(def.name);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [senderOptions]);
 
   // ── Auto-save (debounced 4s) ─────────────────────────────────────────────
   useEffect(() => {
@@ -864,7 +862,7 @@ export default function EmailTemplateEditorPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
                 <BlockPropertiesPanel
                   block={blocks.find(b => b.id === selectedId) ?? null}
                   onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
@@ -1047,7 +1045,7 @@ export default function EmailTemplateEditorPage() {
                 <Keyboard className="w-3.5 h-3.5" />
               </button>
             </PopoverTrigger>
-            <PopoverContent align="center" side="top" className="w-56 p-3">
+            <PopoverContent align="center" side="top" className="w-72 p-3">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Shortcuts</p>
               <div className="space-y-1">
                 {KEYBOARD_SHORTCUTS.map(s => (
