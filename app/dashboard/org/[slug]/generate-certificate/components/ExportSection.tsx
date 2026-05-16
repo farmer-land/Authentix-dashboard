@@ -323,7 +323,7 @@ interface SendEmailModalProps {
   onEmailSent?: (statuses: Record<string, string>) => void;
 }
 
-type SendModalStep = 'checking' | 'no_integration' | 'no_template' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
+type SendModalStep = 'checking' | 'no_template' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
 
 function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
@@ -425,11 +425,11 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
     try {
       await api.delivery.testSend({
         test_email: testEmail.trim(),
-        integration_id: selectedIntegrationId || undefined,
+        integration_id: usePlatformDefault ? undefined : (selectedIntegrationId || undefined),
         template_id: selectedTemplateId || undefined,
         subject_override: subjectOverride.trim() || undefined,
         from_name_override: fromNameOverride.trim() || undefined,
-        use_platform_default: !selectedIntegrationId || undefined,
+        use_platform_default: usePlatformDefault || undefined,
       });
       toast.success(`Test email sent to ${testEmail}`);
     } catch (err: any) {
@@ -559,12 +559,24 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
                     <ExternalLink className="w-3.5 h-3.5" />
                     Edit This Template
                   </Button>
-                  <Link href={orgPath('/email-templates')} className="block">
-                    <Button variant="outline" className="w-full gap-2 text-muted-foreground">
-                      <Plus className="w-3.5 h-3.5" />
-                      Create New Template
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 text-muted-foreground"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem('pendingSendJob', JSON.stringify({
+                          jobId,
+                          recipientCount,
+                          certPreviewUrl: certPreviewUrl ?? null,
+                          certFieldHeaders: certFieldHeaders ?? [],
+                        }));
+                      } catch { /* storage unavailable */ }
+                      router.push(orgPath('/email-templates'));
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Create New Template
+                  </Button>
                 </div>
               </div>
             </div>
@@ -584,49 +596,6 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
           </div>
         )}
 
-        {/* No integration */}
-        {step === 'no_integration' && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">No custom email integration is configured yet. Choose how you'd like to send:</p>
-            <div className="grid gap-3">
-              {/* Option 1: Authentix default */}
-              <button
-                type="button"
-                onClick={() => {
-                  setUsePlatformDefault(true);
-                  // Check if templates exist before proceeding
-                  if (templates.length === 0) { setStep('no_template'); return; }
-                  const defaultTpl = templates.find(t => t.is_default) ?? templates[0]!;
-                  setSelectedTemplateId(defaultTpl.id);
-                  setStep('select_template');
-                }}
-                className="flex items-start gap-3 p-4 rounded-lg border-2 border-border hover:border-[#3ECF8E] hover:bg-[#3ECF8E]/5 text-left transition-all group"
-              >
-                <div className="p-2 rounded-full bg-[#3ECF8E]/10 shrink-0 mt-0.5">
-                  <Mail className="w-4 h-4 text-[#3ECF8E]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold group-hover:text-[#3ECF8E] transition-colors">Use Authentix Default Email</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Send from Authentix's verified domain — no setup needed.</p>
-                </div>
-              </button>
-              {/* Option 2: Set up your own */}
-              <Link href={orgPath('/settings/delivery')} className="block">
-                <div className="flex items-start gap-3 p-4 rounded-lg border-2 border-border hover:border-border/60 text-left transition-all group">
-                  <div className="p-2 rounded-full bg-muted shrink-0 mt-0.5">
-                    <Settings2 className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">Set Up My Own Email</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Connect AWS SES or Gmail/Outlook SMTP to send from your domain.</p>
-                  </div>
-                </div>
-              </Link>
-            </div>
-            <Button variant="ghost" size="sm" onClick={onClose} className="w-full text-muted-foreground">Cancel</Button>
-          </div>
-        )}
-
         {/* No template */}
         {step === 'no_template' && (
           <div className="space-y-4">
@@ -638,9 +607,22 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
             </Alert>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-              <Link href={orgPath('/email-templates')} className="flex-1">
-                <Button className="w-full gap-2">Create Template <ExternalLink className="w-3.5 h-3.5" /></Button>
-              </Link>
+              <Button
+                className="flex-1 gap-2"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem('pendingSendJob', JSON.stringify({
+                      jobId,
+                      recipientCount,
+                      certPreviewUrl: certPreviewUrl ?? null,
+                      certFieldHeaders: certFieldHeaders ?? [],
+                    }));
+                  } catch { /* storage unavailable */ }
+                  router.push(orgPath('/email-templates'));
+                }}
+              >
+                Create Template <ExternalLink className="w-3.5 h-3.5" />
+              </Button>
             </div>
           </div>
         )}
@@ -1284,12 +1266,14 @@ export function ExportSection({
   const [certGenJobId, setCertGenJobId] = useState<string | null>(null);
 
   // Email setup pre-check (soft warning before generating)
-  const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean } | null>(null);
+  const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean; hasIntegration: boolean } | null>(null);
   useEffect(() => {
-    Promise.all([api.delivery.listTemplates()])
-      .then(([tplList]) => {
+    Promise.all([api.delivery.listTemplates(), api.delivery.listIntegrations()])
+      .then(([tplList, intList]) => {
         const hasTemplate = tplList.some(t => t.is_active && t.channel === 'email');
-        setEmailSetup({ hasTemplate });
+        // Platform default is always available as sender, so integration is never truly "missing"
+        const hasIntegration = intList.some(i => i.is_active && i.channel === 'email') || true;
+        setEmailSetup({ hasTemplate, hasIntegration });
       })
       .catch(() => { /* silently ignore */ });
   }, []);
@@ -2189,8 +2173,8 @@ export function ExportSection({
             <Alert className="border-amber-500/30 bg-amber-500/5">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-sm text-amber-800 flex items-center justify-between gap-2">
-                <span>No email template configured — you won't be able to send certificates by email after generation.</span>
-                <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap shrink-0">Set up →</Link>
+                <span>No email template set up — create one so you can send certificates by email after generating.</span>
+                <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap shrink-0 font-medium">Create template →</Link>
               </AlertDescription>
             </Alert>
           )}
