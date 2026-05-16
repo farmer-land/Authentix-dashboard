@@ -162,13 +162,23 @@ function FloatingColorPicker({
   onClose: () => void;
   onChange: (c: { r: number; g: number; b: number; a: number }) => void;
 }) {
-  const [pos, setPos] = useState(initialPos);
+  // Clamp to viewport so picker never starts off-screen
+  const PICKER_W = 232;
+  const PICKER_H = 380;
+  const clampedInitial = {
+    x: Math.min(Math.max(initialPos.x, 8), (typeof window !== 'undefined' ? window.innerWidth : 1200) - PICKER_W - 8),
+    y: Math.min(Math.max(initialPos.y, 8), (typeof window !== 'undefined' ? window.innerHeight : 800) - PICKER_H - 8),
+  };
+  const [pos, setPos] = useState(clampedInitial);
   const dragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragOrigin.current) return;
-      setPos({ x: dragOrigin.current.px + (e.clientX - dragOrigin.current.mx), y: dragOrigin.current.py + (e.clientY - dragOrigin.current.my) });
+      setPos({
+        x: Math.min(Math.max(dragOrigin.current.px + (e.clientX - dragOrigin.current.mx), 8), window.innerWidth - PICKER_W - 8),
+        y: Math.min(Math.max(dragOrigin.current.py + (e.clientY - dragOrigin.current.my), 8), window.innerHeight - PICKER_H - 8),
+      });
     };
     const onUp = () => { dragOrigin.current = null; };
     document.addEventListener('mousemove', onMove);

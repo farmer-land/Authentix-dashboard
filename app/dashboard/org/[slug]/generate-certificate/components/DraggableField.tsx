@@ -189,6 +189,9 @@ export function DraggableField({
   useLayoutEffect(() => { onDragRef.current = onDrag; }, [onDrag]);
   useLayoutEffect(() => { onResizeRef.current = onResize; }, [onResize]);
 
+  // rAF handle — throttles state updates to one per animation frame to prevent jitter
+  const rafRef = useRef<number>(0);
+
   // Calculate scaled dimensions
   const scaledX = field.x * scale;
   const scaledY = field.y * scale;
@@ -202,19 +205,24 @@ export function DraggableField({
         const deltaX = e.clientX - dragStartRef.current.x;
         const deltaY = e.clientY - dragStartRef.current.y;
         dragStartRef.current = { x: e.clientX, y: e.clientY };
-        onDragRef.current(deltaX, deltaY);
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => onDragRef.current(deltaX, deltaY));
       } else if (isResizing) {
         const deltaX = e.clientX - dragStartRef.current.x;
         const deltaY = e.clientY - dragStartRef.current.y;
         const newWidth = initialDimsRef.current.width + deltaX;
         const newHeight = initialDimsRef.current.height + deltaY;
         if (newWidth > 20 && newHeight > 20) {
-          onResizeRef.current(newWidth, newHeight, initialFieldRef.current.width, initialFieldRef.current.fontSize);
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = requestAnimationFrame(() =>
+            onResizeRef.current(newWidth, newHeight, initialFieldRef.current.width, initialFieldRef.current.fontSize)
+          );
         }
       }
     };
 
     const handleMouseUp = () => {
+      cancelAnimationFrame(rafRef.current);
       setIsDragging(false);
       setIsResizing(false);
     };

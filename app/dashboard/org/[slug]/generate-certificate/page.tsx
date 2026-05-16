@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { toast } from 'sonner';
 import { useGenerateCertificateState } from './state/useGenerateCertificateState';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { useOrgSlug } from '@/lib/org';
@@ -811,17 +812,13 @@ export default function GenerateCertificatePage() {
       } catch (error: any) {
         console.error('Error saving template:', error);
         if (error?.message?.includes('Bucket not found') || error?.message?.includes('bucket') || error?.statusCode === 404) {
-          alert(
-            '❌ Storage Bucket Error\n\n' +
-            `Error: ${error?.message}\n\n` +
-            'The storage bucket "authentix" might not exist or you don\'t have access.\n\n' +
-            'Check:\n' +
-            '1. Bucket exists in Supabase Storage\n' +
-            '2. Storage policies allow uploads\n' +
-            '3. User has organization_id set'
-          );
+          toast.error('Storage Bucket Error', {
+            description: `The storage bucket "authentix" might not exist or you don't have access. Check that the bucket exists in Supabase Storage, storage policies allow uploads, and your user has organization_id set. (${error?.message})`,
+          });
         } else {
-          alert(`Failed to save template: ${error?.message || 'Unknown error'}\n\nYou can still use it for this session.`);
+          toast.error('Failed to save template', {
+            description: `${error?.message || 'Unknown error'} — you can still use it for this session.`,
+          });
         }
       }
     }
@@ -1855,42 +1852,45 @@ export default function GenerateCertificatePage() {
               )}
             </div>
 
-          </div>{/* end editing canvas */}
+            {/* ── Right properties panel — floating over canvas ── */}
+            {selectedField && rightPanelVisible && !previewOpen && (
+              <div
+                className="absolute z-40 right-4 top-4 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+                style={{ height: 'calc(100% - 32px)' }}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/40 shrink-0 rounded-t-xl">
+                  <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-medium text-foreground flex-1">Properties</span>
+                  <button
+                    onClick={() => setRightPanelVisible(false)}
+                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+                    title="Hide panel"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {/* Scrollable content */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  <RightPanel
+                    selectedField={selectedField}
+                    onFieldUpdate={(updates) => {
+                      if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
+                    }}
+                    allFieldLabels={fields.filter(f => f.id !== selectedFieldId).map(f => f.label)}
+                    scale={canvasScale}
+                    onScaleChange={setCanvasScale}
+                    onFitToScreen={() => setFitTrigger(t => t + 1)}
+                    snapToGrid={snapToGrid}
+                    onSnapToggle={() => setSnapToGrid(v => !v)}
+                    pdfWidth={template?.pdfWidth}
+                    pdfHeight={template?.pdfHeight}
+                  />
+                </div>
+              </div>
+            )}
 
-          {/* ── Right properties panel — docked sidebar so canvas always gets correct width ── */}
-          {selectedField && rightPanelVisible && !previewOpen && (
-            <div className="w-80 shrink-0 flex flex-col bg-card border-l border-border/50 overflow-hidden">
-              {/* Header */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/40 shrink-0">
-                <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-xs font-medium text-foreground flex-1">Properties</span>
-                <button
-                  onClick={() => setRightPanelVisible(false)}
-                  className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
-                  title="Hide panel"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto min-h-0">
-                <RightPanel
-                  selectedField={selectedField}
-                  onFieldUpdate={(updates) => {
-                    if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
-                  }}
-                  allFieldLabels={fields.filter(f => f.id !== selectedFieldId).map(f => f.label)}
-                  scale={canvasScale}
-                  onScaleChange={setCanvasScale}
-                  onFitToScreen={() => setFitTrigger(t => t + 1)}
-                  snapToGrid={snapToGrid}
-                  onSnapToggle={() => setSnapToGrid(v => !v)}
-                  pdfWidth={template?.pdfWidth}
-                  pdfHeight={template?.pdfHeight}
-                />
-              </div>
-            </div>
-          )}
+          </div>{/* end editing canvas */}
 
           {/* ── Preview panel ── */}
           {previewOpen && (
@@ -1924,7 +1924,7 @@ export default function GenerateCertificatePage() {
           </div>{/* end flex row */}
 
           {/* ── Stepper bottom bar ── */}
-          <div className="shrink-0 border-t border-border/40 bg-card/95 backdrop-blur-sm">
+          <div className="shrink-0 border-t border-border/20">
             <div className="flex items-center px-4 py-2 gap-2">
               <div className="flex-1 flex justify-center">
                 {stepperExpanded ? (
