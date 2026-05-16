@@ -76,6 +76,20 @@ export default function GenerateCertificatePage() {
   // Manual entries appended after the uploaded file rows during generation
   const [additionalRows, setAdditionalRows] = useState<Record<string, unknown>[]>([]);
 
+  // Pending session restore — set when a saved session is found on load.
+  // Null means no session to restore (or user dismissed it).
+  const [pendingResumeSession, setPendingResumeSession] = useState<{
+    templateId: string;
+    templateName: string;
+    fields: any[];
+    currentPage?: number;
+    canvasScale?: number;
+    templateVersionId: string | null;
+    currentStep: string | null;
+    importedDataMeta: any;
+    fieldMappings: any[];
+  } | null>(null);
+
   // Tracks previous field IDs so we can detect when field composition changes
   const prevFieldIdsRef = useRef<string>('');
 
@@ -335,63 +349,19 @@ export default function GenerateCertificatePage() {
             sessionStorage.removeItem(`gencert_session:${orgSlug}`);
             try { localStorage.removeItem(`gencert_last_template_id:${orgSlug}`); } catch { /* ignore */ }
           } else try {
-            await handleTemplateSelectSafe(templateObj);
-            // If we have a full field snapshot (same-tab refresh), apply it on top of DB fields.
-            // Strip out blob URLs (stale after refresh) so the DB-loaded permanent URL is used instead.
-            if (sessionFields && sessionFields.length > 0) {
-              const sanitized = sessionFields.map((f: any) => ({
-                ...f,
-                imageUrl: f.imageUrl?.startsWith('blob:') ? undefined : f.imageUrl,
-                qrLogoUrl: f.qrLogoUrl?.startsWith('blob:') ? undefined : f.qrLogoUrl,
-              }));
-              setFields(sanitized);
-            }
-            if (sessionPage !== undefined) setCurrentPage(sessionPage);
-            if (sessionScale) setCanvasScale(sessionScale);
-            if (sessionVersionId) setTemplateVersionId(sessionVersionId);
-
-            // Restore field mappings saved at session time
-            if (sessionFieldMappings && sessionFieldMappings.length > 0) {
-              setFieldMappings(sessionFieldMappings);
-            }
-
-            // Restore imported data: re-fetch rows from the server using the saved import ID,
-            // so the generate button stays enabled without requiring a re-upload.
-            if (sessionImportMeta?.importId) {
-              const importId = sessionImportMeta.importId;
-              try {
-                const [importJob, dataPage] = await Promise.all([
-                  api.imports.get(importId),
-                  api.imports.getData(importId, { limit: 100 }),
-                ]);
-                const rawItems = (dataPage.items ?? []) as Array<{ row_index: number; data: Record<string, any> }>;
-                const rows = rawItems.map((r: any) => r.data ?? r);
-                setImportedData({
-                  fileName: importJob.file_name ?? sessionImportMeta.fileName,
-                  headers: sessionImportMeta.headers,
-                  rows,
-                  rowCount: importJob.total_rows ?? sessionImportMeta.rowCount,
-                  importId,
-                  importIds: sessionImportMeta.importIds ?? [importId],
-                });
-              } catch {
-                // Network error — restore metadata only so the UI reflects the previous state
-                // even though the user may need to re-upload before generating.
-                setImportedData({
-                  fileName: sessionImportMeta.fileName,
-                  headers: sessionImportMeta.headers,
-                  rows: [],
-                  rowCount: sessionImportMeta.rowCount,
-                  importId: sessionImportMeta.importId,
-                  importIds: sessionImportMeta.importIds,
-                });
-              }
-            }
-
-            // Return to the step the user was on so they don't have to navigate manually.
-            if (sessionStep === 'data' || sessionStep === 'export') {
-              setCurrentStep(sessionStep as any);
-            }
+            // Don't auto-jump — show a "Resume" prompt so the user can choose to
+            // continue or start fresh with a different template.
+            setPendingResumeSession({
+              templateId: templateIdToRestore!,
+              templateName: templateObj.title || templateObj.name || 'Previous session',
+              fields: sessionFields ?? [],
+              currentPage: sessionPage,
+              canvasScale: sessionScale,
+              templateVersionId: sessionVersionId,
+              currentStep: sessionStep,
+              importedDataMeta: sessionImportMeta,
+              fieldMappings: sessionFieldMappings ?? [],
+            });
           } catch {
             // Don't clear the session on restore failure — a transient network error
             // would wipe the user's work. Just fall back to template selection.
@@ -649,6 +619,56 @@ export default function GenerateCertificatePage() {
         fields: [],
         versionId: null,
       };
+    }
+  };
+
+  // Resume a pending session that was found in sessionStorage on load.
+  const handleResumeSession = async () => {
+    if (!pendingResumeSession) return;
+    const session = pendingResumeSession;
+    setPendingResumeSession(null);
+
+    const templateObj = savedTemplates.find((t: any) => t.id === session.templateId);
+    if (!templateObj) return;
+
+    await handleTemplateSelectSafe(templateObj);
+
+    if (session.fields.length > 0) {
+      const sanitized = session.fields.map((f: any) => ({
+        ...f,
+        imageUrl: f.imageUrl?.startsWith('blob:') ? undefined : f.imageUrl,
+        qrLogoUrl: f.qrLogoUrl?.startsWith('blob:') ? undefined : f.qrLogoUrl,
+      }));
+      setFields(sanitized);
+    }
+    if (session.currentPage !== undefined) setCurrentPage(session.currentPage);
+    if (session.canvasScale) setCanvasScale(session.canvasScale);
+    if (session.templateVersionId) setTemplateVersionId(session.templateVersionId);
+    if (session.fieldMappings.length > 0) setFieldMappings(session.fieldMappings);
+
+    const meta = session.importedDataMeta;
+    if (meta?.importId) {
+      try {
+        const [importJob, dataPage] = await Promise.all([
+          api.imports.get(meta.importId),
+          api.imports.getData(meta.importId, { limit: 100 }),
+        ]);
+        const rows = ((dataPage.items ?? []) as Array<{ row_index: number; data: Record<string, any> }>).map((r: any) => r.data ?? r);
+        setImportedData({
+          fileName: importJob.file_name ?? meta.fileName,
+          headers: meta.headers,
+          rows,
+          rowCount: importJob.total_rows ?? meta.rowCount,
+          importId: meta.importId,
+          importIds: meta.importIds ?? [meta.importId],
+        });
+      } catch {
+        setImportedData({ fileName: meta.fileName, headers: meta.headers, rows: [], rowCount: meta.rowCount, importId: meta.importId, importIds: meta.importIds });
+      }
+    }
+
+    if (session.currentStep === 'data' || session.currentStep === 'export') {
+      setCurrentStep(session.currentStep as any);
     }
   };
 
@@ -1451,20 +1471,51 @@ export default function GenerateCertificatePage() {
 
         <div className="flex-1 flex overflow-hidden min-h-0">
           {currentStep === 'template' && (
-            <div className="flex-1 overflow-hidden">
-              <TemplateSelector
-                savedTemplates={savedTemplates}
-                onSelectTemplate={(t) => { setTemplateMode('single'); handleTemplateSelect(t); }}
-                onNewUpload={handleNewTemplateUpload}
-                onDeleteTemplate={handleDeleteTemplate}
-                recentGenerated={recentGenerated}
-                inProgress={inProgressTemplates}
-                recentLoading={recentLoading}
-                onSelectRecentTemplate={handleRecentTemplateSelect}
-                templateMode={templateMode}
-                onTemplateModeChange={setTemplateMode}
-                onSelectMultipleTemplates={handleSelectMultipleTemplates}
-              />
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Resume session banner */}
+              {pendingResumeSession && (
+                <div className="shrink-0 mx-6 mt-4 flex items-center gap-3 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Resume previous session?</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      You were working on <span className="font-medium text-foreground">{pendingResumeSession.templateName}</span>
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleResumeSession}
+                    className="shrink-0 gap-1.5"
+                  >
+                    Resume
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setPendingResumeSession(null);
+                      sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+                    }}
+                    className="shrink-0 text-muted-foreground"
+                  >
+                    Start fresh
+                  </Button>
+                </div>
+              )}
+              <div className="flex-1 overflow-hidden">
+                <TemplateSelector
+                  savedTemplates={savedTemplates}
+                  onSelectTemplate={(t) => { setTemplateMode('single'); handleTemplateSelect(t); setPendingResumeSession(null); }}
+                  onNewUpload={handleNewTemplateUpload}
+                  onDeleteTemplate={handleDeleteTemplate}
+                  recentGenerated={recentGenerated}
+                  inProgress={inProgressTemplates}
+                  recentLoading={recentLoading}
+                  onSelectRecentTemplate={(t, loadFields) => { handleRecentTemplateSelect(t, loadFields); setPendingResumeSession(null); }}
+                  templateMode={templateMode}
+                  onTemplateModeChange={setTemplateMode}
+                  onSelectMultipleTemplates={(ts) => { handleSelectMultipleTemplates(ts); setPendingResumeSession(null); }}
+                />
+              </div>
             </div>
           )}
 
