@@ -313,6 +313,8 @@ function applyTemplatePreview(html: string, vars: Record<string, string>): strin
 
 interface SendEmailModalProps {
   jobId: string;
+  /** All cert-generation job IDs (one per template config × import file). Used for multi-template / multi-file email send. */
+  allCertJobIds?: string[];
   recipientCount: number;
   certPreviewUrl?: string | null;
   firstRecipientRow?: Record<string, any> | null;
@@ -325,7 +327,7 @@ interface SendEmailModalProps {
 
 type SendModalStep = 'checking' | 'no_template' | 'no_integration' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
 
-function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
+function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
   const [step, setStep] = useState<SendModalStep>('checking');
   const [integrations, setIntegrations] = useState<DeliveryIntegration[]>([]);
@@ -385,28 +387,37 @@ function SendEmailModal({ jobId, recipientCount, certPreviewUrl, firstRecipientR
     if (!selectedTemplate) return;
     if (!usePlatformDefault && !selectedIntegration) return;
     setStep('sending');
+    // Send emails for every cert-gen job ID (covers multi-template and multi-file batches).
+    // Fall back to the primary jobId if allCertJobIds is empty or not provided.
+    const jobIds = allCertJobIds && allCertJobIds.length > 0 ? allCertJobIds : [jobId];
     try {
-      const result = await api.delivery.sendJobEmails({
-        generation_job_id: jobId,
-        integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
-        template_id: selectedTemplate.id,
-        subject_override: subjectOverride.trim() || undefined,
-        from_name_override: fromNameOverride.trim() || undefined,
-        use_platform_default: usePlatformDefault || undefined,
-      });
-      setSendResult({ sent: result.sent, failed: result.failed });
+      let totalSent = 0;
+      let totalFailed = 0;
+      const allMessages: Array<{ to_email?: string; status: string }> = [];
+      for (const cjId of jobIds) {
+        const result = await api.delivery.sendJobEmails({
+          generation_job_id: cjId,
+          integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
+          template_id: selectedTemplate.id,
+          subject_override: subjectOverride.trim() || undefined,
+          from_name_override: fromNameOverride.trim() || undefined,
+          use_platform_default: usePlatformDefault || undefined,
+        });
+        totalSent += result.sent;
+        totalFailed += result.failed;
+        if (result.messages) allMessages.push(...result.messages);
+      }
+      setSendResult({ sent: totalSent, failed: totalFailed });
       setStep('done');
-      toast.success(`${result.sent} email${result.sent !== 1 ? 's' : ''} sent!`);
-      // Build status map keyed by recipient email (cert.recipient_id is not
-      // populated in GeneratedCertificateInfo, so use email as the stable key)
-      if (onEmailSent && result.messages) {
+      toast.success(`${totalSent} email${totalSent !== 1 ? 's' : ''} sent!`);
+      if (onEmailSent) {
         const statuses: Record<string, string> = {};
-        for (const m of result.messages) {
+        for (const m of allMessages) {
           if (m.to_email) statuses[m.to_email] = m.status;
         }
         onEmailSent(statuses);
       }
-      // Fetch per-recipient delivery report (best effort)
+      // Fetch per-recipient delivery report for the primary job (best effort)
       try {
         const report = await api.delivery.listMessagesByJob(jobId);
         setDeliveryMessages(report.messages ?? []);
@@ -1263,9 +1274,25 @@ export function ExportSection({
               });
             }
           }
-          const firstJobId = result?.first_job_id as string | null | undefined;
-          if (firstJobId) setCertGenJobId(firstJobId);
-          setTotalGenerated(total);
+          // Collect all cert-gen job IDs: one per template config in this background job's results
+          const certJobIds = (resultsArr ?? [])
+            .map((r: any) => r.job_id as string | null | undefined)
+            .filter((id): id is string => !!id);
+          if (certJobIds.length > 0) {
+            setCertGenJobId(certJobIds[0]!);
+            setAllCertJobIds(prev => {
+              const merged = Array.from(new Set([...prev, ...certJobIds]));
+              return merged;
+            });
+          } else {
+            // Fallback: use first_job_id if results didn't include per-entry job IDs
+            const firstJobId = result?.first_job_id as string | null | undefined;
+            if (firstJobId) {
+              setCertGenJobId(prev => prev ?? firstJobId);
+              setAllCertJobIds(prev => prev.includes(firstJobId) ? prev : [...prev, firstJobId]);
+            }
+          }
+          setTotalGenerated(prev => prev + total);
           setDownloadUrl(url ?? null);
           setGeneratedCertificates(allCerts);
           if (summary.length > 0) setGenerationSummary(summary);
@@ -1292,7 +1319,6 @@ export function ExportSection({
     timerId = setTimeout(poll, 2000);
     return () => { stopped = true; clearTimeout(timerId); };
   }, [generationJobId]); // eslint-disable-line react-hooks/exhaustive-deps
-
 
   // Expiry settings
   const [expiryType, setExpiryType] = useState<ExpiryType>('year');
@@ -1327,6 +1353,50 @@ export function ExportSection({
   const [emailStatuses, setEmailStatuses] = useState<Record<string, string> | undefined>(undefined);
   // certificate_generation_jobs.id (different from background_jobs.id = generationJobId)
   const [certGenJobId, setCertGenJobId] = useState<string | null>(null);
+  // All cert-gen job IDs collected from every background job result (multi-template × multi-file)
+  const [allCertJobIds, setAllCertJobIds] = useState<string[]>([]);
+  // Background job IDs for import files 2+ (file 1 is tracked by generationJobId)
+  const [extraGenerationJobIds, setExtraGenerationJobIds] = useState<string[]>([]);
+
+  // Poll each extra background job (files 2+) in parallel to accumulate their cert-gen job IDs and total counts.
+  // These jobs don't drive the overlay — the primary job does — but we need their cert job IDs for email send.
+  useEffect(() => {
+    if (extraGenerationJobIds.length === 0) return;
+    const cleanups: Array<() => void> = [];
+    for (const ejId of extraGenerationJobIds) {
+      let stopped = false;
+      let timerId: ReturnType<typeof setTimeout>;
+      const poll = async () => {
+        if (stopped || !isMountedRef.current) return;
+        try {
+          const status = await api.certificates.pollJobStatus(ejId);
+          if (!isMountedRef.current || stopped) return;
+          if (status.status === 'completed') {
+            stopped = true;
+            const result = status.result as Record<string, unknown> | null;
+            const resultsArr = result?.results as Array<any> | undefined;
+            const certJobIds = (resultsArr ?? [])
+              .map((r: any) => r.job_id as string | null | undefined)
+              .filter((id): id is string => !!id);
+            if (certJobIds.length > 0) {
+              setAllCertJobIds(prev => Array.from(new Set([...prev, ...certJobIds])));
+            } else {
+              const fallback = result?.first_job_id as string | null | undefined;
+              if (fallback) setAllCertJobIds(prev => prev.includes(fallback) ? prev : [...prev, fallback]);
+            }
+            const extraTotal = (result?.total_certificates as number | undefined) ?? 0;
+            if (extraTotal > 0) setTotalGenerated(prev => prev + extraTotal);
+            return;
+          }
+          if (status.status === 'failed') { stopped = true; return; }
+        } catch { /* ignore, retry */ }
+        timerId = setTimeout(poll, 4000);
+      };
+      timerId = setTimeout(poll, 3000);
+      cleanups.push(() => { stopped = true; clearTimeout(timerId); });
+    }
+    return () => cleanups.forEach(c => c());
+  }, [extraGenerationJobIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Email setup pre-check (soft warning before generating)
   const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean; hasIntegration: boolean } | null>(null);
@@ -1370,7 +1440,12 @@ export function ExportSection({
   const allMappedColumnsValid = !importedData || fieldMappings
     .filter(m => m.columnName)
     .every(m => importedData.headers.includes(m.columnName));
-  const canGenerate = !!(template && importedData && template.id && allMappableFieldsMapped && allMappedColumnsValid);
+  // Each additional config must also have all its mappable fields mapped
+  const allAdditionalConfigsMapped = additionalConfigs.every(cfg => {
+    const mappable = cfg.fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
+    return mappable.every(f => cfg.fieldMappings.some(m => m.fieldId === f.id));
+  });
+  const canGenerate = !!(template && importedData && template.id && allMappableFieldsMapped && allMappedColumnsValid && allAdditionalConfigsMapped);
 
   // All configs including the primary one (for unified rendering)
   const allConfigs: CertificateConfig[] = [
@@ -1513,14 +1588,10 @@ export function ExportSection({
     setGeneratedCertificates([]);
     setTotalGenerated(0);
     setGenerationSummary([]);
-
-    // Validate expiry date is in the future
-    if (expiryType === 'custom' && customExpiryDate) {
-      if (new Date(customExpiryDate) <= new Date()) {
-        toast.error('Expiry date must be in the future');
-        return;
-      }
-    }
+    // Clear stale cert-gen job IDs from any previous run
+    setCertGenJobId(null);
+    setAllCertJobIds([]);
+    setExtraGenerationJobIds([]);
 
     const options: {
       includeQR: boolean;
@@ -1575,9 +1646,9 @@ export function ExportSection({
         label: cfg.label,
       }));
 
-      const firstJobId = await (async () => {
+      const { firstJobId, restJobIds } = await (async () => {
         if (importIds) {
-          let firstId: string | null = null;
+          const allJobIds: string[] = [];
           for (let i = 0; i < importIds.length; i++) {
             const batchParams = {
               import_id: importIds[i]!,
@@ -1590,9 +1661,9 @@ export function ExportSection({
               ? `File ${i + 1}/${importIds.length}: ${Math.round(totalRows / importIds.length)} certs`
               : `${totalRows} certificate${totalRows !== 1 ? 's' : ''} — ${configsToRun[0]?.label ?? ''}`;
             addJob(job_id, fileLabel);
-            if (!firstId) firstId = job_id;
+            allJobIds.push(job_id);
           }
-          return firstId!;
+          return { firstJobId: allJobIds[0]!, restJobIds: allJobIds.slice(1) };
         }
         // Inline data fallback
         const { job_id } = await api.certificates.batchGenerate({
@@ -1601,12 +1672,13 @@ export function ExportSection({
           configs: configDefs,
         });
         addJob(job_id, `${totalRows} certificate${totalRows !== 1 ? 's' : ''} — ${configsToRun[0]?.label ?? ''}`);
-        return job_id;
+        return { firstJobId: job_id, restJobIds: [] as string[] };
       })();
 
       if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
 
       setGenerationJobId(firstJobId);
+      if (restJobIds.length > 0) setExtraGenerationJobIds(restJobIds);
       // Progress timer keeps running through polling — cleared only on completion or error
     } catch (err: any) {
       if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
@@ -2352,6 +2424,8 @@ export function ExportSection({
               setProgressLabel('');
               setGenerationJobId(null);
               setCertGenJobId(null);
+              setAllCertJobIds([]);
+              setExtraGenerationJobIds([]);
               setEmailStatuses(undefined);
             }}
           >
@@ -2359,9 +2433,9 @@ export function ExportSection({
           </Button>
           <Button
             className="flex-1 gap-2"
-            disabled={!generationJobId || totalGenerated === 0}
+            disabled={!generationJobId || totalGenerated === 0 || generationStatus !== 'completed'}
             onClick={() => setSendModalOpen(true)}
-            title={totalGenerated === 0 ? 'No certificates to send' : !generationJobId ? 'No job ID available' : 'Send certificates by email'}
+            title={generationStatus !== 'completed' ? 'Wait for generation to complete' : totalGenerated === 0 ? 'No certificates to send' : !generationJobId ? 'No job ID available' : 'Send certificates by email'}
           >
             <Send className="w-4 h-4" />
             Send via Email
@@ -2373,6 +2447,7 @@ export function ExportSection({
       {sendModalOpen && generationJobId && (
         <SendEmailModal
           jobId={certGenJobId ?? generationJobId}
+          allCertJobIds={allCertJobIds.length > 0 ? allCertJobIds : undefined}
           recipientCount={totalGenerated}
           certPreviewUrl={generatedCertificates[0]?.preview_url ?? null}
           firstRecipientRow={importedData?.rows[0] ?? null}
