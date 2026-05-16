@@ -552,17 +552,11 @@ export default function TemplatesPage() {
                       const isImage = ['png', 'jpg', 'jpeg', 'webp', 'image/png', 'image/jpeg', 'image/webp'].includes(template.file_type || '');
                       
                       return isImage ? (
-                        <div className="w-full h-full flex items-center justify-center bg-white">
+                        <div className="w-full h-full">
                           <img
                             src={previewUrl}
                             alt={template.title || template.name}
-                            className="max-w-full max-h-full w-auto h-auto object-contain"
-                            style={{ 
-                              width: 'auto',
-                              height: 'auto',
-                              maxWidth: '100%',
-                              maxHeight: '100%'
-                            }}
+                            className="w-full h-full object-cover"
                             onError={() => {
                               // Handle image load error
                               setPreviewStates((prev) => ({
@@ -691,7 +685,7 @@ export default function TemplatesPage() {
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-xs border",
+                                "text-xs border max-w-30 truncate block",
                                 categoryColors.bg,
                                 categoryColors.text,
                                 categoryColors.border
@@ -714,7 +708,7 @@ export default function TemplatesPage() {
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-xs border",
+                                "text-xs border max-w-30 truncate block",
                                 subcategoryColors.bg,
                                 subcategoryColors.text,
                                 subcategoryColors.border

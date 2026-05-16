@@ -153,7 +153,7 @@ export function createInitialState(templateIdFromUrl: string | null): GenerateCe
     useInfiniteCanvas: true,
     currentPage: 0,
     totalPages: 1,
-    leftPanelVisible: true,
+    leftPanelVisible: false,
     leftPanelPos: { x: 16, y: 24 },
     rightPanelVisible: true,
     stepperExpanded: true,

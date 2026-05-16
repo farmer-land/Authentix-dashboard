@@ -193,16 +193,17 @@ export default function GenerateCertificatePage() {
     prevFieldIdsRef.current = currentIds;
   }, [fields]);
 
-  // Re-fit the canvas whenever the right panel shows/hides so the certificate
-  // fills the newly available width (critical for landscape/wide templates).
-  useEffect(() => {
-    setFitTrigger(t => t + 1);
-  }, [rightPanelVisible]);
-
   // Reset right-panel position when a new template is loaded or preview opens/closes
   useEffect(() => {
     setPanelReady(false);
   }, [template?.id, previewOpen]);
+
+  // ── Refresh guard: design step with no template → go back to template chooser ──
+  useEffect(() => {
+    if (currentStep === 'design' && !template && !isTemplateLoading && !templateIdFromUrl) {
+      setCurrentStep('template');
+    }
+  }, [currentStep, template, isTemplateLoading, templateIdFromUrl]);
 
   // ── Browser-back interception ───────────────────────────────────────────────
   // Push a history entry when entering the design step so the back button stays
@@ -1666,8 +1667,6 @@ export default function GenerateCertificatePage() {
                 snapToGrid={snapToGrid}
                 onSnapToggle={() => setSnapToGrid(v => !v)}
                 fitTrigger={fitTrigger}
-                leftPanelWidth={leftPanelVisible ? 288 : 0}
-                rightPanelWidth={rightPanelVisible && !!selectedField && !previewOpen ? 336 : 0}
               />
               </ErrorBoundary>
             ) : (
@@ -1690,30 +1689,22 @@ export default function GenerateCertificatePage() {
               </div>
             )}
 
-            {/* ── Left panel collapsed card (wide, short) ── */}
+            {/* ── Left panel collapsed vertical pill ── */}
             {!leftPanelVisible && (
               <div
-                className="absolute z-40 flex items-center gap-2.5 bg-card border border-border/50 rounded-xl shadow-md px-3 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                style={{ left: leftPanelPos.x, top: 16, width: 288 }}
+                className="absolute z-40 flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                style={{ left: 8, top: '50%', transform: 'translateY(-50%)', width: 40 }}
                 onClick={() => setLeftPanelVisible(true)}
                 title="Expand layers panel"
               >
-                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {template ? (
-                    <>
-                      <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{template.templateName}</p>
-                      {(templateMeta.category || templateMeta.subcategory) && (
-                        <p className="text-[9px] text-muted-foreground truncate leading-tight">
-                          {[templateMeta.category, templateMeta.subcategory].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground">Layers</p>
-                  )}
-                </div>
-                <Maximize2 className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
+                <span
+                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                >
+                  Layers
+                </span>
+                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
               </div>
             )}
 
@@ -1722,22 +1713,20 @@ export default function GenerateCertificatePage() {
               <div
                 className="absolute z-40 w-72 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
                 style={{
-                  left: leftPanelPos.x,
+                  left: 8,
                   top: 16,
                   height: 'calc(100% - 32px)',
                 }}
               >
-                {/* Drag handle header */}
+                {/* Header */}
                 <div
-                  className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/40 cursor-grab active:cursor-grabbing shrink-0 select-none"
-                  onMouseDown={handleLeftPanelDragStart}
+                  className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/40 shrink-0 select-none"
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="text-xs font-medium text-foreground flex-1">Layers</span>
                   <button
                     onClick={() => setLeftPanelVisible(false)}
                     className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
-                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

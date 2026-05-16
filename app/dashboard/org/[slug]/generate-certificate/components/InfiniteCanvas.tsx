@@ -165,8 +165,6 @@ export function InfiniteCanvas({
   snapToGrid: snapToGridProp,
   onSnapToggle,
   fitTrigger,
-  leftPanelWidth = 0,
-  rightPanelWidth = 0,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -253,18 +251,17 @@ export function InfiniteCanvas({
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
     const padding = 120;
-    const availableWidth = cw - leftPanelWidth - rightPanelWidth;
     const fitScale = clamp(
-      Math.min((availableWidth - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
+      Math.min((cw - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
       MIN_SCALE,
       MAX_SCALE,
     );
-    const centeredX = leftPanelWidth + (availableWidth - pdfWidth * fitScale) / 2;
+    const centeredX = (cw - pdfWidth * fitScale) / 2;
     const centeredY = (ch - pdfHeight * fitScale) / 2;
     onScaleChange(fitScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
-  }, [pdfWidth, pdfHeight, onScaleChange, leftPanelWidth, rightPanelWidth]);
+  }, [pdfWidth, pdfHeight, onScaleChange]);
 
   // Run auto-fit whenever the template dimensions change
   const prevDimsRef = useRef({ w: 0, h: 0 });
@@ -600,7 +597,7 @@ export function InfiniteCanvas({
       if (containerRef.current && toolbarRef.current) {
         const ct = containerRef.current.getBoundingClientRect();
         const tb = toolbarRef.current.getBoundingClientRect();
-        const minX = leftPanelWidth + 4;
+        const minX = 4;
         const maxX = ct.width - tb.width - 4;
         const maxY = ct.height - tb.height - 4;
         setToolbarPos({ x: Math.max(minX, Math.min(rawX, maxX)), y: Math.max(4, Math.min(rawY, maxY)) });
@@ -946,7 +943,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: 16, left: `calc(50% + ${(leftPanelWidth - rightPanelWidth) / 2}px)`, transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >
