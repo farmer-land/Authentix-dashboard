@@ -839,6 +839,7 @@ export function InfiniteCanvas({
           width: displayW,
           height: displayH,
           transform: `translate(${pan.x}px, ${pan.y}px)`,
+          transition: (isPanning || isResizingTemplate || isRotating) ? 'none' : 'transform 0.15s ease-out',
           willChange: isPanning ? 'transform' : 'auto',
         }}
         data-field="canvas"
@@ -1230,24 +1231,6 @@ export function InfiniteCanvas({
           </button>
         </div>
       )}
-
-      {/* ── Canvas info bar (bottom-left) ── */}
-      <div className="absolute bottom-3 left-3 z-40 flex items-center gap-2 text-[10px] text-muted-foreground/50 select-none pointer-events-none">
-        <span>{Math.round(visualDims?.w ?? pdfWidth)} × {Math.round(visualDims?.h ?? pdfHeight)}</span>
-        <span className="w-px h-2.5 bg-border" />
-        <span>{visibleFields.length} field{visibleFields.length !== 1 ? 's' : ''}</span>
-        {snapToGrid && (
-          <>
-            <span className="w-px h-2.5 bg-border" />
-            <span className="text-primary/70">Snap {SNAP_SIZE}px</span>
-          </>
-        )}
-      </div>
-
-      {/* ── Keyboard hint (bottom-right) ── */}
-      <div className="absolute bottom-3 right-3 z-40 text-[9px] text-muted-foreground/30 select-none pointer-events-none text-right leading-relaxed">
-        Del · ⌘Z undo · ⌘C/V/D copy/paste/dup · Shift+click multi-select · ? shortcuts
-      </div>
 
       {/* ── Right-click context menu ── */}
       {contextMenu && (() => {

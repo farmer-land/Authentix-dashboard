@@ -5,15 +5,15 @@ import { toast } from 'sonner';
 import { useGenerateCertificateState } from './state/useGenerateCertificateState';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { useOrgSlug } from '@/lib/org';
-import { CertificateField, CertificateTemplate, ImportedData, FieldMapping } from '@/lib/types/certificate';
+import { CertificateField, CertificateTemplate, ImportedData, FieldMapping, FIELD_TYPE_CONFIG, FieldType } from '@/lib/types/certificate';
+import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 import type { CertificateConfig } from './components/ExportSection';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
 import {
   Image as ImageIcon, FileText,
   CheckCircle2, Layers, Palette, Database, Wand2,
-  ChevronDown, ChevronUp, X, Eye,
+  ChevronDown, ChevronUp, X, Eye, Plus, ChevronRight, Check,
   SlidersHorizontal, Maximize2,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -79,6 +79,10 @@ export default function GenerateCertificatePage() {
   const [additionalRows, setAdditionalRows] = useState<Record<string, unknown>[]>([]);
   // True when the active template was uploaded without a category — show a soft prompt in design view
   const [templateNeedsCategory, setTemplateNeedsCategory] = useState(false);
+  // Data-fields panel state
+  const [selectedDataHeaders, setSelectedDataHeaders] = useState<Set<string>>(new Set());
+  const [addMoreOpen, setAddMoreOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(true);
 
   // Pending session restore — set when a saved session is found on load.
   // Null means no session to restore (or user dismissed it).
@@ -938,14 +942,71 @@ export default function GenerateCertificatePage() {
     return `${stripped} (${n})`;
   };
 
+  const headerToFieldType = (header: string): FieldType => {
+    const h = header.toLowerCase().replace(/[\s-]+/g, '_');
+    if (['recipient_name', 'full_name', 'name', 'first_name', 'last_name'].includes(h)) return 'name';
+    if (['email', 'email_address', 'e_mail', 'mail'].includes(h)) return 'email';
+    if (['course', 'course_name', 'program', 'programme', 'subject'].includes(h)) return 'course';
+    if (['start_date', 'issue_date', 'date', 'from_date', 'issued_on'].includes(h)) return 'start_date';
+    if (['end_date', 'expiry', 'expiry_date', 'valid_until', 'to_date'].includes(h)) return 'end_date';
+    if (['phone', 'phone_number', 'mobile', 'contact_number'].includes(h)) return 'phone';
+    return 'custom_text';
+  };
+
+  const handleAddDataFields = (headers: string[]) => {
+    if (!template) return;
+    pushToHistory(fields);
+    const REF_WIDTH = 595;
+    const REF_HEIGHT = 842;
+    const wScale = template.pdfWidth > 0 ? template.pdfWidth / REF_WIDTH : 1;
+    const hScale = template.pdfHeight > 0 ? template.pdfHeight / REF_HEIGHT : 1;
+    const newFields: CertificateField[] = [];
+    let nextY = template.pdfHeight * 0.35;
+    for (const header of headers) {
+      const fieldType = headerToFieldType(header);
+      const config = FIELD_TYPE_CONFIG[fieldType];
+      const scaledWidth = Math.round(config.defaultWidth * wScale);
+      const scaledHeight = Math.round(config.defaultHeight * hScale);
+      const x = (template.pdfWidth - scaledWidth) / 2;
+      const rawLabel = header.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const field: CertificateField = {
+        id: crypto.randomUUID(),
+        type: fieldType,
+        label: makeUniqueLabel(rawLabel, [...fields, ...newFields]),
+        x,
+        y: nextY,
+        width: scaledWidth,
+        height: scaledHeight,
+        pageNumber: currentPage,
+        fontSize: fieldType === 'qr_code' ? 0 : Math.max(12, Math.round(24 * hScale)),
+        fontFamily: 'DM Sans',
+        color: '#000000',
+        fontWeight: 'normal',
+        fontStyle: 'normal',
+        textAlign: 'center',
+        sampleValue: rawLabel,
+      };
+      if (fieldType === 'start_date' || fieldType === 'end_date') {
+        (field as any).dateFormat = 'MMMM dd, yyyy';
+      }
+      newFields.push(field);
+      nextY += scaledHeight + Math.round(16 * hScale);
+    }
+    setFields(prev => [...prev, ...newFields]);
+    setSelectedDataHeaders(new Set());
+    setLayersOpen(true);
+  };
+
   const handleAddField = (field: CertificateField) => {
     pushToHistory(fields);
+    const panelWasHidden = !rightPanelVisible;
     setFields((prev) => {
       const uniqueLabel = makeUniqueLabel(field.label, prev);
       return [...prev, { ...field, label: uniqueLabel }];
     });
     setSelectedFieldId(field.id);
     setRightPanelVisible(true);
+    if (panelWasHidden) setFitTrigger(t => t + 1);
   };
 
   const handleUpdateField = (fieldId: string, updates: Partial<CertificateField>) => {
@@ -1017,9 +1078,11 @@ export default function GenerateCertificatePage() {
   }, [fields, pushToHistory]);
 
   const handleFieldSelect = (fieldId: string) => {
-    if (previewOpen) return; // don't open right panel in preview mode
+    if (previewOpen) return;
+    const panelWasHidden = !rightPanelVisible;
     setSelectedFieldId(fieldId);
     setRightPanelVisible(true);
+    if (panelWasHidden) setFitTrigger(t => t + 1);
   };
 
   const handleTemplateResizeStart = (width: number, height: number) => {
@@ -1725,110 +1788,225 @@ export default function GenerateCertificatePage() {
                 </div>
               )}
               {leftPanelVisible && (
-                <div
-                  className="shrink-0 w-72 m-3 mr-0 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-                >
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-semibold text-foreground flex-1">Layers</span>
-                  <button
-                    onClick={() => { setLeftPanelVisible(false); setFitTrigger(t => t + 1); }}
-                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <div className="shrink-0 w-72 m-3 mr-0 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden">
+                  {/* Panel header */}
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-semibold text-foreground flex-1">Design</span>
+                    <button
+                      onClick={() => { setLeftPanelVisible(false); setFitTrigger(t => t + 1); }}
+                      className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
 
-                {templateMode === 'multi' && templateConfigs.length > 1 && (
-                  <div className="shrink-0 border-b border-border/30 px-3 py-2">
-                    <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Templates</p>
-                    <div className="space-y-0.5">
-                      {templateConfigs.map((cfg, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSwitchActiveTemplate(idx)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${
-                            idx === activeTemplateIndex
-                              ? 'bg-primary text-primary-foreground font-medium'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`}
-                        >
-                          <span className={`w-4 h-4 rounded-full border text-[9px] flex items-center justify-center shrink-0 font-bold ${
-                            idx === activeTemplateIndex ? 'border-primary-foreground/50' : 'border-current'
-                          }`}>
-                            {idx + 1}
-                          </span>
-                          <span className="truncate">{cfg.template.templateName || `Template ${idx + 1}`}</span>
-                        </button>
-                      ))}
+                  {/* Multi-template switcher */}
+                  {templateMode === 'multi' && templateConfigs.length > 1 && (
+                    <div className="shrink-0 border-b border-border/30 px-3 py-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Templates</p>
+                      <div className="space-y-0.5">
+                        {templateConfigs.map((cfg, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleSwitchActiveTemplate(idx)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${
+                              idx === activeTemplateIndex
+                                ? 'bg-primary text-primary-foreground font-medium'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            }`}
+                          >
+                            <span className={`w-4 h-4 rounded-full border text-[9px] flex items-center justify-center shrink-0 font-bold ${
+                              idx === activeTemplateIndex ? 'border-primary-foreground/50' : 'border-current'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            <span className="truncate">{cfg.template.templateName || `Template ${idx + 1}`}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tab switcher — pinned above scrollable content */}
+                  <div className="shrink-0 px-3 pt-2 pb-1">
+                    <div className="flex items-center bg-muted rounded-lg p-1 gap-1 h-8">
+                      <button
+                        onClick={() => setActiveTab('fields')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
+                          activeTab === 'fields' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <Layers className="w-3 h-3" />
+                        Fields
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('assets')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
+                          activeTab === 'assets' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <ImageIcon className="w-3 h-3" />
+                        Assets
+                      </button>
                     </div>
                   </div>
-                )}
 
-                <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
-                    <div className="px-3 pt-2 pb-1 shrink-0">
-                      <div className="flex items-center bg-muted rounded-lg p-1 gap-1 h-8">
-                        <button
-                          onClick={() => setActiveTab('fields')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
-                            activeTab === 'fields' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          <Layers className="w-3 h-3" />
-                          Fields
-                        </button>
-                        <button
-                          onClick={() => setActiveTab('assets')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-md h-full transition-all ${
-                            activeTab === 'assets' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          <ImageIcon className="w-3 h-3" />
-                          Assets
-                        </button>
-                      </div>
-                    </div>
-                    <TabsContent value="fields" className="p-3 mt-0 space-y-5">
+                  {/* Scrollable content */}
+                  <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
+                    {activeTab === 'fields' && (
                       <div>
-                        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Fields</p>
-                        <FieldTypeSelector
-                          onAddField={handleAddField}
-                          onAddImageField={handleAddAssetField}
-                          onAddImageFile={handleAddImageFile}
-                          pdfWidth={template.pdfWidth}
-                          pdfHeight={template.pdfHeight}
-                          currentPage={currentPage}
+                        {/* Data fields from the imported file */}
+                        {importedData && importedData.headers.length > 0 && (
+                          <div className="px-3 pt-3 pb-2">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">From your file</p>
+                              {selectedDataHeaders.size > 0 && (
+                                <span className="text-[10px] text-muted-foreground/60">{selectedDataHeaders.size} selected</span>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              {importedData.headers.map((h) => {
+                                const fieldType = headerToFieldType(h);
+                                const config = FIELD_TYPE_CONFIG[fieldType];
+                                const isChecked = selectedDataHeaders.has(h);
+                                const displayLabel = h.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                return (
+                                  <div
+                                    key={h}
+                                    onClick={() => setSelectedDataHeaders(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(h)) next.delete(h); else next.add(h);
+                                      return next;
+                                    })}
+                                    className={cn(
+                                      'flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer select-none transition-colors border',
+                                      isChecked ? 'bg-primary/8 border-primary/25' : 'border-transparent hover:bg-muted/60'
+                                    )}
+                                  >
+                                    <span className={cn(
+                                      'shrink-0 h-3.5 w-3.5 rounded-sm border flex items-center justify-center transition-colors',
+                                      isChecked ? 'bg-primary border-primary' : 'border-border'
+                                    )}>
+                                      {isChecked && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium leading-none truncate">{displayLabel}</p>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">{config.label}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {selectedDataHeaders.size > 0 && (
+                              <Button
+                                size="sm"
+                                className="w-full mt-2 h-8 text-xs"
+                                onClick={() => handleAddDataFields(Array.from(selectedDataHeaders))}
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                                Add {selectedDataHeaders.size} field{selectedDataHeaders.size !== 1 ? 's' : ''} to template
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="h-px bg-border/40 mx-3" />
+
+                        {/* FieldTypeSelector — accordion when data fields are present, always-visible otherwise */}
+                        {importedData && importedData.headers.length > 0 ? (
+                          <div>
+                            <button
+                              onClick={() => setAddMoreOpen(v => !v)}
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                            >
+                              <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${addMoreOpen ? 'rotate-90' : ''}`} />
+                              Add more fields
+                            </button>
+                            {addMoreOpen && (
+                              <div className="px-3 pb-3">
+                                <FieldTypeSelector
+                                  onAddField={handleAddField}
+                                  onAddImageField={handleAddAssetField}
+                                  onAddImageFile={handleAddImageFile}
+                                  pdfWidth={template.pdfWidth}
+                                  pdfHeight={template.pdfHeight}
+                                  currentPage={currentPage}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="px-3 pt-3 pb-2">
+                            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Add Fields</p>
+                            <FieldTypeSelector
+                              onAddField={handleAddField}
+                              onAddImageField={handleAddAssetField}
+                              onAddImageFile={handleAddImageFile}
+                              pdfWidth={template.pdfWidth}
+                              pdfHeight={template.pdfHeight}
+                              currentPage={currentPage}
+                            />
+                          </div>
+                        )}
+
+                        <div className="h-px bg-border/40 mx-3" />
+
+                        {/* Layers accordion */}
+                        <div>
+                          <button
+                            onClick={() => setLayersOpen(v => !v)}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                          >
+                            <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${layersOpen ? 'rotate-90' : ''}`} />
+                            Layers
+                            {fields.length > 0 && (
+                              <span className="ml-auto text-[10px] font-normal text-muted-foreground/60">{fields.length}</span>
+                            )}
+                          </button>
+                          {layersOpen && (
+                            <div className="px-3 pb-4">
+                              <ErrorBoundary fallbackLabel="Layers panel error">
+                                <FieldLayersList
+                                  fields={fields}
+                                  selectedFieldId={selectedFieldId}
+                                  hiddenFields={hiddenFields}
+                                  onFieldSelect={handleFieldSelect}
+                                  onFieldDelete={handleDeleteField}
+                                  onToggleVisibility={handleToggleVisibility}
+                                  onFieldReorder={handleFieldLayerReorder}
+                                  onFieldLock={handleFieldLock}
+                                  onFieldRename={handleFieldRename}
+                                  onFieldDuplicate={handleFieldDuplicate}
+                                />
+                              </ErrorBoundary>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {activeTab === 'assets' && (
+                      <div className="p-3">
+                        <AssetLibrary
+                          assets={libraryAssets}
+                          onAssetsChange={setLibraryAssets}
+                          onAddAsset={handleAddAssetField}
                         />
                       </div>
-                      <div className="pb-4">
-                        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Layers</p>
-                        <ErrorBoundary fallbackLabel="Layers panel error">
-                        <FieldLayersList
-                          fields={fields}
-                          selectedFieldId={selectedFieldId}
-                          hiddenFields={hiddenFields}
-                          onFieldSelect={handleFieldSelect}
-                          onFieldDelete={handleDeleteField}
-                          onToggleVisibility={handleToggleVisibility}
-                          onFieldReorder={handleFieldLayerReorder}
-                          onFieldLock={handleFieldLock}
-                          onFieldRename={handleFieldRename}
-                          onFieldDuplicate={handleFieldDuplicate}
-                        />
-                        </ErrorBoundary>
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="assets" className="p-3 mt-0">
-                      <AssetLibrary
-                        assets={libraryAssets}
-                        onAssetsChange={setLibraryAssets}
-                        onAddAsset={handleAddAssetField}
-                      />
-                    </TabsContent>
-                  </Tabs>
+                    )}
+                  </div>
+
+                  {/* Template dimensions — pinned at bottom */}
+                  {template && (
+                    <div className="shrink-0 border-t border-border/40 px-3 py-2">
+                      <p className="text-[9px] text-muted-foreground/50 tabular-nums">
+                        {Math.round(template.pdfWidth)} × {Math.round(template.pdfHeight)} px
+                        {' · '}
+                        {fields.filter(f => (f.pageNumber ?? 0) === currentPage).length} field{fields.filter(f => (f.pageNumber ?? 0) === currentPage).length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
             )}
             </>
           )}
