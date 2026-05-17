@@ -41,6 +41,7 @@ export default function GenerateCertificatePage() {
   const searchParams = useSearchParams();
   const templateIdFromUrl = searchParams.get('template');
   const importIdFromUrl = searchParams.get('import');
+  const sourceRefFromUrl = searchParams.get('source_ref');
   const pathname = usePathname();
   const router = useRouter();
   const orgSlug = useOrgSlug();
@@ -49,6 +50,8 @@ export default function GenerateCertificatePage() {
   const skipAutoSelectRef = useRef(false);
   // Tracks whether we've already loaded the ?import= param so we don't reload it repeatedly
   const importUrlLoadedRef = useRef(false);
+  // Tracks whether we've already loaded the ?source_ref= param (contacts from delivery)
+  const sourceRefLoadedRef = useRef(false);
   // Tracks whether we've pushed a history entry for the design step (for browser-back interception)
   const designHistoryPushedRef = useRef(false);
 
@@ -219,6 +222,54 @@ export default function GenerateCertificatePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importIdFromUrl, template?.id, isTemplateLoading, importedData]);
+
+  // ── Auto-load ?source_ref= contacts when template is ready ──────────────────
+  // Contacts were imported from the Contacts page — fetch them by source_ref and
+  // pre-populate the data step so the user lands directly on field mapping.
+  useEffect(() => {
+    if (
+      sourceRefFromUrl &&
+      !sourceRefLoadedRef.current &&
+      !importIdFromUrl &&
+      template?.id &&
+      !isTemplateLoading &&
+      !importedData
+    ) {
+      sourceRefLoadedRef.current = true;
+      api.delivery.listContacts({ source_ref: sourceRefFromUrl, limit: 500 }).then(({ contacts }) => {
+        if (contacts.length === 0) return;
+
+        // Flatten contact records into plain row objects
+        const rows = contacts.map((c) => {
+          const props = (c.custom_properties as Record<string, unknown>) ?? {};
+          return {
+            email: c.email ?? '',
+            first_name: c.first_name ?? '',
+            last_name: c.last_name ?? '',
+            ...Object.fromEntries(Object.entries(props).map(([k, v]) => [k, String(v ?? '')])),
+          } as unknown as Record<string, string>;
+        });
+        const headers = Object.keys(rows[0]!);
+
+        handleDataImport({
+          fileName: 'Contacts import',
+          headers,
+          rows,
+          rowCount: rows.length,
+          importId: undefined,
+          importIds: [],
+        });
+
+        // Advance to the data step so the user sees field mapping immediately
+        if (currentStep === 'data' || currentStep === 'design') {
+          setCurrentStep('data');
+        }
+      }).catch(() => {
+        // Silent — DataSelector will show the empty upload state as fallback
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceRefFromUrl, template?.id, isTemplateLoading, importedData]);
 
   // ── Refresh guard: design step with no template → go back to template chooser ──
   useEffect(() => {

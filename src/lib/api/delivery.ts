@@ -371,12 +371,14 @@ export const deliveryApi = {
     offset?: number;
     search?: string;
     unsubscribed?: boolean;
+    source_ref?: string;
   }): Promise<{ contacts: EmailContact[]; total: number }> => {
     const qs = new URLSearchParams();
     if (params?.limit) qs.set("limit", String(params.limit));
     if (params?.offset) qs.set("offset", String(params.offset));
     if (params?.search) qs.set("search", params.search);
     if (params?.unsubscribed !== undefined) qs.set("unsubscribed", String(params.unsubscribed));
+    if (params?.source_ref) qs.set("source_ref", params.source_ref);
     const response = await apiRequest<{ contacts: EmailContact[]; total: number }>(
       `/delivery/contacts${qs.toString() ? `?${qs}` : ""}`,
     );
@@ -399,10 +401,10 @@ export const deliveryApi = {
     return data.data!;
   },
 
-  importContactsBatch: async (rows: Array<Record<string, string>>): Promise<{ imported: number; skipped: number; errors: string[] }> => {
+  importContactsBatch: async (rows: Array<Record<string, string>>, source_ref?: string): Promise<{ imported: number; skipped: number; errors: string[] }> => {
     const response = await apiRequest<{ imported: number; skipped: number; errors: string[] }>(
       "/delivery/contacts/import-batch",
-      { method: "POST", body: JSON.stringify({ rows }) },
+      { method: "POST", body: JSON.stringify({ rows, source_ref }) },
     );
     return response.data!;
   },

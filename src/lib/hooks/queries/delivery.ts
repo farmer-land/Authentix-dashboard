@@ -186,7 +186,7 @@ export function useDeliveryMessagesByJob(jobId: string | null | undefined) {
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
-export function useEmailContacts(params?: { limit?: number; offset?: number; search?: string; unsubscribed?: boolean }) {
+export function useEmailContacts(params?: { limit?: number; offset?: number; search?: string; unsubscribed?: boolean; source_ref?: string }) {
   const slug = useOrgSlug();
   const query = useQuery({
     queryKey: deliveryKeys.contacts(slug, params as Record<string, unknown>),
