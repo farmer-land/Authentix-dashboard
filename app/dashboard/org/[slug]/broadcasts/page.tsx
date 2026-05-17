@@ -23,12 +23,14 @@ import {
   Megaphone, Plus, Loader2, Send, Trash2, MoreHorizontal, Clock,
   CheckCircle2, AlertCircle, Edit2, Users, Upload, FileSpreadsheet,
   ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw, Info,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
 import {
   useEmailBroadcasts, useCreateBroadcast, useUpdateBroadcast,
   useSendBroadcast, useDeleteBroadcast, useDeliveryIntegrations,
+  useEmailContacts,
 } from "@/lib/hooks/queries/delivery";
 import { useEmailSegments } from "@/lib/hooks/queries/delivery";
 import type { EmailBroadcast, BroadcastStatus, CreateBroadcastDto } from "@/lib/api/client";
@@ -39,7 +41,7 @@ import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type RecipientMode = "csv" | "manual" | "segment";
+type RecipientMode = "csv" | "manual" | "segment" | "contacts";
 
 interface ParsedRecipient {
   email: string;
@@ -56,10 +58,11 @@ interface WizardState {
 
   // Step 2 — Recipients
   recipient_mode: RecipientMode;
-  recipients: ParsedRecipient[];         // parsed from CSV or manual entry
-  csv_columns: string[];                  // column headers from CSV (used as template vars)
+  recipients: ParsedRecipient[];         // parsed from CSV, manual, or contacts
+  csv_columns: string[];                  // column headers from CSV / contacts (used as template vars)
   manual_emails: string;                  // raw textarea value
   segment_id: string;
+  contacts_search: string;
 
   // Step 3 — Design / Compose
   subject: string;
@@ -164,6 +167,15 @@ function CampaignWizard({
   const { segments } = useEmailSegments();
   const createMutation = useCreateBroadcast();
   const { integrations: rawIntegrations } = useDeliveryIntegrations();
+  const [contactSearch, setContactSearch] = useState("");
+  const { contacts: allContacts, total: contactTotal, loading: contactsLoading } = useEmailContacts({
+    limit: 200,
+    offset: 0,
+    search: contactSearch || undefined,
+    unsubscribed: false,
+  });
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
+
   const [step, setStep] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -191,6 +203,7 @@ function CampaignWizard({
     csv_columns: [],
     manual_emails: "",
     segment_id: "",
+    contacts_search: "",
     subject: "",
     preview_text: "",
     html_body: "",
@@ -239,27 +252,50 @@ function CampaignWizard({
   const isStructuredManual = w.recipient_mode === "manual" && templateVarsFromHtml.length > 0;
 
   // ── Effective recipients list ──────────────────────────────────────────────
+  const contactRecipients: ParsedRecipient[] = w.recipient_mode === "contacts"
+    ? allContacts
+        .filter(c => selectedContactIds.size === 0 || selectedContactIds.has(c.id))
+        .map(c => ({
+          email: c.email,
+          first_name: c.first_name ?? "",
+          last_name: c.last_name ?? "",
+          ...Object.fromEntries(
+            Object.entries(c.custom_properties ?? {}).map(([k, v]) => [k, String(v)])
+          ),
+        }))
+    : [];
+
   const effectiveRecipients = isStructuredManual
     ? w.recipients.filter(r => r.email?.includes("@"))
     : w.recipient_mode === "manual"
     ? parseManualEmails(w.manual_emails)
-    : w.recipient_mode === "csv" ? w.recipients : [];
+    : w.recipient_mode === "csv" ? w.recipients
+    : w.recipient_mode === "contacts" ? contactRecipients
+    : [];
 
   const recipientCount = w.recipient_mode === "segment"
     ? (segments.find(s => s.id === w.segment_id)?.contact_count ?? 0)
     : effectiveRecipients.length;
 
-  // ── Detected variables (from CSV columns, for the editor hint) ─────────────
+  // ── Detected variables (from CSV columns or contact properties, for the editor hint) ──
+  const contactCustomKeys: string[] = w.recipient_mode === "contacts"
+    ? [...new Set(
+        allContacts.flatMap(c => Object.keys(c.custom_properties ?? {}))
+      )].filter(k => k.toLowerCase() !== "email")
+    : [];
+
   const templateVars = w.recipient_mode === "csv"
     ? w.csv_columns.filter(c => c.toLowerCase() !== "email")
-    : w.recipient_mode === "manual"
-    ? []
+    : w.recipient_mode === "contacts"
+    ? ["first_name", "last_name", ...contactCustomKeys]
     : [];
 
   // ── Step validation ────────────────────────────────────────────────────────
   const step0Valid = w.name.trim() && w.from_email.trim() && w.from_name.trim();
   const step1Valid = w.recipient_mode === "segment"
     ? !!w.segment_id
+    : w.recipient_mode === "contacts"
+    ? contactTotal > 0
     : recipientCount > 0;
   const step2Valid = !!w.subject.trim() && !!w.html_body.trim();
 
@@ -307,7 +343,9 @@ function CampaignWizard({
         html: w.html_body,                               // map internal state name → API field
         email_type: w.email_type,
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
-        inline_recipients: w.recipient_mode !== "segment" ? effectiveRecipients : undefined,
+        inline_recipients: w.recipient_mode !== "segment"
+          ? (w.recipient_mode === "contacts" ? contactRecipients : effectiveRecipients)
+          : undefined,
       };
       const broadcast = await createMutation.mutateAsync(dto);
       try {
@@ -465,16 +503,17 @@ function CampaignWizard({
       )}
 
       {/* Mode tabs */}
-      <div className="flex rounded-lg border overflow-hidden">
+      <div className="flex rounded-lg border overflow-hidden flex-wrap">
         {([
-          { mode: "csv" as RecipientMode, icon: <FileSpreadsheet className="h-4 w-4" />, label: "Upload Excel / CSV" },
+          { mode: "csv" as RecipientMode, icon: <FileSpreadsheet className="h-4 w-4" />, label: "Upload file" },
+          { mode: "contacts" as RecipientMode, icon: <Users className="h-4 w-4" />, label: "From contacts" },
           { mode: "manual" as RecipientMode, icon: <PenLine className="h-4 w-4" />, label: "Enter manually" },
-          { mode: "segment" as RecipientMode, icon: <Users className="h-4 w-4" />, label: "Use segment" },
+          { mode: "segment" as RecipientMode, icon: <RefreshCw className="h-4 w-4" />, label: "Use segment" },
         ] as const).map(({ mode, icon, label }) => (
           <button
             key={mode}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors",
+              "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors min-w-28",
               w.recipient_mode === mode
                 ? "bg-primary text-primary-foreground"
                 : "bg-background hover:bg-muted text-muted-foreground",
@@ -484,6 +523,7 @@ function CampaignWizard({
                 set("recipients", []);
                 set("csv_columns", []);
                 set("manual_emails", "");
+                setSelectedContactIds(new Set());
               }
               set("recipient_mode", mode);
             }}
@@ -725,6 +765,134 @@ function CampaignWizard({
         )
       )}
 
+      {/* Contacts picker */}
+      {w.recipient_mode === "contacts" && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search contacts…"
+                value={contactSearch}
+                onChange={e => setContactSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+            {selectedContactIds.size > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-9 shrink-0"
+                onClick={() => setSelectedContactIds(new Set())}
+              >
+                <X className="h-3 w-3 mr-1" /> Clear selection
+              </Button>
+            )}
+          </div>
+
+          {contactTotal === 0 && !contactsLoading ? (
+            <Alert>
+              <AlertDescription>
+                No subscribed contacts yet.{" "}
+                <a href="../contacts" className="underline">Import contacts</a> first, then come back.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{contactTotal} subscribed contact{contactTotal !== 1 ? "s" : ""}</span>
+                {selectedContactIds.size > 0 ? (
+                  <span className="text-primary font-medium">{selectedContactIds.size} selected</span>
+                ) : (
+                  <span>
+                    All {Math.min(contactTotal, 200)} will be used
+                    {contactTotal > 200 && " (first 200 loaded)"}
+                  </span>
+                )}
+              </div>
+
+              {contactsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
+                </div>
+              ) : (
+                <div className="rounded-lg border overflow-hidden max-h-64 overflow-y-auto">
+                  {allContacts.map(c => {
+                    const name = [c.first_name, c.last_name].filter(Boolean).join(" ");
+                    const isSelected = selectedContactIds.has(c.id);
+                    const customKeys = Object.keys(c.custom_properties ?? {});
+                    return (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 border-b last:border-0 cursor-pointer transition-colors",
+                          isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30",
+                        )}
+                        onClick={() => {
+                          setSelectedContactIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(c.id)) next.delete(c.id);
+                            else next.add(c.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded border-2 shrink-0",
+                          isSelected ? "border-primary bg-primary" : "border-muted-foreground/40",
+                        )}>
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-primary-foreground" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-mono truncate">{c.email}</p>
+                          {name && <p className="text-xs text-muted-foreground">{name}</p>}
+                          {customKeys.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              {customKeys.slice(0, 3).join(", ")}
+                              {customKeys.length > 3 && ` +${customKeys.length - 3} more`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Variable coverage from contact properties */}
+              {templateVarsFromHtml.length > 0 && (
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="px-3 py-2 bg-muted/50 border-b text-xs font-medium text-muted-foreground">
+                    Template variable coverage
+                  </div>
+                  <div className="divide-y">
+                    {templateVarsFromHtml.map(v => {
+                      const available = ["first_name", "last_name", ...contactCustomKeys];
+                      const matched = available.some(k => k.toLowerCase() === v.toLowerCase());
+                      return (
+                        <div key={v} className="flex items-center gap-3 px-3 py-2 text-xs">
+                          {matched ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                          )}
+                          <code className="bg-muted px-1.5 py-0.5 rounded font-mono">{`{{${v}}}`}</code>
+                          {matched ? (
+                            <span className="text-green-700 dark:text-green-400">available from contacts</span>
+                          ) : (
+                            <span className="text-amber-700 dark:text-amber-400">not in contact data — will be blank</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Segment picker */}
       {w.recipient_mode === "segment" && (
         <div className="space-y-2">
@@ -896,7 +1064,11 @@ function CampaignWizard({
               w.recipient_mode === "segment"
                 ? `${recipientCount} contacts in "${segments.find(s => s.id === w.segment_id)?.name ?? "segment"}"`
                 : w.recipient_mode === "csv"
-                ? `${recipientCount} recipients from CSV`
+                ? `${recipientCount} recipients from file`
+                : w.recipient_mode === "contacts"
+                ? selectedContactIds.size > 0
+                  ? `${selectedContactIds.size} selected contacts`
+                  : `All ${contactTotal} subscribed contacts`
                 : `${recipientCount} emails entered manually`
             }
           />
