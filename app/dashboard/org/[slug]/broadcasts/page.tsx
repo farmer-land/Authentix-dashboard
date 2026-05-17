@@ -167,11 +167,11 @@ function CampaignWizard({
   const { segments } = useEmailSegments();
   const createMutation = useCreateBroadcast();
   const { integrations: rawIntegrations } = useDeliveryIntegrations();
-  const [contactSearch, setContactSearch] = useState("");
+  const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const { contacts: allContacts, total: contactTotal, loading: contactsLoading } = useEmailContacts({
     limit: 200,
     offset: 0,
-    search: contactSearch || undefined,
+    search: debouncedContactSearch || undefined,
     unsubscribed: false,
   });
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
@@ -183,6 +183,8 @@ function CampaignWizard({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>('');
   const didAutoSelect = useRef(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const contactSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const activeIntegrations = rawIntegrations.filter(i => i.channel === 'email' && i.is_active);
   const integrationOptions = activeIntegrations.map(i => ({
@@ -331,8 +333,18 @@ function CampaignWizard({
     set("recipients", w.recipients.filter((_, i) => i !== idx));
   }, [w.recipients]);
 
+  // ── Contact search with debounce ───────────────────────────────────────────
+  const handleContactSearchChange = useCallback((value: string) => {
+    setContactSearch(value);
+    clearTimeout(contactSearchTimer.current);
+    contactSearchTimer.current = setTimeout(() => {
+      setDebouncedContactSearch(value);
+    }, 350);
+  }, []);
+
   // ── Send ───────────────────────────────────────────────────────────────────
   const handleSend = async () => {
+    if (sending) return; // guard against double-click before re-render
     setSending(true);
     try {
       const dto: CreateBroadcastDto = {
@@ -340,7 +352,7 @@ function CampaignWizard({
         subject: w.subject,
         from_name: w.from_name,
         from_email: w.from_email,
-        html: w.html_body,                               // map internal state name → API field
+        html: w.html_body,
         email_type: w.email_type,
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
         inline_recipients: w.recipient_mode !== "segment"
@@ -352,7 +364,8 @@ function CampaignWizard({
         await api.delivery.sendBroadcast(broadcast.id);
         toast.success(`Campaign sent to ${recipientCount} recipients!`);
       } catch (sendErr) {
-        toast.error("Campaign saved but send failed — find it in drafts to retry.");
+        const reason = sendErr instanceof Error ? sendErr.message : "Unknown error";
+        toast.error(`Campaign saved but send failed: ${reason}. Find it in drafts to retry.`);
       }
       onCreated(broadcast.id);
     } catch (err) {
@@ -363,12 +376,16 @@ function CampaignWizard({
   };
 
   const handleSaveDraft = async () => {
+    if (!w.name.trim()) {
+      toast.error("Enter a campaign name before saving");
+      return;
+    }
     try {
       const broadcast = await createMutation.mutateAsync({
         name: w.name,
         subject: w.subject || "(draft)",
         from_name: w.from_name,
-        from_email: w.from_email,
+        from_email: w.from_email || "draft@placeholder.local",
         html: w.html_body || "",
         email_type: w.email_type,
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
@@ -774,7 +791,7 @@ function CampaignWizard({
               <Input
                 placeholder="Search contacts…"
                 value={contactSearch}
-                onChange={e => setContactSearch(e.target.value)}
+                onChange={e => handleContactSearchChange(e.target.value)}
                 className="pl-9 h-9"
               />
             </div>

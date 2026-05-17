@@ -1353,7 +1353,7 @@ export function ExportSection({
 
     timerId = setTimeout(poll, 2000);
     return () => { stopped = true; clearTimeout(timerId); };
-  }, [generationJobId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [generationJobId]);
 
   // Expiry settings
   const [expiryType, setExpiryType] = useState<ExpiryType>('year');
@@ -1431,7 +1431,7 @@ export function ExportSection({
       cleanups.push(() => { stopped = true; clearTimeout(timerId); });
     }
     return () => cleanups.forEach(c => c());
-  }, [extraGenerationJobIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [extraGenerationJobIds]);
 
   // Email setup pre-check (soft warning before generating)
   const [emailSetup, setEmailSetup] = useState<{ hasTemplate: boolean; hasIntegration: boolean } | null>(null);

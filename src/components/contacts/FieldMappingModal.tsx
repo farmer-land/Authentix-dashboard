@@ -58,6 +58,16 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
       "family name", "last", "lname",
     ],
   },
+  {
+    key: "recipient_name",
+    label: "Recipient Name",
+    required: false,
+    description: "Full name when first/last are not separate columns",
+    aliases: [
+      "recipient_name", "recipient name", "full_name", "full name",
+      "name", "recipient",
+    ],
+  },
 ];
 
 export function FieldMappingModal({
@@ -229,12 +239,14 @@ export function FieldMappingModal({
           return (
             <div className="rounded-lg border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Extra columns</span> — stored as custom
-              properties and available for email/certificate variables:{" "}
-              {extra.map((h) => (
-                <span key={h} className="font-mono bg-muted px-1 rounded mx-0.5">
-                  {h}
-                </span>
-              ))}
+              properties and available for email/certificate variables:
+              <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto">
+                {extra.map((h) => (
+                  <span key={h} className="font-mono bg-muted px-1 rounded">
+                    {h}
+                  </span>
+                ))}
+              </div>
             </div>
           );
         })()}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +82,8 @@ export default function VerificationLogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, total_pages: 1 });
 
@@ -115,10 +117,16 @@ export default function VerificationLogsPage() {
 
   const handleRefresh = () => fetchEvents(page, resultFilter);
 
-  // Client-side search over the current page
-  const filtered = search.trim()
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setDebouncedSearch(value), 200);
+  };
+
+  // Client-side search over the current page (debounced to avoid re-rendering on every keystroke)
+  const filtered = debouncedSearch.trim()
     ? events.filter(e => {
-        const q = search.toLowerCase();
+        const q = debouncedSearch.toLowerCase();
         return (
           e.certificates?.recipient_name?.toLowerCase().includes(q) ||
           e.certificates?.certificate_number?.toLowerCase().includes(q) ||
@@ -168,7 +176,7 @@ export default function VerificationLogsPage() {
           <Input
             placeholder="Search recipient or certificate…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => handleSearchChange(e.target.value)}
             className="pl-9 h-9 w-full sm:w-64"
           />
         </div>

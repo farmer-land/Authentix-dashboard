@@ -8,7 +8,7 @@ export interface ParsedFile {
 }
 
 function normalizeKey(s: string): string {
-  return s.toLowerCase().replace(/[\s\-]+/g, "_");
+  return s.toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 /** Attempt to parse a Markdown pipe-table. Returns null if content doesn't look like one. */
@@ -22,7 +22,7 @@ function parseMarkdownTable(text: string, fileName: string): ParsedFile | null {
   const headerLine = lines[0]!;
   const sepLine = lines[1]!;
   // Separator must consist only of pipes, dashes, colons, spaces
-  if (!headerLine.includes("|") || !/^[\|\-\s:]+$/.test(sepLine)) return null;
+  if (!headerLine.includes("|") || !/^[|\-\s:]+$/.test(sepLine)) return null;
 
   const parseRow = (line: string): string[] => {
     const stripped = line.replace(/^\||\|$/g, "");

@@ -41,6 +41,7 @@ export default function TemplatesPage() {
   const router = useRouter();
   const { orgPath } = useOrg();
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Generate consistent color for category/subcategory badges
   const getColorForText = (text: string): { bg: string; text: string; border: string } => {
@@ -333,8 +334,9 @@ export default function TemplatesPage() {
       // Generate preview
       await api.templates.generatePreview(templateId, versionId);
 
-      // Wait a bit then reload preview URL
-      setTimeout(async () => {
+      // Wait a bit then reload preview URL (tracked so we can cancel if template is deleted)
+      retryTimeoutsRef.current[templateId] = setTimeout(async () => {
+        delete retryTimeoutsRef.current[templateId];
         const url = await loadPreviewUrl(template);
         setPreviewStates((prev) => ({
           ...prev,
@@ -392,6 +394,12 @@ export default function TemplatesPage() {
 
     setDeleting(true);
     try {
+      // Cancel any in-flight preview retry for this template
+      if (retryTimeoutsRef.current[templateId]) {
+        clearTimeout(retryTimeoutsRef.current[templateId]);
+        delete retryTimeoutsRef.current[templateId];
+      }
+
       await api.templates.delete(templateId);
 
       console.log('[Templates] Template deleted:', templateToDelete.name);

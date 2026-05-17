@@ -31,7 +31,7 @@ export function useCertificates(params?: {
   const query = useQuery({
     queryKey: certificateKeys.list(slug, params as Record<string, unknown>),
     queryFn: () => api.certificates.list(params),
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000,
   });
 
   return {
