@@ -168,7 +168,7 @@ function ContactCertModal({
 
 function ImportAccordionRow({
   session,
-  orgSlug,
+  orgSlug: _orgSlug,
   onGenerateCerts,
   onBroadcast,
   onDesignEmail,

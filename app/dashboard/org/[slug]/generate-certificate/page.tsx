@@ -6,23 +6,18 @@ import { useGenerateCertificateState } from './state/useGenerateCertificateState
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { useOrgSlug } from '@/lib/org';
 import { CertificateField, CertificateTemplate, ImportedData, FieldMapping } from '@/lib/types/certificate';
-import type { Asset } from './components/AssetLibrary';
 import { api } from '@/lib/api/client';
-import type { RecentGeneratedTemplate, InProgressTemplate } from '@/lib/api/client';
 import type { CertificateConfig } from './components/ExportSection';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import {
-  Sparkles, Upload, Image as ImageIcon, FileText, Download,
-  CheckCircle2, Circle, Layers, Palette, Database, Wand2,
-  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Eye,
+  Image as ImageIcon, FileText,
+  CheckCircle2, Layers, Palette, Database, Wand2,
+  ChevronDown, ChevronUp, X, Eye,
   SlidersHorizontal, Maximize2,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import type { SaveStatus } from './components/InfiniteCanvas';
 
 // Heavy components lazy-loaded to reduce initial bundle and speed up first render
 const CertificateCanvas  = dynamic(() => import('./components/CertificateCanvas').then(m => ({ default: m.CertificateCanvas })),  { ssr: false });
