@@ -3826,6 +3826,8 @@ export interface EmailBlockBuilderProps {
   onSubjectChange?: (val: string) => void;
   onSenderNameChange?: (val: string) => void;
   onAddBlock?: (type: BlockType) => void;
+  /** Suppress the starter gallery even when blocks is empty (e.g. existing template with non-block HTML). */
+  suppressGallery?: boolean;
 }
 
 export function EmailBlockBuilder({
@@ -3844,6 +3846,7 @@ export function EmailBlockBuilder({
   onSubjectChange,
   onSenderNameChange,
   onAddBlock,
+  suppressGallery = false,
 }: EmailBlockBuilderProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [insertPickerAfterId, setInsertPickerAfterId] = useState<string | null>(null);
@@ -3922,8 +3925,9 @@ export function EmailBlockBuilder({
   const activeBlock = activeId ? blocks.find(b => b.id === activeId) : null;
 
   // Track whether the user has dismissed the gallery (blank canvas) or selected a template.
-  // Initialized to true when blocks exist so existing templates never show the gallery.
-  const [galleryDismissed, setGalleryDismissed] = useState(blocks.length > 0);
+  // Initialized to true when blocks exist, or when the parent suppresses the gallery
+  // (e.g. existing templates that have HTML body but no embedded block JSON).
+  const [galleryDismissed, setGalleryDismissed] = useState(blocks.length > 0 || suppressGallery);
 
   if (blocks.length === 0 && !galleryDismissed) {
     return (

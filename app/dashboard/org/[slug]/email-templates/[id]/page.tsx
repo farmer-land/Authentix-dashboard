@@ -133,6 +133,9 @@ export default function EmailTemplateEditorPage() {
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(288);
   const [rightPanelWidth, setRightPanelWidth] = useState(288);
+  // True once we know the template had a saved body — suppresses the starter gallery
+  // for templates that don't have embedded block JSON (e.g. created from predefined HTML)
+  const [templateHadBody, setTemplateHadBody] = useState(false);
   const isDraggingLeft = useRef(false);
   const isDraggingRight = useRef(false);
   const dragStartXLeft = useRef(0);
@@ -312,8 +315,10 @@ export default function EmailTemplateEditorPage() {
             if (editorState.utm.campaign) setUtmCampaign(editorState.utm.campaign);
           }
         } else {
-          // No saved blocks: show the template gallery (empty = gallery renders in EmailBlockBuilder)
+          // No embedded block JSON — template may have raw HTML (from predefined templates).
+          // Keep blocks empty so the canvas is blank, but suppress the starter gallery.
           setBlocks([]);
+          if (savedHtml && savedHtml.trim()) setTemplateHadBody(true);
         }
       }
 
@@ -850,6 +855,7 @@ export default function EmailTemplateEditorPage() {
                 onSubjectChange={handleSubjectChange}
                 onSenderNameChange={setSenderName}
                 onAddBlock={addBlock}
+                suppressGallery={templateHadBody}
               />
             </div>
           </div>

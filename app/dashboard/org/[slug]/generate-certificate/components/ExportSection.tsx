@@ -2378,6 +2378,19 @@ export function ExportSection({
             </p>
           )}
 
+          {/* Reason why generate is disabled */}
+          {!canGenerate && overlayState === 'hidden' && (
+            <p className="text-xs text-center text-muted-foreground/70">
+              {!importedData
+                ? 'Import data in the Data step to enable generation'
+                : !template?.id
+                ? 'Template is still saving — please wait a moment'
+                : !allMappableFieldsMapped
+                ? 'Map all certificate fields to columns in the Data step'
+                : 'Complete all field mappings to enable generation'}
+            </p>
+          )}
+
           {/* Generate + Preview row */}
           <div className="flex gap-2">
             {canGenerate && overlayState === 'hidden' && (

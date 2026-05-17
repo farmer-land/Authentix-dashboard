@@ -192,12 +192,6 @@ export function TemplateSelector({
     setError('');
 
     if (!templateName.trim()) { setError('Template name is required'); return; }
-    if (!categoryId) { setError('Please select a category'); return; }
-    if (!subcategoryId && subcategories.length > 0) {
-      if (subcategoriesLoading) { setError('Please wait for subcategories to load'); return; }
-      setError('Please select a subcategory');
-      return;
-    }
 
     setIsProcessing(true);
     setError('');
@@ -476,7 +470,7 @@ export function TemplateSelector({
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="category">Category <span className="text-destructive">*</span></Label>
+                        <Label htmlFor="category">Category <span className="text-muted-foreground text-xs font-normal">(optional — can set later)</span></Label>
                         <Select value={categoryId} onValueChange={setCategoryId} disabled={isProcessing || categoriesLoading}>
                           <SelectTrigger>
                             <SelectValue placeholder={categoriesLoading ? 'Loading categories...' : 'Select category'} />
@@ -509,7 +503,7 @@ export function TemplateSelector({
                       {categoryId && (
                         <div className="space-y-2">
                           <Label htmlFor="subcategory">
-                            Subcategory{subcategories.length > 0 && <span className="text-destructive"> *</span>}
+                            Subcategory
                           </Label>
                           <Select value={subcategoryId} onValueChange={setSubcategoryId} disabled={isProcessing || subcategoriesLoading}>
                             <SelectTrigger>

@@ -945,7 +945,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >
@@ -1156,17 +1156,15 @@ export function InfiniteCanvas({
         );
       })()}
 
-      {/* ── Empty state guide ── */}
+      {/* ── Empty state tip (left edge, pointing toward left panel) ── */}
       {fields.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="text-center space-y-2 opacity-40">
-            <div className="w-12 h-12 rounded-xl border-2 border-dashed border-muted-foreground/40 flex items-center justify-center mx-auto">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-muted-foreground/60" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-              </svg>
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+          <div className="flex items-center gap-2 bg-card/90 backdrop-blur-sm border border-border/60 rounded-xl px-3 py-2.5 shadow-lg max-w-42.5">
+            <ChevronLeft className="w-4 h-4 text-primary shrink-0 animate-pulse" />
+            <div>
+              <p className="text-[11px] font-semibold text-foreground leading-tight">Add fields</p>
+              <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">Open Fields tab to add text, QR codes &amp; images</p>
             </div>
-            <p className="text-xs text-muted-foreground font-medium">Add fields from the left panel</p>
-            <p className="text-[10px] text-muted-foreground/70">Name, dates, QR code, images and more</p>
           </div>
         </div>
       )}

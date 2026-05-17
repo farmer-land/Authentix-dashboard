@@ -77,6 +77,8 @@ export default function GenerateCertificatePage() {
 
   // Manual entries appended after the uploaded file rows during generation
   const [additionalRows, setAdditionalRows] = useState<Record<string, unknown>[]>([]);
+  // True when the active template was uploaded without a category — show a soft prompt in design view
+  const [templateNeedsCategory, setTemplateNeedsCategory] = useState(false);
 
   // Pending session restore — set when a saved session is found on load.
   // Null means no session to restore (or user dismissed it).
@@ -97,6 +99,8 @@ export default function GenerateCertificatePage() {
 
   // Cancellation ref for parallel multi-select loads
   const multiSelectRequestRef = useRef(0);
+  // Guard so auto-resume only fires once per load
+  const autoResumedRef = useRef(false);
 
   const leftPanelDragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -744,6 +748,16 @@ export default function GenerateCertificatePage() {
     }
   };
 
+  // Auto-resume session on refresh — fires once when pendingResumeSession is first set.
+  // This replaces the manual "Resume" button click so the user lands back where they were.
+  useEffect(() => {
+    if (pendingResumeSession && !autoResumedRef.current) {
+      autoResumedRef.current = true;
+      handleResumeSession();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingResumeSession]);
+
   // Multi-mode: load all selected templates in parallel, navigate to design
   const handleSelectMultipleTemplates = async (selectedTemplates: any[]) => {
     if (selectedTemplates.length === 0) return;
@@ -828,7 +842,6 @@ export default function GenerateCertificatePage() {
 
     // ── Multi mode: save + return template for carousel selection, never navigate ──
     if (templateMode === 'multi') {
-      if (!categoryId || !subcategoryId) return null;
       try {
         const templateData = await api.templates.create(file, {
           title: finalTemplateName.trim(),
@@ -864,12 +877,10 @@ export default function GenerateCertificatePage() {
     setFields([]);
     setSelectedFieldId(null);
     setCurrentStep('design');
+    setTemplateNeedsCategory(!categoryId);
 
     if (saveTemplate) {
       try {
-        if (!categoryId || !subcategoryId) {
-          throw new Error('Category and subcategory IDs are required');
-        }
         const templateData = await api.templates.create(file, {
           title: finalTemplateName.trim(),
           category_id: categoryId,
@@ -1699,7 +1710,7 @@ export default function GenerateCertificatePage() {
                   <div
                     className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
-                    onClick={() => setLeftPanelVisible(true)}
+                    onClick={() => { setLeftPanelVisible(true); setFitTrigger(t => t + 1); }}
                     title="Expand layers panel"
                   >
                     <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
@@ -1721,7 +1732,7 @@ export default function GenerateCertificatePage() {
                   <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="text-xs font-semibold text-foreground flex-1">Layers</span>
                   <button
-                    onClick={() => setLeftPanelVisible(false)}
+                    onClick={() => { setLeftPanelVisible(false); setFitTrigger(t => t + 1); }}
                     className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1824,6 +1835,14 @@ export default function GenerateCertificatePage() {
 
           {/* ── Canvas area (flex-1 — bounded between the side panels) ── */}
           <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
+            {/* Category nudge — transparent, non-blocking top-center prompt */}
+            {templateNeedsCategory && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none">
+                <span className="text-[11px] text-muted-foreground/70">
+                  No category set — you can add one before the Data step
+                </span>
+              </div>
+            )}
             {useInfiniteCanvas ? (
               <ErrorBoundary fallbackLabel="Canvas failed to load">
               <InfiniteCanvas
@@ -1919,7 +1938,7 @@ export default function GenerateCertificatePage() {
                   <div
                     className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
-                    onClick={() => setRightPanelVisible(true)}
+                    onClick={() => { setRightPanelVisible(true); setFitTrigger(t => t + 1); }}
                     title="Expand properties panel"
                   >
                     <Palette className="w-4 h-4 text-muted-foreground/70" />
@@ -1939,7 +1958,7 @@ export default function GenerateCertificatePage() {
                     <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
                     <button
-                      onClick={() => setRightPanelVisible(false)}
+                      onClick={() => { setRightPanelVisible(false); setFitTrigger(t => t + 1); }}
                       className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                       title="Hide panel"
                     >

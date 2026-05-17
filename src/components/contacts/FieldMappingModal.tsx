@@ -14,6 +14,8 @@ export interface PlatformField {
   key: string;
   label: string;
   required: boolean;
+  /** At least one of these keys (including self) must be mapped to satisfy the required check. */
+  requiresOneOf?: string[];
   aliases: string[];
   description?: string;
 }
@@ -34,11 +36,15 @@ const SKIP = "__skip__";
 
 export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
   {
-    key: "email",
-    label: "Email",
+    key: "recipient_name",
+    label: "Recipient Name",
     required: true,
-    aliases: ["email", "e_mail", "email_address", "mail", "email address"],
-    description: "Contact email address (required)",
+    requiresOneOf: ["recipient_name", "first_name"],
+    description: "Full name used on certificates (or map First Name below)",
+    aliases: [
+      "recipient_name", "recipient name", "full_name", "full name",
+      "name", "recipient",
+    ],
   },
   {
     key: "first_name",
@@ -46,7 +52,7 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     required: false,
     aliases: [
       "first_name", "first name", "firstname", "given_name", "given name",
-      "first", "fname", "name",
+      "first", "fname",
     ],
   },
   {
@@ -59,14 +65,11 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     ],
   },
   {
-    key: "recipient_name",
-    label: "Recipient Name",
+    key: "email",
+    label: "Email",
     required: false,
-    description: "Full name when first/last are not separate columns",
-    aliases: [
-      "recipient_name", "recipient name", "full_name", "full name",
-      "name", "recipient",
-    ],
+    description: "Required for email campaigns — skip if not available",
+    aliases: ["email", "e_mail", "email_address", "mail", "email address"],
   },
 ];
 
@@ -99,7 +102,10 @@ export function FieldMappingModal({
     () =>
       platformFields
         .filter((f) => f.required)
-        .every((f) => mapping[f.key] && mapping[f.key] !== SKIP),
+        .every((f) => {
+          const keysToCheck = f.requiresOneOf ?? [f.key];
+          return keysToCheck.some((k) => mapping[k] && mapping[k] !== SKIP);
+        }),
     [platformFields, mapping]
   );
 
@@ -221,7 +227,7 @@ export function FieldMappingModal({
 
                 {/* Sample value preview */}
                 {isMapped && sampleVal !== null && sampleVal !== "" && (
-                  <p className="text-[11px] text-muted-foreground pl-[168px]">
+                  <p className="text-[11px] text-muted-foreground pl-42">
                     Sample:{" "}
                     <span className="font-mono bg-muted px-1 rounded">{sampleVal}</span>
                   </p>
