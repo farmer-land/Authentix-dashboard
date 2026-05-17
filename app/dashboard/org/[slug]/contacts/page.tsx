@@ -59,6 +59,10 @@ function writeImportLog(slug: string, sessions: ImportSession[]) {
   localStorage.setItem(importLogKey(slug), JSON.stringify(sessions.slice(0, 20)));
 }
 
+function stripExtension(name: string): string {
+  return name.replace(/\.[^.]+$/, "");
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function toTitleCase(str: string): string {
@@ -68,6 +72,55 @@ function toTitleCase(str: string): string {
 
 function formatPropertyKey(key: string): string {
   return key.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ── Accordion action bar (shared between recent imports and all contacts) ──────
+
+function AccordionActions({
+  onGenerateCerts,
+  onBroadcast,
+  onDesignEmail,
+  onUseLater,
+  onDelete,
+}: {
+  onGenerateCerts: () => void;
+  onBroadcast: () => void;
+  onDesignEmail: () => void;
+  onUseLater?: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onGenerateCerts}>
+        <Award className="h-3 w-3 mr-1" /> Certificates
+      </Button>
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onBroadcast}>
+        <Megaphone className="h-3 w-3 mr-1" /> Broadcast
+      </Button>
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onDesignEmail}>
+        <Mail className="h-3 w-3 mr-1" /> Email
+      </Button>
+      {onUseLater && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs text-muted-foreground"
+          onClick={onUseLater}
+        >
+          Use Later
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+        onClick={onDelete}
+        title="Remove import"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
 }
 
 // ── Certificate template picker modal ─────────────────────────────────────────
@@ -168,16 +221,18 @@ function ContactCertModal({
 
 function ImportAccordionRow({
   session,
-  orgSlug: _orgSlug,
   onGenerateCerts,
   onBroadcast,
   onDesignEmail,
+  onUseLater,
+  onDelete,
 }: {
   session: ImportSession;
-  orgSlug: string;
   onGenerateCerts: (source_ref: string) => void;
   onBroadcast: () => void;
   onDesignEmail: () => void;
+  onUseLater: () => void;
+  onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const { contacts, total, loading } = useEmailContacts(
@@ -201,32 +256,13 @@ function ImportAccordionRow({
             {formatDistanceToNow(new Date(session.imported_at), { addSuffix: true })}
           </p>
         </div>
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => onGenerateCerts(session.source_ref)}
-          >
-            <Award className="h-3 w-3 mr-1" /> Certificates
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={onBroadcast}
-          >
-            <Megaphone className="h-3 w-3 mr-1" /> Broadcast
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={onDesignEmail}
-          >
-            <Mail className="h-3 w-3 mr-1" /> Design Email
-          </Button>
-        </div>
+        <AccordionActions
+          onGenerateCerts={() => onGenerateCerts(session.source_ref)}
+          onBroadcast={onBroadcast}
+          onDesignEmail={onDesignEmail}
+          onUseLater={onUseLater}
+          onDelete={onDelete}
+        />
       </button>
 
       {open && (
@@ -256,7 +292,7 @@ function ImportAccordionRow({
                       return (
                         <tr key={c.id} className="border-b last:border-0">
                           <td className="px-3 py-2 font-medium">{name}</td>
-                          <td className="px-3 py-2 font-mono text-muted-foreground">{c.email}</td>
+                          <td className="px-3 py-2 font-mono text-muted-foreground">{c.email ?? "—"}</td>
                           <td className="px-3 py-2">
                             <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", c.unsubscribed ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700")}>
                               {c.unsubscribed ? "Unsub" : "Sub"}
@@ -298,7 +334,15 @@ export default function ContactsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Parsed file state — shown in mapping modal
+  // File parsing — held here until the user names the import
+  const [pendingFile, setPendingFile] = useState<{
+    headers: string[];
+    rows: Record<string, string>[];
+    rawName: string;
+  } | null>(null);
+  const [importName, setImportName] = useState("");
+
+  // After naming, passed to the mapping modal
   const [parsedFile, setParsedFile] = useState<{
     headers: string[];
     rows: Record<string, string>[];
@@ -314,8 +358,11 @@ export default function ContactsPage() {
   // Certificate template picker modal
   const [certModal, setCertModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
 
-  // Post-import "what's next?" prompt — shown after every successful import
-  const [postImport, setPostImport] = useState<ImportSession | null>(null);
+  // Delete recent import confirmation
+  const [deleteImportTarget, setDeleteImportTarget] = useState<ImportSession | null>(null);
+
+  // All contacts accordion
+  const [allContactsOpen, setAllContactsOpen] = useState(true);
 
   const { contacts, total, loading } = useEmailContacts({
     limit: PAGE_SIZE,
@@ -343,7 +390,9 @@ export default function ContactsPage() {
         toast.error("Could not detect any columns in this file");
         return;
       }
-      setParsedFile({ headers: parsed.headers, rows: parsed.rows, fileName: parsed.fileName });
+      const rawName = stripExtension(parsed.fileName);
+      setPendingFile({ headers: parsed.headers, rows: parsed.rows, rawName });
+      setImportName(rawName);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to read file");
     }
@@ -358,6 +407,13 @@ export default function ContactsPage() {
     [handleFileSelect]
   );
 
+  const handleNameConfirm = useCallback(() => {
+    if (!pendingFile) return;
+    const name = importName.trim() || pendingFile.rawName;
+    setParsedFile({ headers: pendingFile.headers, rows: pendingFile.rows, fileName: name });
+    setPendingFile(null);
+  }, [pendingFile, importName]);
+
   const handleMappingConfirm = useCallback(
     async (mapping: Record<string, string>) => {
       if (!parsedFile) return;
@@ -366,7 +422,6 @@ export default function ContactsPage() {
 
       const source_ref = nanoid();
 
-      // Build normalized rows (platform keys + extra columns as custom properties)
       const mappedCsvCols = new Set(Object.values(mapping));
       const extraCols = headers.filter((h) => !mappedCsvCols.has(h));
       const normalizedRows: Record<string, string>[] = rows.map((row) => {
@@ -380,7 +435,6 @@ export default function ContactsPage() {
         return normalized;
       });
 
-      // Send in batches
       setIsImporting(true);
       const batches: Record<string, string>[][] = [];
       for (let i = 0; i < normalizedRows.length; i += BATCH_SIZE) {
@@ -415,7 +469,6 @@ export default function ContactsPage() {
           toast.warning(`${allErrors.length} batch${allErrors.length !== 1 ? "es" : ""} had errors`);
         }
 
-        // Persist session to localStorage
         const session: ImportSession = {
           source_ref,
           file_name: fileName,
@@ -427,7 +480,6 @@ export default function ContactsPage() {
         const updated = [session, ...readImportLog(orgSlug)];
         writeImportLog(orgSlug, updated);
         setImportLog(updated);
-        setPostImport(session);
 
         queryClient.invalidateQueries({ queryKey: ["delivery"] });
       } catch (err) {
@@ -438,6 +490,12 @@ export default function ContactsPage() {
     },
     [parsedFile, queryClient, orgSlug]
   );
+
+  const removeFromLog = useCallback((source_ref: string) => {
+    const updated = readImportLog(orgSlug).filter((s) => s.source_ref !== source_ref);
+    writeImportLog(orgSlug, updated);
+    setImportLog(updated);
+  }, [orgSlug]);
 
   const handleCertModalConfirm = (templateId: string) => {
     const base = `/dashboard/org/${orgSlug}/generate-certificate?template=${templateId}`;
@@ -485,74 +543,6 @@ export default function ContactsPage() {
         />
       </div>
 
-      {/* Post-import "What's next?" prompt */}
-      {postImport && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">
-                {postImport.imported.toLocaleString()} contacts imported
-                {postImport.skipped > 0 && ` · ${postImport.skipped.toLocaleString()} skipped`}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">What would you like to do with <span className="font-medium">{postImport.file_name}</span>?</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => { setPostImport(null); setCertModal({ open: true, source_ref: postImport.source_ref }); }}
-            >
-              <Award className="h-3.5 w-3.5 mr-1.5" /> Generate Certificates
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setPostImport(null); router.push(`/dashboard/org/${orgSlug}/broadcasts`); }}
-            >
-              <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Send Broadcast
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setPostImport(null); router.push(`/dashboard/org/${orgSlug}/email-templates`); }}
-            >
-              <Mail className="h-3.5 w-3.5 mr-1.5" /> Design Email
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-auto text-muted-foreground"
-              onClick={() => setPostImport(null)}
-            >
-              I&apos;ll use this later
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Top action cards — always visible */}
-      <div className="grid grid-cols-3 gap-3">
-        <ActionCard
-          icon={Award}
-          title="Generate Certificates"
-          description="Bulk-issue certificates to your contacts"
-          onClick={() => setCertModal({ open: true })}
-        />
-        <ActionCard
-          icon={Megaphone}
-          title="Send Broadcast"
-          description="Email campaign to your list"
-          onClick={() => router.push(`/dashboard/org/${orgSlug}/broadcasts`)}
-        />
-        <ActionCard
-          icon={Mail}
-          title="Design Email Template"
-          description="Create a reusable email template"
-          onClick={() => router.push(`/dashboard/org/${orgSlug}/email-templates`)}
-        />
-      </div>
-
-
       {/* Recent imports accordion */}
       {importLog.length > 0 && (
         <div className="space-y-2">
@@ -561,169 +551,211 @@ export default function ContactsPage() {
             <ImportAccordionRow
               key={session.source_ref}
               session={session}
-              orgSlug={orgSlug}
               onGenerateCerts={(ref) => setCertModal({ open: true, source_ref: ref })}
               onBroadcast={() => router.push(`/dashboard/org/${orgSlug}/broadcasts`)}
               onDesignEmail={() => router.push(`/dashboard/org/${orgSlug}/email-templates`)}
+              onUseLater={() => removeFromLog(session.source_ref)}
+              onDelete={() => setDeleteImportTarget(session)}
             />
           ))}
         </div>
       )}
 
-      {/* All contacts */}
-      <div className="space-y-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">All Contacts</p>
-
-        {/* Drop zone — only when empty */}
-        {!loading && !hasContacts && (
-          <div
-            className="border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/30"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleFileDrop}
-            onClick={() => fileInputRef.current?.click()}
+      {/* All Contacts accordion */}
+      <div className="space-y-2">
+        <div className="border rounded-xl overflow-hidden">
+          {/* Accordion header */}
+          <button
+            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+            onClick={() => setAllContactsOpen((v) => !v)}
           >
-            <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium">Drop your file here to import contacts</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Supports CSV, Excel (.xlsx / .xls), TSV, and Markdown tables
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              We'll help you map columns — handles any file size automatically
-            </p>
-          </div>
-        )}
-
-        {/* Filters */}
-        {hasContacts && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-48 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or email…"
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9"
-              />
+            <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform", allContactsOpen && "rotate-180")} />
+            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">All Contacts</p>
+              {total > 0 && (
+                <p className="text-xs text-muted-foreground">{total.toLocaleString()} contact{total !== 1 ? "s" : ""}</p>
+              )}
             </div>
-            <Button
-              variant={filterUnsubscribed === undefined ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => { setFilterUnsubscribed(undefined); setPage(0); }}
-            >
-              All
-            </Button>
-            <Button
-              variant={filterUnsubscribed === false ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => { setFilterUnsubscribed(false); setPage(0); }}
-            >
-              <MailCheck className="h-3.5 w-3.5 mr-1.5" /> Subscribed
-            </Button>
-            <Button
-              variant={filterUnsubscribed === true ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => { setFilterUnsubscribed(true); setPage(0); }}
-            >
-              <MailX className="h-3.5 w-3.5 mr-1.5" /> Unsubscribed
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isImporting}
-              className="ml-auto"
-            >
-              {isImporting
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                : <Upload className="h-3.5 w-3.5 mr-1.5" />}
-              Import more
-            </Button>
-          </div>
-        )}
+            <AccordionActions
+              onGenerateCerts={() => setCertModal({ open: true })}
+              onBroadcast={() => router.push(`/dashboard/org/${orgSlug}/broadcasts`)}
+              onDesignEmail={() => router.push(`/dashboard/org/${orgSlug}/email-templates`)}
+              onDelete={() => setDeleteTarget({ id: "__all__" } as EmailContact)}
+            />
+          </button>
 
-        {/* Table */}
-        {contacts.length > 0 && (
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Properties</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Added</th>
-                      <th className="px-4 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.map((contact) => (
-                      <ContactRow
-                        key={contact.id}
-                        contact={contact}
-                        onDelete={() => setDeleteTarget(contact)}
-                        onToggleSubscription={() =>
-                          updateMutation.mutate(
-                            { id: contact.id, dto: { unsubscribed: !contact.unsubscribed } },
-                            {
-                              onSuccess: () =>
-                                toast.success(contact.unsubscribed ? "Resubscribed" : "Unsubscribed"),
-                            }
-                          )
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+          {/* Accordion body */}
+          {allContactsOpen && (
+            <div className="border-t bg-muted/10">
+              {/* Drop zone — only when empty */}
+              {!loading && !hasContacts && (
+                <div
+                  className="m-4 border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/30"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="font-medium">Drop your file here to import contacts</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Supports CSV, Excel (.xlsx / .xls), TSV, and Markdown tables
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    We&apos;ll help you map columns — handles any file size automatically
+                  </p>
+                </div>
+              )}
 
-        {/* Loading skeleton */}
-        {loading && (
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-10 bg-muted animate-pulse rounded-md" />
-              ))}
-            </CardContent>
-          </Card>
-        )}
+              {/* Filters */}
+              {hasContacts && (
+                <div className="flex items-center gap-2 flex-wrap px-4 pt-3">
+                  <div className="relative flex-1 min-w-48 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or email…"
+                      value={search}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Button
+                    variant={filterUnsubscribed === undefined ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => { setFilterUnsubscribed(undefined); setPage(0); }}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={filterUnsubscribed === false ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => { setFilterUnsubscribed(false); setPage(0); }}
+                  >
+                    <MailCheck className="h-3.5 w-3.5 mr-1.5" /> Subscribed
+                  </Button>
+                  <Button
+                    variant={filterUnsubscribed === true ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => { setFilterUnsubscribed(true); setPage(0); }}
+                  >
+                    <MailX className="h-3.5 w-3.5 mr-1.5" /> Unsubscribed
+                  </Button>
+                </div>
+              )}
 
-        {/* Empty state — no contacts at all */}
-        {!loading && !hasContacts && importLog.length === 0 && (
-          <div className="text-center py-4">
-            <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              No contacts yet
-            </p>
-          </div>
-        )}
+              {/* Table */}
+              {contacts.length > 0 && (
+                <div className="px-4 py-3">
+                  <Card>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Properties</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Added</th>
+                              <th className="px-4 py-3" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {contacts.map((contact) => (
+                              <ContactRow
+                                key={contact.id}
+                                contact={contact}
+                                onDelete={() => setDeleteTarget(contact)}
+                                onToggleSubscription={() =>
+                                  updateMutation.mutate(
+                                    { id: contact.id, dto: { unsubscribed: !contact.unsubscribed } },
+                                    {
+                                      onSuccess: () =>
+                                        toast.success(contact.unsubscribed ? "Resubscribed" : "Unsubscribed"),
+                                    }
+                                  )
+                                }
+                              />
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Page {page + 1} of {totalPages} · {total.toLocaleString()} contacts
-            </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              {/* Loading skeleton */}
+              {loading && (
+                <div className="px-4 py-3">
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="h-10 bg-muted animate-pulse rounded-md" />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!loading && !hasContacts && importLog.length > 0 && (
+                <div className="text-center py-6">
+                  <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" />
+                    No contacts yet
+                  </p>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between text-sm px-4 pb-3">
+                  <span className="text-muted-foreground">
+                    Page {page + 1} of {totalPages} · {total.toLocaleString()} contacts
+                  </span>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages - 1}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Name import dialog */}
+      <Dialog
+        open={!!pendingFile}
+        onOpenChange={(v) => { if (!v) setPendingFile(null); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Name this import</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={importName}
+            onChange={(e) => setImportName(e.target.value)}
+            placeholder="e.g. January batch, Marketing list…"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") handleNameConfirm(); }}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPendingFile(null)}>Cancel</Button>
+            <Button onClick={handleNameConfirm}>Continue</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Field mapping modal */}
       <FieldMappingModal
@@ -743,14 +775,46 @@ export default function ContactsPage() {
         onConfirm={handleCertModalConfirm}
       />
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      {/* Delete recent import confirmation */}
+      <AlertDialog
+        open={!!deleteImportTarget}
+        onOpenChange={(open) => !open && setDeleteImportTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deleteImportTarget?.file_name}</strong> will be removed from Recent Imports.
+              The contacts will remain in All Contacts.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!deleteImportTarget) return;
+                removeFromLog(deleteImportTarget.source_ref);
+                setDeleteImportTarget(null);
+                toast.success("Import removed");
+              }}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete contact confirmation */}
+      <AlertDialog
+        open={!!deleteTarget && deleteTarget.id !== "__all__"}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete contact?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove{" "}
-              <span className="font-medium">{deleteTarget?.email}</span> from your contact list.
+              <span className="font-medium">{deleteTarget?.email ?? "this contact"}</span> from your contact list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -773,34 +837,42 @@ export default function ContactsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
 
-function ActionCard({
-  icon: Icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full text-left rounded-xl border p-3 hover:border-primary hover:bg-primary/5 transition-colors group"
-    >
-      <div className="flex items-start gap-2.5">
-        <Icon className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-        <div>
-          <p className="text-xs font-medium">{title}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{description}</p>
-        </div>
-      </div>
-    </button>
+      {/* Delete all contacts confirmation */}
+      <AlertDialog
+        open={deleteTarget?.id === "__all__"}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete all contacts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all {total.toLocaleString()} contacts. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                setDeleteTarget(null);
+                const toastId = toast.loading(`Deleting contacts…`);
+                try {
+                  // Delete the currently-visible page; invalidate to refetch remaining
+                  await Promise.all(contacts.map((c) => api.delivery.deleteContact(c.id)));
+                  queryClient.invalidateQueries({ queryKey: ["delivery"] });
+                  toast.success("Contacts deleted", { id: toastId });
+                } catch {
+                  toast.error("Failed to delete some contacts", { id: toastId });
+                }
+              }}
+            >
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -821,7 +893,7 @@ function ContactRow({
   return (
     <tr className="border-b last:border-0 hover:bg-muted/20 transition-colors">
       <td className="px-4 py-3 font-medium text-sm">{name}</td>
-      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{contact.email}</td>
+      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{contact.email ?? "—"}</td>
       <td className="px-4 py-3">
         {customKeys.length > 0 ? (
           <div className="flex flex-wrap gap-1">

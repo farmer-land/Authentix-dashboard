@@ -1872,6 +1872,7 @@ export default function GenerateCertificatePage() {
                     setRightPanelVisible(false);
                     setSelectedFieldId(null);
                   }
+                  setFitTrigger(t => t + 1);
                 }}
                 previewOpen={previewOpen}
                 onUndo={undo}
@@ -1886,6 +1887,8 @@ export default function GenerateCertificatePage() {
                 snapToGrid={snapToGrid}
                 onSnapToggle={() => setSnapToGrid(v => !v)}
                 fitTrigger={fitTrigger}
+                footerHeight={40}
+                leftPanelOpen={leftPanelVisible}
               />
               </ErrorBoundary>
             ) : (
@@ -2013,7 +2016,7 @@ export default function GenerateCertificatePage() {
                   <span className="text-[10px] text-muted-foreground/60">· sample values</span>
                 </div>
                 <button
-                  onClick={() => setPreviewOpen(false)}
+                  onClick={() => { setPreviewOpen(false); setFitTrigger(t => t + 1); }}
                   className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                   title="Close preview"
                 >

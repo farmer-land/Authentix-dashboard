@@ -82,6 +82,12 @@ interface InfiniteCanvasProps {
   leftPanelWidth?: number;
   // Right panel width in px so toolbar + fit-to-screen account for it
   rightPanelWidth?: number;
+  // Height in px reserved by the stepper bar at the bottom of the canvas area.
+  // fitToScreen shifts the template up by half this value so it stays visually
+  // centred in the available space, and the toolbar sits above the stepper.
+  footerHeight?: number;
+  // Whether the left panel is currently open (used to auto-dismiss the add-fields tip)
+  leftPanelOpen?: boolean;
 }
 
 const SNAP_SIZE = 8;
@@ -167,6 +173,8 @@ export function InfiniteCanvas({
   fitTrigger,
   leftPanelWidth,
   rightPanelWidth,
+  footerHeight = 0,
+  leftPanelOpen = false,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -216,6 +224,25 @@ export function InfiniteCanvas({
   const [toolbarMinimized, setToolbarMinimized] = useState(false);
   const [helpPanelOpen, setHelpPanelOpen] = useState(false);
 
+  // "Add fields" tip — shown once per session
+  const [addFieldsTipSeen, setAddFieldsTipSeen] = useState(() => {
+    try { return !!sessionStorage.getItem('cert_add_fields_tip_seen'); } catch { return false; }
+  });
+  const dismissAddFieldsTip = useCallback(() => {
+    setAddFieldsTipSeen(true);
+    try { sessionStorage.setItem('cert_add_fields_tip_seen', '1'); } catch {}
+  }, []);
+  useEffect(() => {
+    if (addFieldsTipSeen) return;
+    // Auto-dismiss after 5 s
+    const t = setTimeout(dismissAddFieldsTip, 5000);
+    return () => clearTimeout(t);
+  }, [addFieldsTipSeen, dismissAddFieldsTip]);
+  // Dismiss when the left panel opens or the first field is added
+  useEffect(() => {
+    if (!addFieldsTipSeen && (leftPanelOpen || fields.length > 0)) dismissAddFieldsTip();
+  }, [leftPanelOpen, fields.length, addFieldsTipSeen, dismissAddFieldsTip]);
+
   // Inject Google Fonts stylesheets for all fonts used by current fields so text renders
   // in the correct typeface while editing (not just in the preview panel).
   useEffect(() => {
@@ -252,18 +279,34 @@ export function InfiniteCanvas({
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-    const padding = 80;
-    const fitScale = clamp(
-      Math.min((cw - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
-      MIN_SCALE,
-      MAX_SCALE,
-    );
+    const availH = ch - footerHeight;
+    const isLandscape = pdfWidth > pdfHeight;
+
+    let fitScale: number;
+    if (isLandscape) {
+      // Landscape templates: default to 60 % of the canvas area so the
+      // designer feels less cramped and there's room to work around the template.
+      fitScale = clamp(
+        0.6 * Math.min(cw / pdfWidth, availH / pdfHeight),
+        MIN_SCALE,
+        MAX_SCALE,
+      );
+    } else {
+      // Portrait templates: fit snugly with 80 px padding on each side.
+      const padding = 80;
+      fitScale = clamp(
+        Math.min((cw - padding * 2) / pdfWidth, (availH - padding * 2) / pdfHeight),
+        MIN_SCALE,
+        MAX_SCALE,
+      );
+    }
+
     const centeredX = (cw - pdfWidth * fitScale) / 2;
-    const centeredY = (ch - pdfHeight * fitScale) / 2;
+    const centeredY = (availH - pdfHeight * fitScale) / 2;
     onScaleChange(fitScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
-  }, [pdfWidth, pdfHeight, onScaleChange]);
+  }, [pdfWidth, pdfHeight, footerHeight, onScaleChange]);
 
   // Run auto-fit whenever the template dimensions change
   const prevDimsRef = useRef({ w: 0, h: 0 });
@@ -945,7 +988,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: footerHeight + 20, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >
@@ -1156,8 +1199,8 @@ export function InfiniteCanvas({
         );
       })()}
 
-      {/* ── Empty state tip (left edge, pointing toward left panel) ── */}
-      {fields.length === 0 && (
+      {/* ── Empty state tip (left edge, pointing toward left panel) — once per session ── */}
+      {fields.length === 0 && !addFieldsTipSeen && (
         <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
           <div className="flex items-center gap-2 bg-card/90 backdrop-blur-sm border border-border/60 rounded-xl px-3 py-2.5 shadow-lg max-w-42.5">
             <ChevronLeft className="w-4 h-4 text-primary shrink-0 animate-pulse" />

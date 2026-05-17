@@ -188,30 +188,16 @@ export function FieldMappingModal({
                         <SelectValue placeholder="Choose column…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {!field.required && (
-                          <SelectItem value={SKIP} className="text-muted-foreground">
-                            — Skip this field
-                          </SelectItem>
-                        )}
-                        {headers.map((h) => {
-                          const takenByOther =
-                            usedCols.has(h) && mapping[field.key] !== h;
-                          return (
-                            <SelectItem
-                              key={h}
-                              value={h}
-                              disabled={takenByOther}
-                              className="text-sm"
-                            >
-                              <span>{h}</span>
-                              {takenByOther && (
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  (already mapped)
-                                </span>
-                              )}
+                        <SelectItem value={SKIP} className="text-muted-foreground">
+                          — Skip this field
+                        </SelectItem>
+                        {headers
+                          .filter((h) => !usedCols.has(h) || mapping[field.key] === h)
+                          .map((h) => (
+                            <SelectItem key={h} value={h} className="text-sm">
+                              {h}
                             </SelectItem>
-                          );
-                        })}
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
