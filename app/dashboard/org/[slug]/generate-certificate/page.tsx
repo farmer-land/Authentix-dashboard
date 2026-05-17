@@ -220,7 +220,8 @@ export default function GenerateCertificatePage() {
 
   // ── Auto-load ?source_ref= contacts when template is ready ──────────────────
   // Contacts were imported from the Contacts page — fetch them by source_ref and
-  // pre-populate the data step so the user lands directly on field mapping.
+  // silently pre-populate the data step. We stay on 'design' so the user can
+  // review / edit the template before moving to field mapping.
   useEffect(() => {
     if (
       sourceRefFromUrl &&
@@ -255,10 +256,11 @@ export default function GenerateCertificatePage() {
           importIds: [],
         });
 
-        // Advance to the data step so the user sees field mapping immediately
-        if (currentStep === 'data' || currentStep === 'design') {
-          setCurrentStep('data');
-        }
+        // Stay on the current step — contacts are pre-loaded in the background.
+        // The user can review the template design first, then navigate to Data.
+        toast.success(`${rows.length.toLocaleString()} contacts pre-loaded`, {
+          description: 'When you\'re ready, go to the Data step to map fields and generate.',
+        });
       }).catch(() => {
         // Silent — DataSelector will show the empty upload state as fallback
       });

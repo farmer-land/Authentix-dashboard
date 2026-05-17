@@ -314,6 +314,9 @@ export default function ContactsPage() {
   // Certificate template picker modal
   const [certModal, setCertModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
 
+  // Post-import "what's next?" prompt — shown after every successful import
+  const [postImport, setPostImport] = useState<ImportSession | null>(null);
+
   const { contacts, total, loading } = useEmailContacts({
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
@@ -424,6 +427,7 @@ export default function ContactsPage() {
         const updated = [session, ...readImportLog(orgSlug)];
         writeImportLog(orgSlug, updated);
         setImportLog(updated);
+        setPostImport(session);
 
         queryClient.invalidateQueries({ queryKey: ["delivery"] });
       } catch (err) {
@@ -481,6 +485,51 @@ export default function ContactsPage() {
         />
       </div>
 
+      {/* Post-import "What's next?" prompt */}
+      {postImport && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">
+                {postImport.imported.toLocaleString()} contacts imported
+                {postImport.skipped > 0 && ` · ${postImport.skipped.toLocaleString()} skipped`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">What would you like to do with <span className="font-medium">{postImport.file_name}</span>?</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => { setPostImport(null); setCertModal({ open: true, source_ref: postImport.source_ref }); }}
+            >
+              <Award className="h-3.5 w-3.5 mr-1.5" /> Generate Certificates
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setPostImport(null); router.push(`/dashboard/org/${orgSlug}/broadcasts`); }}
+            >
+              <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Send Broadcast
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setPostImport(null); router.push(`/dashboard/org/${orgSlug}/email-templates`); }}
+            >
+              <Mail className="h-3.5 w-3.5 mr-1.5" /> Design Email
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto text-muted-foreground"
+              onClick={() => setPostImport(null)}
+            >
+              I&apos;ll use this later
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Top action cards — always visible */}
       <div className="grid grid-cols-3 gap-3">
         <ActionCard
@@ -502,6 +551,7 @@ export default function ContactsPage() {
           onClick={() => router.push(`/dashboard/org/${orgSlug}/email-templates`)}
         />
       </div>
+
 
       {/* Recent imports accordion */}
       {importLog.length > 0 && (
