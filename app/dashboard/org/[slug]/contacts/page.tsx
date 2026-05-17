@@ -246,6 +246,11 @@ function ImportAccordionRow({
             {" · "}
             {formatDistanceToNow(new Date(session.imported_at), { addSuffix: true })}
           </p>
+          {session.skipped > 0 && session.imported === 0 && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+              Rows skipped — check that each row has a valid email address (must contain @)
+            </p>
+          )}
         </div>
         <AccordionActions
           onGenerateCerts={() => onGenerateCerts(session.source_ref)}
@@ -510,7 +515,6 @@ export default function ContactsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <p className="text-xs text-muted-foreground hidden sm:block">or drop a file anywhere</p>
           <Button
             variant="outline"
             size="sm"
@@ -522,6 +526,7 @@ export default function ContactsPage() {
               : <Upload className="h-4 w-4 mr-2" />}
             {isImporting ? "Importing…" : "Import contacts"}
           </Button>
+          <p className="text-xs text-muted-foreground hidden sm:block">or drop a file anywhere</p>
         </div>
         <input
           ref={fileInputRef}
@@ -541,9 +546,14 @@ export default function ContactsPage() {
         <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
           <div>
             <p className="text-sm font-semibold">
-              {recentCard.imported.toLocaleString()} contacts imported
+              {recentCard.imported.toLocaleString()} contact{recentCard.imported !== 1 ? "s" : ""} imported
               {recentCard.skipped > 0 && ` · ${recentCard.skipped.toLocaleString()} skipped`}
             </p>
+            {recentCard.skipped > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                Rows are skipped when the email address is missing or invalid (no @).
+              </p>
+            )}
             <p className="text-xs text-muted-foreground mt-0.5">
               What would you like to do with <span className="font-medium">{recentCard.file_name}</span>?
             </p>
@@ -611,26 +621,41 @@ export default function ContactsPage() {
         {allContactsOpen && (
           <div className="border-t">
             {importLog.length === 0 ? (
-              /* Empty state */
-              <div className="flex flex-col items-center justify-center py-14 gap-3 text-center px-6">
-                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                  <Upload className="h-5 w-5 text-muted-foreground" />
+              total > 0 ? (
+                /* Contacts exist but were imported before session tracking */
+                <div className="px-4 py-4 flex items-start gap-3">
+                  <Users className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {total.toLocaleString()} contact{total !== 1 ? "s" : ""} in your database
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      These were imported before file history was tracked. Import a new file to see it listed here.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">No contacts yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Import a CSV, Excel, TSV, or Markdown file to get started
-                  </p>
+              ) : (
+                /* Truly empty */
+                <div className="flex flex-col items-center justify-center py-14 gap-3 text-center px-6">
+                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">No contacts yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Import a CSV, Excel, TSV, or Markdown file to get started
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isImporting}
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1.5" /> Import contacts
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isImporting}
-                >
-                  <Upload className="h-3.5 w-3.5 mr-1.5" /> Import contacts
-                </Button>
-              </div>
+              )
             ) : (
               /* File rows */
               importLog.map((session) => (
