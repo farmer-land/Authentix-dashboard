@@ -1618,102 +1618,35 @@ export default function GenerateCertificatePage() {
       {currentStep === 'design' && template && (
         <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-background flex flex-col">
 
-          {/* Canvas area + optional preview — flex row, fills all space */}
+          {/* Canvas area + panels + optional preview — flex row, fills all space */}
           <div className="flex-1 flex overflow-hidden">
 
-          {/* Editing canvas — always fills full width; panels float as absolute overlays */}
-          <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
-            {useInfiniteCanvas ? (
-              <ErrorBoundary fallbackLabel="Canvas failed to load">
-              <InfiniteCanvas
-                fileUrl={template.fileUrl}
-                pdfWidth={template.pdfWidth}
-                pdfHeight={template.pdfHeight}
-                fields={fields.filter(f => (f.pageNumber ?? 0) === currentPage)}
-                selectedFieldId={selectedFieldId}
-                hiddenFields={hiddenFields}
-                scale={canvasScale}
-                currentPage={currentPage + 1}
-                totalPages={totalPages}
-                onFieldUpdate={handleUpdateField}
-                onFieldSelect={handleFieldSelect}
-                onScaleChange={setCanvasScale}
-                onFieldDelete={handleDeleteField}
-                onTemplateResize={handleTemplateResize}
-                onTemplateResizeStart={handleTemplateResizeStart}
-                onPageChange={(page) => setCurrentPage(page - 1)}
-                onAssetDrop={(url, name, x, y, replaceBlobUrl) => handleAddAssetField(url, name, x, y, replaceBlobUrl)}
-                onFieldDuplicate={handleFieldDuplicate}
-                onPreviewToggle={() => {
-                  const opening = !previewOpen;
-                  setPreviewOpen(opening);
-                  if (opening) {
-                    setLeftPanelVisible(false);
-                    setRightPanelVisible(false);
-                    setSelectedFieldId(null);
-                  }
-                }}
-                previewOpen={previewOpen}
-                onUndo={undo}
-                onRedo={redo}
-                canUndo={canUndo}
-                canRedo={canRedo}
-                saveStatus={saveStatus}
-                onFieldsDelete={handleFieldsDelete}
-                onFieldReorder={handleFieldReorder}
-                onFieldLock={handleFieldLock}
-                onFieldDragStart={handleFieldDragStart}
-                snapToGrid={snapToGrid}
-                onSnapToggle={() => setSnapToGrid(v => !v)}
-                fitTrigger={fitTrigger}
-                leftPanelWidth={leftPanelVisible && !previewOpen ? 300 : 0}
-                rightPanelWidth={selectedField && rightPanelVisible && !previewOpen ? 344 : 0}
-              />
-              </ErrorBoundary>
-            ) : (
-              <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8">
-                <CertificateCanvas
-                  fileUrl={template.fileUrl}
-                  pdfWidth={template.pdfWidth}
-                  pdfHeight={template.pdfHeight}
-                  fields={fields}
-                  selectedFieldId={selectedFieldId}
-                  hiddenFields={hiddenFields}
-                  scale={canvasScale}
-                  onFieldUpdate={handleUpdateField}
-                  onFieldSelect={handleFieldSelect}
-                  onScaleChange={setCanvasScale}
-                  onFieldDelete={handleDeleteField}
-                  onTemplateResize={handleTemplateResize}
-                />
-              </div>
-            )}
-
-            {/* ── Left pill (collapsed) — floating, left:12 keeps gap from nav ── */}
-            {!leftPanelVisible && !previewOpen && (
-              <div
-                className="absolute z-40 flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                style={{ left: 12, top: '50%', transform: 'translateY(-50%)', width: 40 }}
-                onClick={() => setLeftPanelVisible(true)}
-                title="Expand layers panel"
-              >
-                <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
-                <span
-                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
-                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          {/* ── Left panel section (flex child — carves out its own space) ── */}
+          {!previewOpen && (
+            <>
+              {!leftPanelVisible && (
+                <div className="shrink-0 flex items-center py-3 pl-3">
+                  <div
+                    className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                    style={{ width: 40 }}
+                    onClick={() => setLeftPanelVisible(true)}
+                    title="Expand layers panel"
+                  >
+                    <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
+                    <span
+                      className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                      style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                    >
+                      Layers
+                    </span>
+                    <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+                  </div>
+                </div>
+              )}
+              {leftPanelVisible && (
+                <div
+                  className="shrink-0 w-72 m-3 mr-0 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
                 >
-                  Layers
-                </span>
-                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
-              </div>
-            )}
-
-            {/* ── Left panel (expanded) — floating overlay ── */}
-            {leftPanelVisible && !previewOpen && (
-              <div
-                className="absolute z-40 w-72 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-                style={{ left: 12, top: 48, height: 'calc(100% - 108px)' }}
-              >
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="text-xs font-semibold text-foreground flex-1">Layers</span>
@@ -1816,75 +1749,72 @@ export default function GenerateCertificatePage() {
                 </div>
               </div>
             )}
+            </>
+          )}
 
-            {/* ── Right pill (collapsed) ── */}
-            {selectedField && !rightPanelVisible && !previewOpen && (
-              <div
-                className="absolute z-40 flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                style={{ right: 12, top: '50%', transform: 'translateY(-50%)', width: 40 }}
-                onClick={() => setRightPanelVisible(true)}
-                title="Expand properties panel"
-              >
-                <Palette className="w-4 h-4 text-muted-foreground/70" />
-                <span
-                  className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
-                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                >
-                  Props
-                </span>
-                <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
-              </div>
-            )}
-
-            {/* ── Right panel (expanded) — floating overlay ── */}
-            {selectedField && rightPanelVisible && !previewOpen && (
-              <div
-                className="absolute z-40 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
-                style={{ right: 12, top: 48, height: 'calc(100% - 108px)' }}
-              >
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
-                  <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
-                  <button
-                    onClick={() => setRightPanelVisible(false)}
-                    className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
-                    title="Hide panel"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
-                  <RightPanel
-                    selectedField={selectedField}
-                    onFieldUpdate={(updates) => {
-                      if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
-                    }}
-                    allFieldLabels={fields.filter(f => f.id !== selectedFieldId).map(f => f.label)}
-                    scale={canvasScale}
-                    onScaleChange={setCanvasScale}
-                    onFitToScreen={() => setFitTrigger(t => t + 1)}
-                    snapToGrid={snapToGrid}
-                    onSnapToggle={() => setSnapToGrid(v => !v)}
-                    pdfWidth={template?.pdfWidth}
-                    pdfHeight={template?.pdfHeight}
-                    onAlignField={(alignment) => {
-                      if (!selectedField || !template) return;
-                      const { width, height } = selectedField;
-                      const { pdfWidth, pdfHeight } = template;
-                      const updates: Partial<CertificateField> = {};
-                      if (alignment === 'left') updates.x = 0;
-                      else if (alignment === 'center-h') updates.x = (pdfWidth - width) / 2;
-                      else if (alignment === 'right') updates.x = pdfWidth - width;
-                      else if (alignment === 'top') updates.y = 0;
-                      else if (alignment === 'center-v') updates.y = (pdfHeight - height) / 2;
-                      else if (alignment === 'bottom') updates.y = pdfHeight - height;
-                      if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
-                    }}
-                    onBringForward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'front')}
-                    onSendBackward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'back')}
-                    columnHeaders={importedData?.headers}
-                  />
-                </div>
+          {/* ── Canvas area (flex-1 — bounded between the side panels) ── */}
+          <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
+            {useInfiniteCanvas ? (
+              <ErrorBoundary fallbackLabel="Canvas failed to load">
+              <InfiniteCanvas
+                fileUrl={template.fileUrl}
+                pdfWidth={template.pdfWidth}
+                pdfHeight={template.pdfHeight}
+                fields={fields.filter(f => (f.pageNumber ?? 0) === currentPage)}
+                selectedFieldId={selectedFieldId}
+                hiddenFields={hiddenFields}
+                scale={canvasScale}
+                currentPage={currentPage + 1}
+                totalPages={totalPages}
+                onFieldUpdate={handleUpdateField}
+                onFieldSelect={handleFieldSelect}
+                onScaleChange={setCanvasScale}
+                onFieldDelete={handleDeleteField}
+                onTemplateResize={handleTemplateResize}
+                onTemplateResizeStart={handleTemplateResizeStart}
+                onPageChange={(page) => setCurrentPage(page - 1)}
+                onAssetDrop={(url, name, x, y, replaceBlobUrl) => handleAddAssetField(url, name, x, y, replaceBlobUrl)}
+                onFieldDuplicate={handleFieldDuplicate}
+                onPreviewToggle={() => {
+                  const opening = !previewOpen;
+                  setPreviewOpen(opening);
+                  if (opening) {
+                    setLeftPanelVisible(false);
+                    setRightPanelVisible(false);
+                    setSelectedFieldId(null);
+                  }
+                }}
+                previewOpen={previewOpen}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                saveStatus={saveStatus}
+                onFieldsDelete={handleFieldsDelete}
+                onFieldReorder={handleFieldReorder}
+                onFieldLock={handleFieldLock}
+                onFieldDragStart={handleFieldDragStart}
+                snapToGrid={snapToGrid}
+                onSnapToggle={() => setSnapToGrid(v => !v)}
+                fitTrigger={fitTrigger}
+              />
+              </ErrorBoundary>
+            ) : (
+              <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8">
+                <CertificateCanvas
+                  fileUrl={template.fileUrl}
+                  pdfWidth={template.pdfWidth}
+                  pdfHeight={template.pdfHeight}
+                  fields={fields}
+                  selectedFieldId={selectedFieldId}
+                  hiddenFields={hiddenFields}
+                  scale={canvasScale}
+                  onFieldUpdate={handleUpdateField}
+                  onFieldSelect={handleFieldSelect}
+                  onScaleChange={setCanvasScale}
+                  onFieldDelete={handleDeleteField}
+                  onTemplateResize={handleTemplateResize}
+                />
               </div>
             )}
 
@@ -1909,8 +1839,79 @@ export default function GenerateCertificatePage() {
                 </button>
               </div>
             </div>
+          </div>{/* end canvas area */}
 
-          </div>{/* end editing canvas */}
+          {/* ── Right panel section (flex child — carves out its own space) ── */}
+          {!previewOpen && (
+            <>
+              {selectedField && !rightPanelVisible && (
+                <div className="shrink-0 flex items-center py-3 pr-3">
+                  <div
+                    className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                    style={{ width: 40 }}
+                    onClick={() => setRightPanelVisible(true)}
+                    title="Expand properties panel"
+                  >
+                    <Palette className="w-4 h-4 text-muted-foreground/70" />
+                    <span
+                      className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                      style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                    >
+                      Props
+                    </span>
+                    <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+                  </div>
+                </div>
+              )}
+              {selectedField && rightPanelVisible && (
+                <div className="shrink-0 w-80 m-3 ml-0 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
+                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
+                    <button
+                      onClick={() => setRightPanelVisible(false)}
+                      className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+                      title="Hide panel"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
+                    <RightPanel
+                      selectedField={selectedField}
+                      onFieldUpdate={(updates) => {
+                        if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
+                      }}
+                      allFieldLabels={fields.filter(f => f.id !== selectedFieldId).map(f => f.label)}
+                      scale={canvasScale}
+                      onScaleChange={setCanvasScale}
+                      onFitToScreen={() => setFitTrigger(t => t + 1)}
+                      snapToGrid={snapToGrid}
+                      onSnapToggle={() => setSnapToGrid(v => !v)}
+                      pdfWidth={template?.pdfWidth}
+                      pdfHeight={template?.pdfHeight}
+                      onAlignField={(alignment) => {
+                        if (!selectedField || !template) return;
+                        const { width, height } = selectedField;
+                        const { pdfWidth, pdfHeight } = template;
+                        const updates: Partial<CertificateField> = {};
+                        if (alignment === 'left') updates.x = 0;
+                        else if (alignment === 'center-h') updates.x = (pdfWidth - width) / 2;
+                        else if (alignment === 'right') updates.x = pdfWidth - width;
+                        else if (alignment === 'top') updates.y = 0;
+                        else if (alignment === 'center-v') updates.y = (pdfHeight - height) / 2;
+                        else if (alignment === 'bottom') updates.y = pdfHeight - height;
+                        if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
+                      }}
+                      onBringForward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'front')}
+                      onSendBackward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'back')}
+                      columnHeaders={importedData?.headers}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           {/* ── Preview panel ── */}
           {previewOpen && (

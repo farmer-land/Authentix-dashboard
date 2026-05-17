@@ -3903,12 +3903,16 @@ export function EmailBlockBuilder({
 
   const activeBlock = activeId ? blocks.find(b => b.id === activeId) : null;
 
-  if (blocks.length === 0) {
+  // Track whether the user has dismissed the gallery (blank canvas) or selected a template.
+  // Initialized to true when blocks exist so existing templates never show the gallery.
+  const [galleryDismissed, setGalleryDismissed] = useState(blocks.length > 0);
+
+  if (blocks.length === 0 && !galleryDismissed) {
     return (
       <StarterTemplateGallery
         context={context}
-        onSelect={onChange}
-        onDismiss={onStartFresh}
+        onSelect={(selected) => { setGalleryDismissed(true); onChange(selected); }}
+        onDismiss={() => setGalleryDismissed(true)}
       />
     );
   }
@@ -3926,11 +3930,30 @@ export function EmailBlockBuilder({
       {/* Artboard label — above the email card, like Figma's frame label */}
       <div className="max-w-[600px] mx-auto mb-2 flex items-center justify-between select-none">
         <span className="text-[10px] text-zinc-600 font-medium tracking-wide">Email Template</span>
-        <span className="text-[10px] text-zinc-700 font-mono">600px</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => { onChange([]); setGalleryDismissed(false); }}
+            className="text-[10px] text-zinc-500 hover:text-[#3ECF8E] transition-colors flex items-center gap-1"
+          >
+            <LayoutTemplate className="w-3 h-3" />
+            Change template
+          </button>
+          <span className="text-[10px] text-zinc-700 font-mono">600px</span>
+        </div>
       </div>
 
+      {/* Blank-canvas drop zone when user chose "Start with blank canvas" */}
+      {blocks.length === 0 && (
+        <div className="max-w-[600px] mx-auto border-2 border-dashed border-zinc-700 rounded-xl flex flex-col items-center justify-center gap-3 py-20 text-center">
+          <Plus className="w-8 h-8 text-zinc-600" />
+          <p className="text-sm font-medium text-zinc-400">Blank canvas</p>
+          <p className="text-xs text-zinc-600">Drag blocks from the left panel or click to add</p>
+        </div>
+      )}
+
       {/* Artboard — the email card */}
-      <div
+      {blocks.length > 0 && <div
         className="max-w-[600px] mx-auto"
         style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 20px 60px rgba(0,0,0,0.55)" }}
       >
@@ -4092,7 +4115,7 @@ export function EmailBlockBuilder({
             </DragOverlay>
           </DndContext>
         </div>
-      </div>
+      </div>}
 
       {/* Artboard footer hint */}
       <div className="max-w-[600px] mx-auto mt-3 text-center select-none">

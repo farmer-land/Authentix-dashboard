@@ -252,22 +252,18 @@ export function InfiniteCanvas({
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-    // Account for floating panels so the template centers in the visible gap
-    const leftW = leftPanelWidth ?? 0;
-    const rightW = rightPanelWidth ?? 0;
-    const usableW = cw - leftW - rightW;
     const padding = 80;
     const fitScale = clamp(
-      Math.min((usableW - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
+      Math.min((cw - padding * 2) / pdfWidth, (ch - padding * 2) / pdfHeight),
       MIN_SCALE,
       MAX_SCALE,
     );
-    const centeredX = leftW + (usableW - pdfWidth * fitScale) / 2;
+    const centeredX = (cw - pdfWidth * fitScale) / 2;
     const centeredY = (ch - pdfHeight * fitScale) / 2;
     onScaleChange(fitScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
-  }, [pdfWidth, pdfHeight, onScaleChange, leftPanelWidth, rightPanelWidth]);
+  }, [pdfWidth, pdfHeight, onScaleChange]);
 
   // Run auto-fit whenever the template dimensions change
   const prevDimsRef = useRef({ w: 0, h: 0 });
@@ -949,7 +945,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: 64, left: `calc(${leftPanelWidth ?? 0}px + (100% - ${(leftPanelWidth ?? 0) + (rightPanelWidth ?? 0)}px) / 2)`, transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >
