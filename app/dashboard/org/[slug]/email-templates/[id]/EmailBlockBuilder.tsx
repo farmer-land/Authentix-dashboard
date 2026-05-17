@@ -2659,6 +2659,21 @@ export function BlockPropertiesPanel({
   emailBg?: EmailBackground;
   onEmailBgChange?: (bg: EmailBackground) => void;
 }) {
+  const [openSection, setOpenSection] = useState<string | null>(() => {
+    switch (block?.type) {
+      case "image": return "Image";
+      case "cta_button": return "Button";
+      case "social": return "Social Links";
+      case "video": return "Video";
+      case "iframe": return "Embed";
+      case "table": return "Table";
+      case "divider": return "Divider";
+      case "spacer": return "Spacer";
+      case "two_column": return "Content";
+      default: return "Content";
+    }
+  });
+
   if (!block) {
     return (
       <div className="flex flex-col min-h-0">
@@ -3460,22 +3475,6 @@ export function BlockPropertiesPanel({
       </div>
     </Section>
   ) : null;
-
-  const defaultOpenSection = (() => {
-    switch (type) {
-      case "image": return "Image";
-      case "cta_button": return "Button";
-      case "social": return "Social Links";
-      case "video": return "Video";
-      case "iframe": return "Embed";
-      case "table": return "Table";
-      case "divider": return "Divider";
-      case "spacer": return "Spacer";
-      case "two_column": return "Content";
-      default: return "Content";
-    }
-  })();
-  const [openSection, setOpenSection] = useState<string | null>(defaultOpenSection);
 
   return (
     <SectionOpenCtx.Provider value={{ open: openSection, setOpen: setOpenSection }}>
