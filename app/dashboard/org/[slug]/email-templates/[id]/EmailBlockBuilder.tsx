@@ -800,8 +800,9 @@ export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground, pr
     ? `<div style="display:none;font-size:1px;color:#fefefe;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>`
     : "";
 
-  // Embed blocks as a JSON comment so the editor can restore them on next open
-  const jsonComment = `<!-- ${BLOCKS_JSON_MARKER}:${JSON.stringify(blocks)} -->`;
+  // Embed blocks + editor metadata as a JSON comment so the editor can restore them on next open
+  const editorMeta = { v: 2, blocks, preheader: preheader ?? '', emailBg: emailBg ?? null, utm: utm ?? {} };
+  const jsonComment = `<!-- ${BLOCKS_JSON_MARKER}:${JSON.stringify(editorMeta)} -->`;
   let fullHtml = `${jsonComment}\n${mobileHideStyle}<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; ${wrapperBg} border-radius: 10px; overflow: hidden; border: 1px solid #2d2d2d;">
 ${preheaderHtml}
 ${inner}
@@ -824,15 +825,33 @@ ${inner}
   return fullHtml;
 }
 
-/** Extract blocks from the embedded JSON comment in stored HTML. Returns null if not found. */
-export function extractBlocksFromHtml(html: string): EmailBlock[] | null {
+export interface EditorState {
+  blocks: EmailBlock[];
+  preheader?: string;
+  emailBg?: EmailBackground;
+  utm?: { source?: string; medium?: string; campaign?: string };
+}
+
+/** Extract editor state (blocks + metadata) from the embedded JSON comment in stored HTML. */
+export function extractEditorState(html: string): EditorState | null {
   const match = html.match(new RegExp(`<!-- ${BLOCKS_JSON_MARKER}:(.+?) -->`));
   if (!match?.[1]) return null;
   try {
     const parsed = JSON.parse(match[1]);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed as EmailBlock[];
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Legacy format: just blocks array
+      return { blocks: parsed as EmailBlock[] };
+    }
+    if (parsed.v === 2 && Array.isArray(parsed.blocks)) {
+      return { blocks: parsed.blocks as EmailBlock[], preheader: parsed.preheader, emailBg: parsed.emailBg, utm: parsed.utm };
+    }
   } catch { /* malformed JSON */ }
   return null;
+}
+
+/** @deprecated Use extractEditorState instead */
+export function extractBlocksFromHtml(html: string): EmailBlock[] | null {
+  return extractEditorState(html)?.blocks ?? null;
 }
 
 // ── Starter blocks ───────────────────────────────────────────────────────────

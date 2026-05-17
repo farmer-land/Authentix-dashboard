@@ -440,8 +440,8 @@ export default function EmailTemplatesPage() {
   const [showSamples, setShowSamples] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  // Saved IDs from localStorage (scoped by org slug, loaded once)
-  const [savedIds] = useState<Set<string>>(() => getSavedIds(slug));
+  // Saved IDs from localStorage (scoped by org slug)
+  const [savedIds, setSavedIds] = useState<Set<string>>(() => getSavedIds(slug));
 
   const { templates: rawTemplates, loading, error: fetchError } = useDeliveryTemplates();
   const createTemplate = useCreateDeliveryTemplate();
@@ -522,7 +522,16 @@ export default function EmailTemplatesPage() {
 
   const handleDuplicate = (id: string) => {
     duplicateTemplate.mutate(id, {
-      onSuccess: (duplicated) => toast.success(`"${duplicated.name}" created`),
+      onSuccess: (duplicated) => {
+        toast.success(`"${duplicated.name}" created`);
+        // Mark the duplicate as saved so it appears in the correct section immediately
+        setSavedIds(prev => {
+          const next = new Set(prev);
+          next.add(duplicated.id);
+          try { localStorage.setItem(`et_saved_ids:${slug}`, JSON.stringify([...next])); } catch { /* non-fatal */ }
+          return next;
+        });
+      },
       onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to duplicate template"),
     });
   };

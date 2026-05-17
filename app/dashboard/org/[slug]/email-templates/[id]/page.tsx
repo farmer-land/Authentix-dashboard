@@ -21,7 +21,7 @@ import {
   BlockPropertiesPanel,
   PaletteItemCard,
   blocksToHtml,
-  extractBlocksFromHtml,
+  extractEditorState,
   defaultBlock,
   STARTER_BLOCKS,
   PALETTE,
@@ -234,6 +234,17 @@ export default function EmailTemplateEditorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body, subject, name, isDefault, isActive]);
 
+  // Rebuild body when style settings change without a block edit, so saves always embed current state
+  useEffect(() => {
+    if (isInitialLoad.current) return;
+    const currentBlocks = blocksRef.current;
+    if (!currentBlocks.length) return;
+    const html = blocksToHtml(currentBlocks, emailBg, preheader, { source: utmSource, medium: utmMedium, campaign: utmCampaign });
+    setBody(html);
+    syncVariables(html, subject);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailBg, preheader, utmSource, utmMedium, utmCampaign]);
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (isDraggingPanel.current) {
@@ -289,10 +300,17 @@ export default function EmailTemplateEditorPage() {
       if (!builderInitRef.current) {
         builderInitRef.current = true;
         const savedHtml = template.body ?? "";
-        // Attempt to restore blocks from the embedded JSON comment
-        const savedBlocks = savedHtml ? extractBlocksFromHtml(savedHtml) : null;
-        if (savedBlocks) {
-          setBlocks(savedBlocks);
+        // Restore blocks + editor metadata (preheader, emailBg, UTMs) from the embedded JSON comment
+        const editorState = savedHtml ? extractEditorState(savedHtml) : null;
+        if (editorState) {
+          setBlocks(editorState.blocks);
+          if (editorState.preheader) setPreheader(editorState.preheader);
+          if (editorState.emailBg) setEmailBg(editorState.emailBg);
+          if (editorState.utm) {
+            if (editorState.utm.source) setUtmSource(editorState.utm.source);
+            if (editorState.utm.medium) setUtmMedium(editorState.utm.medium);
+            if (editorState.utm.campaign) setUtmCampaign(editorState.utm.campaign);
+          }
         } else {
           // No saved blocks: show the template gallery (empty = gallery renders in EmailBlockBuilder)
           setBlocks([]);
@@ -526,7 +544,7 @@ export default function EmailTemplateEditorPage() {
       } catch { /* non-fatal */ }
       toast.success("Template saved");
       if (returnToSend) {
-        router.push(orgPath("/generate-certificate"));
+        router.push(orgPath("/generate-certificate?returnToSend=1"));
       } else {
         router.push(orgPath("/email-templates"));
       }

@@ -309,7 +309,7 @@ export default function SegmentsPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={segments.length === 0 ? "hidden" : "grid grid-cols-1 md:grid-cols-2 gap-4"}>
         {segments.map(segment => (
           <Card key={segment.id} className="relative group">
             <CardHeader className="pb-2">
