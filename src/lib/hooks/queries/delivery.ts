@@ -32,7 +32,7 @@ export function useDeliveryIntegrations() {
   const query = useQuery({
     queryKey: deliveryKeys.integrations(slug),
     queryFn: () => api.delivery.listIntegrations(),
-    staleTime: 60 * 1000,
+    staleTime: 5 * 60 * 1000, // integrations rarely change
   });
   return {
     integrations: query.data ?? [],
@@ -77,7 +77,7 @@ export function useDeliveryTemplates() {
   const query = useQuery({
     queryKey: deliveryKeys.templates(slug),
     queryFn: () => api.delivery.listTemplates(),
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000,
   });
   return {
     templates: query.data ?? [],
@@ -131,7 +131,7 @@ export function useDeliveryPlatformSettings() {
   return useQuery({
     queryKey: deliveryKeys.platformSettings(slug),
     queryFn: () => api.delivery.getPlatformDefaultSettings(),
-    staleTime: 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -237,7 +237,7 @@ export function useEmailSegments() {
   const query = useQuery({
     queryKey: deliveryKeys.segments(slug),
     queryFn: () => api.delivery.listSegments(),
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000,
   });
   return {
     segments: query.data?.segments ?? [],

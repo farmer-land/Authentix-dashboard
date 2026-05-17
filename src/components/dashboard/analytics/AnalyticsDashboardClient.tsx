@@ -1074,6 +1074,27 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
     verificationEventsTotal: 0,
   }
 
+  const applyStats = React.useCallback((rawStats: Partial<DashboardStats> | null | undefined) => {
+    if (!rawStats) return
+    setLiveStats({
+      totalCertificates: rawStats.totalCertificates ?? 0,
+      pendingJobs: rawStats.pendingJobs ?? 0,
+      verificationsToday: rawStats.verificationsToday ?? 0,
+      revokedCertificates: rawStats.revokedCertificates ?? 0,
+      verificationEventsTotal: rawStats.verificationEventsTotal ?? 0,
+    })
+  }, [])
+
+  // Refresh stats on mount to pick up any changes since server rendered the page
+  React.useEffect(() => {
+    let cancelled = false
+    api.dashboard.getStats().then((data) => {
+      if (!cancelled) applyStats(data.stats)
+    }).catch(() => { /* silent */ })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Auto-refresh stats every 30s while pending jobs are processing
   React.useEffect(() => {
     if (!initialData) return
@@ -1081,32 +1102,20 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
     const refresh = async () => {
       try {
         const data = await api.dashboard.getStats()
-        if (!cancelled && data.stats) setLiveStats({
-          totalCertificates: data.stats.totalCertificates ?? 0,
-          pendingJobs: data.stats.pendingJobs ?? 0,
-          verificationsToday: data.stats.verificationsToday ?? 0,
-          revokedCertificates: data.stats.revokedCertificates ?? 0,
-          verificationEventsTotal: data.stats.verificationEventsTotal ?? 0,
-        })
+        if (!cancelled) applyStats(data.stats)
       } catch { /* silent */ }
     }
     const id = setInterval(() => {
       if (stats.pendingJobs > 0) refresh()
     }, 30_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [initialData, stats.pendingJobs])
+  }, [initialData, stats.pendingJobs, applyStats])
 
   const handleManualRefresh = async () => {
     setRefreshing(true)
     try {
       const data = await api.dashboard.getStats()
-      if (data.stats) setLiveStats({
-        totalCertificates: data.stats.totalCertificates ?? 0,
-        pendingJobs: data.stats.pendingJobs ?? 0,
-        verificationsToday: data.stats.verificationsToday ?? 0,
-        revokedCertificates: data.stats.revokedCertificates ?? 0,
-        verificationEventsTotal: data.stats.verificationEventsTotal ?? 0,
-      })
+      applyStats(data.stats)
     } catch { /* silent */ }
     finally { setRefreshing(false) }
   }

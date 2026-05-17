@@ -80,7 +80,8 @@ function extractErrorReason(event: DeliveryEmailEvent): string | null {
 function extractRecipient(event: DeliveryEmailEvent): string | null {
   const p = event.raw_payload as Record<string, unknown>;
   const data = (p.data as Record<string, unknown> | undefined) ?? {};
-  const to = data.to ?? data.recipient ?? data.email_address;
+  // Resend uses data.email; others use data.to / data.recipient / data.email_address
+  const to = data.email ?? data.to ?? data.recipient ?? data.email_address ?? p.email ?? p.to;
   if (Array.isArray(to)) return (to as string[]).join(", ");
   if (typeof to === "string") return to;
   return null;
@@ -371,10 +372,27 @@ export default function DeliveryEventsPage() {
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <Activity className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-            <p className="font-medium">No events yet</p>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              Events appear here when emails are sent, delivered, opened, clicked, or bounced via your provider webhook.
-            </p>
+            {eventType !== "__all__" || provider !== "__all__" ? (
+              <>
+                <p className="font-medium">No matching events</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+                  No events match the selected filters. Try changing the event type or provider.
+                </p>
+                <button
+                  className="mt-3 text-sm text-primary underline underline-offset-2"
+                  onClick={() => { setEventType("__all__"); setProvider("__all__"); setPage(0); }}
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="font-medium">No events yet</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Events appear here when emails are sent, delivered, opened, clicked, or bounced via your provider webhook.
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

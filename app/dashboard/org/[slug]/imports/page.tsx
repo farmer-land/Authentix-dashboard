@@ -216,17 +216,23 @@ function UseForGenerationModal({ importId, importJob, orgSlug, onClose }: UseFor
       const resp = await api.templates.list({ sort_by: "created_at", sort_order: "desc", limit: 50 });
       const items = (resp as any).items ?? [];
 
-      // Fetch preview URLs in parallel (silently skip failures)
-      const withPreviews = await Promise.all(
-        items.map(async (t: any) => {
-          try {
-            const url = await api.templates.getPreviewUrl(t.id);
-            return { ...t, preview_url: url };
-          } catch {
-            return t;
-          }
-        })
-      );
+      // Fetch preview URLs with max 5 concurrent requests to avoid hammering the API
+      const CONCURRENCY = 5;
+      const withPreviews: any[] = [];
+      for (let i = 0; i < items.length; i += CONCURRENCY) {
+        const batch = items.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(async (t: any) => {
+            try {
+              const url = await api.templates.getPreviewUrl(t.id);
+              return { ...t, preview_url: url };
+            } catch {
+              return t;
+            }
+          })
+        );
+        withPreviews.push(...results);
+      }
       setTemplates(withPreviews);
     } catch {
       setTemplates([]);

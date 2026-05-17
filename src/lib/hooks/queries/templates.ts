@@ -30,7 +30,7 @@ export function useTemplates(params?: {
   const query = useQuery({
     queryKey: templateKeys.list(slug, params),
     queryFn: () => api.templates.list(params),
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000,
   });
 
   return {

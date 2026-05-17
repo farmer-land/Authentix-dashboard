@@ -41,12 +41,15 @@ import {
   Calendar,
   X,
   SlidersHorizontal,
+  Loader2,
 } from "lucide-react";
 import { type Certificate } from "@/lib/api/client";
 import { useCertificates } from "@/lib/hooks/queries/certificates";
 import { useCatalogCategories, useCatalogSubcategories } from "@/lib/hooks/queries/catalog";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { api } from "@/lib/api/client";
 
 interface FilterState {
   search: string;
@@ -72,6 +75,7 @@ export default function CertificatesPage() {
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(initialFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [previewCertificate, setPreviewCertificate] = useState<Certificate | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const { certificates, pagination, loading, refetch } = useCertificates({
     page,
@@ -122,13 +126,14 @@ export default function CertificatesPage() {
   };
 
   const handleDownload = async (certificate: Certificate) => {
+    const url = certificate.download_url;
+    if (!url) {
+      toast.error("Download URL not available for this certificate");
+      return;
+    }
     try {
-      const url = certificate.download_url;
-      if (!url) {
-        alert("Download URL not available for this certificate");
-        return;
-      }
       const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -139,8 +144,66 @@ export default function CertificatesPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      console.error("Error downloading certificate:", err);
-      alert("Failed to download certificate");
+      toast.error(`Failed to download: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  };
+
+  const handleExportAll = async () => {
+    if (exporting) return;
+    setExporting(true);
+    const toastId = toast.loading("Preparing export…");
+    try {
+      // Fetch all pages up to 2000 certificates (reasonable export limit)
+      const limit = 200;
+      let offset = 0;
+      const all: Certificate[] = [];
+      while (true) {
+        const result = await api.certificates.list({
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          search: appliedFilters.search || undefined,
+          status: (appliedFilters.status || undefined) as 'active' | 'revoked' | 'expired' | undefined,
+          category_id: appliedFilters.category || undefined,
+          subcategory_id: appliedFilters.subcategory || undefined,
+          date_from: appliedFilters.dateFrom || undefined,
+          date_to: appliedFilters.dateTo || undefined,
+          sort_by: "created_at",
+          sort_order: "desc",
+        });
+        all.push(...result.items);
+        if (all.length >= result.pagination.total || all.length >= 2000) break;
+        offset += limit;
+      }
+      // Build CSV
+      const headers = ["Certificate #", "Recipient Name", "Email", "Phone", "Category", "Subcategory", "Status", "Issue Date", "Expiry Date", "Verification URL"];
+      const rows = all.map(c => [
+        c.certificate_number,
+        c.recipient_name,
+        c.recipient_email ?? "",
+        c.recipient_phone ?? "",
+        c.category?.name ?? "",
+        c.subcategory?.name ?? "",
+        c.status,
+        format(new Date(c.issued_at), "yyyy-MM-dd"),
+        c.expires_at ? format(new Date(c.expires_at), "yyyy-MM-dd") : "",
+        c.qr_payload_url ?? c.verification_path ?? "",
+      ]);
+      const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+      const csv = [headers.map(esc).join(","), ...rows.map(r => r.map(esc).join(","))].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `certificates-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${all.length} certificates`, { id: toastId });
+    } catch (err) {
+      toast.error(`Export failed: ${err instanceof Error ? err.message : "unknown error"}`, { id: toastId });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -171,9 +234,11 @@ export default function CertificatesPage() {
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
           </Button>
-          <Button className="gap-2">
-            <Download className="h-4 w-4" />
-            Export All
+          <Button className="gap-2" onClick={handleExportAll} disabled={exporting}>
+            {exporting
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Download className="h-4 w-4" />}
+            {exporting ? "Exporting…" : "Export All"}
           </Button>
         </div>
       </div>
@@ -330,7 +395,7 @@ export default function CertificatesPage() {
               </Button>
             ) : (
               <Button asChild>
-                <a href="/dashboard/generate-certificate">Generate Certificates</a>
+                <a href="generate-certificate">Generate Certificates</a>
               </Button>
             )}
           </CardContent>
