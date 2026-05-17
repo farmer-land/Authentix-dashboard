@@ -399,6 +399,14 @@ export const deliveryApi = {
     return data.data!;
   },
 
+  importContactsBatch: async (rows: Array<Record<string, string>>): Promise<{ imported: number; skipped: number; errors: string[] }> => {
+    const response = await apiRequest<{ imported: number; skipped: number; errors: string[] }>(
+      "/delivery/contacts/import-batch",
+      { method: "POST", body: JSON.stringify({ rows }) },
+    );
+    return response.data!;
+  },
+
   deleteContact: async (id: string): Promise<void> => {
     await apiRequest(`/delivery/contacts/${id}`, { method: "DELETE" });
   },
