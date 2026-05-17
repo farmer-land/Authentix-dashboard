@@ -443,62 +443,6 @@ export function DataSelector({
         </>
       )}
 
-      {/* Saved Imports */}
-      {savedImports.length > 0 && showUpload && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Recent Uploads</h3>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Info className="w-3 h-3" />
-              All recent uploads across your templates
-            </span>
-          </div>
-          {loadImportError && (
-            <p className="text-sm text-destructive mb-3">{loadImportError}</p>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {savedImports.slice(0, 5).map((importJob) => (
-              <Card
-                key={importJob.id}
-                className="p-4 hover:shadow-md transition-all cursor-pointer group"
-                onClick={async () => {
-                  if (!onLoadImport) return;
-                  setLoadImportError(null);
-                  setIsProcessing(true);
-                  try {
-                    await onLoadImport(importJob.id);
-                    // Transition to the mapping UI — parent has now set importedData
-                    setShowUpload(false);
-                  } catch {
-                    setLoadImportError('Failed to load import data. Please try again.');
-                  } finally {
-                    setIsProcessing(false);
-                  }
-                }}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <FileSpreadsheet className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <h4 className="font-medium truncate">{importJob.file_name}</h4>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(importJob.total_rows || 0).toLocaleString()} recipient{importJob.total_rows !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <Badge variant={importJob.status === 'completed' ? 'default' : 'secondary'} className="ml-2">
-                    {importJob.status}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {importJob.created_at ? new Date(importJob.created_at).toLocaleDateString() : ''}
-                </p>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Upload New Data */}
       {showUpload ? (
         <div className="space-y-6">
@@ -584,6 +528,61 @@ export function DataSelector({
               }}
               initialData={manualEditSeed}
             />
+          )}
+
+          {/* Saved Imports — shown below the upload area */}
+          {savedImports.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold">Recent Uploads</h3>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="w-3 h-3" />
+                  All recent uploads across your templates
+                </span>
+              </div>
+              {loadImportError && (
+                <p className="text-sm text-destructive mb-3">{loadImportError}</p>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {savedImports.slice(0, 6).map((importJob) => (
+                  <Card
+                    key={importJob.id}
+                    className="p-4 hover:shadow-md transition-all cursor-pointer group"
+                    onClick={async () => {
+                      if (!onLoadImport) return;
+                      setLoadImportError(null);
+                      setIsProcessing(true);
+                      try {
+                        await onLoadImport(importJob.id);
+                        setShowUpload(false);
+                      } catch {
+                        setLoadImportError('Failed to load import data. Please try again.');
+                      } finally {
+                        setIsProcessing(false);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <h4 className="font-medium truncate text-sm">{importJob.file_name}</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {(importJob.total_rows || 0).toLocaleString()} recipient{importJob.total_rows !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <Badge variant={importJob.status === 'completed' ? 'default' : 'secondary'} className="ml-2 shrink-0">
+                        {importJob.status}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {importJob.created_at ? new Date(importJob.created_at).toLocaleDateString() : ''}
+                    </p>
+                  </Card>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       ) : (

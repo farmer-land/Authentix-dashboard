@@ -40,12 +40,15 @@ export default function GenerateCertificatePage() {
   // Get query parameters
   const searchParams = useSearchParams();
   const templateIdFromUrl = searchParams.get('template');
+  const importIdFromUrl = searchParams.get('import');
   const pathname = usePathname();
   const router = useRouter();
   const orgSlug = useOrgSlug();
 
   // Prevents the URL-param auto-select from re-firing when user deliberately goes back to template chooser
   const skipAutoSelectRef = useRef(false);
+  // Tracks whether we've already loaded the ?import= param so we don't reload it repeatedly
+  const importUrlLoadedRef = useRef(false);
   // Tracks whether we've pushed a history entry for the design step (for browser-back interception)
   const designHistoryPushedRef = useRef(false);
 
@@ -197,6 +200,25 @@ export default function GenerateCertificatePage() {
   useEffect(() => {
     setPanelReady(false);
   }, [template?.id, previewOpen]);
+
+  // ── Auto-load ?import=ID when template is ready ───────────────────────────────
+  // Triggered once per page load: when a template finishes loading AND an import
+  // ID was passed in the URL (e.g. from the Imports page "Generate" button).
+  useEffect(() => {
+    if (
+      importIdFromUrl &&
+      !importUrlLoadedRef.current &&
+      template?.id &&
+      !isTemplateLoading &&
+      !importedData
+    ) {
+      importUrlLoadedRef.current = true;
+      handleLoadImport(importIdFromUrl).catch(() => {
+        // Silent — DataSelector will show the empty upload state as fallback
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importIdFromUrl, template?.id, isTemplateLoading, importedData]);
 
   // ── Refresh guard: design step with no template → go back to template chooser ──
   useEffect(() => {
