@@ -1777,7 +1777,7 @@ export default function GenerateCertificatePage() {
           {!previewOpen && (
             <>
               {!leftPanelVisible && (
-                <div className="shrink-0 flex items-center py-3 pl-3 bg-background">
+                <div className="shrink-0 flex items-center py-3 pl-3" style={{ backgroundColor: 'var(--canvas-bg)' }}>
                   <div
                     className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
