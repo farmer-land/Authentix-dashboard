@@ -13,8 +13,9 @@ import { Button } from '@/components/ui/button';
 import {
   Image as ImageIcon, FileText,
   CheckCircle2, Layers, Palette, Database, Wand2,
-  ChevronDown, ChevronUp, X, Eye, Plus, ChevronRight, Check,
+  ChevronDown, ChevronUp, X, Eye, ChevronRight,
   SlidersHorizontal, Maximize2,
+  User, BookOpen, Calendar, Type, QrCode, Mail, Phone,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -80,7 +81,6 @@ export default function GenerateCertificatePage() {
   // True when the active template was uploaded without a category — show a soft prompt in design view
   const [templateNeedsCategory, setTemplateNeedsCategory] = useState(false);
   // Data-fields panel state
-  const [selectedDataHeaders, setSelectedDataHeaders] = useState<Set<string>>(new Set());
   const [addMoreOpen, setAddMoreOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(true);
 
@@ -942,6 +942,19 @@ export default function GenerateCertificatePage() {
     return `${stripped} (${n})`;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const FIELD_ICONS: Record<FieldType, any> = {
+    name: User,
+    course: BookOpen,
+    start_date: Calendar,
+    end_date: Calendar,
+    custom_text: Type,
+    qr_code: QrCode,
+    image: ImageIcon,
+    email: Mail,
+    phone: Phone,
+  };
+
   const headerToFieldType = (header: string): FieldType => {
     const h = header.toLowerCase().replace(/[\s-]+/g, '_');
     if (['recipient_name', 'full_name', 'name', 'first_name', 'last_name'].includes(h)) return 'name';
@@ -993,20 +1006,17 @@ export default function GenerateCertificatePage() {
       nextY += scaledHeight + Math.round(16 * hScale);
     }
     setFields(prev => [...prev, ...newFields]);
-    setSelectedDataHeaders(new Set());
     setLayersOpen(true);
   };
 
   const handleAddField = (field: CertificateField) => {
     pushToHistory(fields);
-    const panelWasHidden = !rightPanelVisible;
     setFields((prev) => {
       const uniqueLabel = makeUniqueLabel(field.label, prev);
       return [...prev, { ...field, label: uniqueLabel }];
     });
     setSelectedFieldId(field.id);
     setRightPanelVisible(true);
-    if (panelWasHidden) setFitTrigger(t => t + 1);
   };
 
   const handleUpdateField = (fieldId: string, updates: Partial<CertificateField>) => {
@@ -1079,10 +1089,8 @@ export default function GenerateCertificatePage() {
 
   const handleFieldSelect = (fieldId: string) => {
     if (previewOpen) return;
-    const panelWasHidden = !rightPanelVisible;
     setSelectedFieldId(fieldId);
     setRightPanelVisible(true);
-    if (panelWasHidden) setFitTrigger(t => t + 1);
   };
 
   const handleTemplateResizeStart = (width: number, height: number) => {
@@ -1769,7 +1777,7 @@ export default function GenerateCertificatePage() {
           {!previewOpen && (
             <>
               {!leftPanelVisible && (
-                <div className="shrink-0 flex items-center py-3 pl-3">
+                <div className="shrink-0 flex items-center py-3 pl-3 bg-background">
                   <div
                     className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
@@ -1859,55 +1867,25 @@ export default function GenerateCertificatePage() {
                         {/* Data fields from the imported file */}
                         {importedData && importedData.headers.length > 0 && (
                           <div className="px-3 pt-3 pb-2">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">From your file</p>
-                              {selectedDataHeaders.size > 0 && (
-                                <span className="text-[10px] text-muted-foreground/60">{selectedDataHeaders.size} selected</span>
-                              )}
-                            </div>
-                            <div className="space-y-1">
+                            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">From your file</p>
+                            <div className="grid grid-cols-2 gap-2">
                               {importedData.headers.map((h) => {
                                 const fieldType = headerToFieldType(h);
-                                const config = FIELD_TYPE_CONFIG[fieldType];
-                                const isChecked = selectedDataHeaders.has(h);
+                                const Icon = FIELD_ICONS[fieldType];
                                 const displayLabel = h.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
                                 return (
-                                  <div
+                                  <button
                                     key={h}
-                                    onClick={() => setSelectedDataHeaders(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(h)) next.delete(h); else next.add(h);
-                                      return next;
-                                    })}
-                                    className={cn(
-                                      'flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer select-none transition-colors border',
-                                      isChecked ? 'bg-primary/8 border-primary/25' : 'border-transparent hover:bg-muted/60'
-                                    )}
+                                    onClick={() => handleAddDataFields([h])}
+                                    className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-center group select-none"
                                   >
-                                    <span className={cn(
-                                      'shrink-0 h-3.5 w-3.5 rounded-sm border flex items-center justify-center transition-colors',
-                                      isChecked ? 'bg-primary border-primary' : 'border-border'
-                                    )}>
-                                      {isChecked && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-medium leading-none truncate">{displayLabel}</p>
-                                      <p className="text-[10px] text-muted-foreground mt-0.5">{config.label}</p>
-                                    </div>
-                                  </div>
+                                    <Icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                                    <span className="text-[11px] font-medium leading-tight line-clamp-2 w-full">{displayLabel}</span>
+                                    <span className="text-[9px] text-muted-foreground/50 group-hover:text-primary/60 transition-colors mt-auto">Add to template</span>
+                                  </button>
                                 );
                               })}
                             </div>
-                            {selectedDataHeaders.size > 0 && (
-                              <Button
-                                size="sm"
-                                className="w-full mt-2 h-8 text-xs"
-                                onClick={() => handleAddDataFields(Array.from(selectedDataHeaders))}
-                              >
-                                <Plus className="w-3.5 h-3.5 mr-1.5" />
-                                Add {selectedDataHeaders.size} field{selectedDataHeaders.size !== 1 ? 's' : ''} to template
-                              </Button>
-                            )}
                           </div>
                         )}
 
@@ -2109,37 +2087,15 @@ export default function GenerateCertificatePage() {
                 </button>
               </div>
             </div>
-          </div>{/* end canvas area */}
-
-          {/* ── Right panel section (flex child — carves out its own space) ── */}
-          {!previewOpen && (
-            <>
-              {selectedField && !rightPanelVisible && (
-                <div className="shrink-0 flex items-center py-3 pr-3">
-                  <div
-                    className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                    style={{ width: 40 }}
-                    onClick={() => { setRightPanelVisible(true); setFitTrigger(t => t + 1); }}
-                    title="Expand properties panel"
-                  >
-                    <Palette className="w-4 h-4 text-muted-foreground/70" />
-                    <span
-                      className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
-                      style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                    >
-                      Props
-                    </span>
-                    <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
-                  </div>
-                </div>
-              )}
-              {selectedField && rightPanelVisible && (
-                <div className="shrink-0 w-80 m-3 ml-0 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden">
+            {/* ── Right panel — overlay inside canvas, never pushes template ── */}
+            {!previewOpen && selectedField && (
+              rightPanelVisible ? (
+                <div className="absolute top-3 right-3 bottom-12 z-40 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
                   <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
                     <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
                     <button
-                      onClick={() => { setRightPanelVisible(false); setFitTrigger(t => t + 1); }}
+                      onClick={() => setRightPanelVisible(false)}
                       className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                       title="Hide panel"
                     >
@@ -2179,9 +2135,27 @@ export default function GenerateCertificatePage() {
                     />
                   </div>
                 </div>
-              )}
-            </>
-          )}
+              ) : (
+                <div className="absolute top-1/2 right-3 -translate-y-1/2 z-40 pointer-events-auto">
+                  <div
+                    className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                    style={{ width: 40 }}
+                    onClick={() => setRightPanelVisible(true)}
+                    title="Expand properties panel"
+                  >
+                    <Palette className="w-4 h-4 text-muted-foreground/70" />
+                    <span
+                      className="text-[9px] font-semibold text-muted-foreground tracking-widest uppercase"
+                      style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                    >
+                      Props
+                    </span>
+                    <Maximize2 className="w-3 h-3 text-muted-foreground/40" />
+                  </div>
+                </div>
+              )
+            )}
+          </div>{/* end canvas area */}
 
           {/* ── Preview panel ── */}
           {previewOpen && (

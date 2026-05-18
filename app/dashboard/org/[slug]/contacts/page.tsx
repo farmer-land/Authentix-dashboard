@@ -313,6 +313,53 @@ function ImportAccordionRow({
   );
 }
 
+// ── Import dialog (drag-drop + file picker) ───────────────────────────────────
+
+function ImportDialog({ onFile, onClose }: { onFile: (file: File) => void; onClose: () => void }) {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) { onFile(file); onClose(); }
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) { onFile(file); onClose(); }
+    e.target.value = "";
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Import contacts</DialogTitle>
+          <p className="text-sm text-muted-foreground">CSV, Excel, TSV, or Markdown</p>
+        </DialogHeader>
+        <div
+          onDragEnter={(e) => { e.preventDefault(); setIsDragOver(true); }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={cn(
+            "border-2 border-dashed rounded-xl px-6 py-10 text-center cursor-pointer transition-colors select-none",
+            isDragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50 hover:bg-muted/30"
+          )}
+        >
+          <Upload className={cn("h-8 w-8 mx-auto mb-3 transition-colors", isDragOver ? "text-primary" : "text-muted-foreground")} />
+          <p className="text-sm font-medium">Drop a file here</p>
+          <p className="text-xs text-muted-foreground mt-1">or click to choose from your computer</p>
+          <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} className="hidden" onChange={handleFile} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function ContactsPage() {
@@ -323,7 +370,7 @@ export default function ContactsPage() {
 
   const [isImporting, setIsImporting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const dragCounterRef = useRef(0);
 
   // File parse → name → mapping pipeline
@@ -518,7 +565,7 @@ export default function ContactsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setShowImportDialog(true)}
             disabled={isImporting}
           >
             {isImporting
@@ -528,17 +575,6 @@ export default function ContactsPage() {
           </Button>
           <p className="text-xs text-muted-foreground hidden sm:block">or drop a file anywhere</p>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_TYPES}
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFileSelect(f);
-            e.target.value = "";
-          }}
-        />
       </div>
 
       {/* Recent import card — shown right after a fresh import, dismissed on action */}
@@ -649,7 +685,7 @@ export default function ContactsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setShowImportDialog(true)}
                     disabled={isImporting}
                   >
                     <Upload className="h-3.5 w-3.5 mr-1.5" /> Import contacts
@@ -673,6 +709,14 @@ export default function ContactsPage() {
           </div>
         )}
       </div>
+
+      {/* Import file dialog */}
+      {showImportDialog && (
+        <ImportDialog
+          onFile={(file) => { setShowImportDialog(false); handleFileSelect(file); }}
+          onClose={() => setShowImportDialog(false)}
+        />
+      )}
 
       {/* Name import dialog */}
       <Dialog
