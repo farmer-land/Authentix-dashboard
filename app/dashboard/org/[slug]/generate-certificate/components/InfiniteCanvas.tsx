@@ -279,34 +279,36 @@ export function InfiniteCanvas({
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
+    // Account for panel overlays so template centers in the visible gap between them
+    const leftW = leftPanelWidth ?? 0;
+    const rightW = rightPanelWidth ?? 0;
+    const availW = cw - leftW - rightW;
     const availH = ch - footerHeight;
     const isLandscape = pdfWidth > pdfHeight;
 
     let fitScale: number;
     if (isLandscape) {
-      // Landscape templates: default to 60 % of the canvas area so the
-      // designer feels less cramped and there's room to work around the template.
       fitScale = clamp(
-        0.6 * Math.min(cw / pdfWidth, availH / pdfHeight),
+        0.6 * Math.min(availW / pdfWidth, availH / pdfHeight),
         MIN_SCALE,
         MAX_SCALE,
       );
     } else {
-      // Portrait templates: fit snugly with 80 px padding on each side.
       const padding = 80;
       fitScale = clamp(
-        Math.min((cw - padding * 2) / pdfWidth, (availH - padding * 2) / pdfHeight),
+        Math.min((availW - padding * 2) / pdfWidth, (availH - padding * 2) / pdfHeight),
         MIN_SCALE,
         MAX_SCALE,
       );
     }
 
-    const centeredX = (cw - pdfWidth * fitScale) / 2;
+    // Offset X by the left panel so the template lands in the visible gap
+    const centeredX = leftW + (availW - pdfWidth * fitScale) / 2;
     const centeredY = (availH - pdfHeight * fitScale) / 2;
     onScaleChange(fitScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
-  }, [pdfWidth, pdfHeight, footerHeight, onScaleChange]);
+  }, [pdfWidth, pdfHeight, footerHeight, leftPanelWidth, rightPanelWidth, onScaleChange]);
 
   // Run auto-fit whenever the template dimensions change
   const prevDimsRef = useRef({ w: 0, h: 0 });
@@ -989,7 +991,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: footerHeight + 20, left: '50%', transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: footerHeight + 20, left: `calc(${leftPanelWidth ?? 0}px + (100% - ${(leftPanelWidth ?? 0) + (rightPanelWidth ?? 0)}px) / 2)`, transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >
