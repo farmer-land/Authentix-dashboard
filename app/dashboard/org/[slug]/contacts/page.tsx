@@ -478,10 +478,18 @@ export default function ContactsPage() {
 
         const parts = [`${totalImported.toLocaleString()} imported`];
         if (totalSkipped > 0) parts.push(`${totalSkipped.toLocaleString()} skipped`);
-        toast.success(parts.join(", "), { id: toastId });
 
         if (allErrors.length > 0) {
-          toast.warning(`${allErrors.length} batch${allErrors.length !== 1 ? "es" : ""} had errors`);
+          console.error('[Import] batch errors:', allErrors);
+          // If nothing was imported at all, show as an error with the actual message
+          if (totalImported === 0) {
+            toast.error('Import failed', { id: toastId, description: allErrors[0] });
+          } else {
+            toast.success(parts.join(", "), { id: toastId });
+            toast.error('Some rows failed', { description: allErrors[0] });
+          }
+        } else {
+          toast.success(parts.join(", "), { id: toastId });
         }
 
         const session: ImportSession = {
