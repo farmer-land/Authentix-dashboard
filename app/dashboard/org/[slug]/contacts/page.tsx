@@ -16,7 +16,8 @@ import {
   Award, Mail, ChevronDown, FileText, Trash2, Search,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEmailContacts } from "@/lib/hooks/queries/delivery";
+import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
+import type { DeliveryTemplate } from "@/lib/api/delivery";
 import { useTemplates } from "@/lib/hooks/queries/templates";
 import { api } from "@/lib/api/client";
 import { formatDistanceToNow } from "date-fns";
@@ -196,6 +197,142 @@ function ContactCertModal({
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
             Open in Designer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Email template picker modal ───────────────────────────────────────────────
+
+const EMAIL_ACCENT_COLORS = [
+  { bg: "from-violet-500 to-indigo-600", bar: "bg-white/30" },
+  { bg: "from-rose-500 to-pink-600",     bar: "bg-white/30" },
+  { bg: "from-amber-500 to-orange-600",  bar: "bg-white/30" },
+  { bg: "from-teal-500 to-emerald-600",  bar: "bg-white/30" },
+  { bg: "from-sky-500 to-blue-600",      bar: "bg-white/30" },
+];
+
+function EmailTemplateMiniPreview({ template, index }: { template: DeliveryTemplate; index: number }) {
+  const accent = EMAIL_ACCENT_COLORS[index % EMAIL_ACCENT_COLORS.length]!;
+  return (
+    <div className="aspect-[4/3] overflow-hidden rounded-t-xl flex flex-col">
+      {/* Header bar */}
+      <div className={`bg-gradient-to-br ${accent.bg} px-3 pt-3 pb-2 shrink-0`}>
+        <div className={`h-1.5 ${accent.bar} rounded-full w-2/3 mb-1`} />
+        <div className={`h-1 ${accent.bar} rounded-full w-1/2 opacity-60`} />
+      </div>
+      {/* Body mock */}
+      <div className="flex-1 bg-white dark:bg-zinc-900 px-3 py-2 space-y-1.5">
+        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-full" />
+        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-4/5" />
+        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-full" />
+        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-3/4" />
+        <div className="mt-2 h-4 rounded bg-gradient-to-r opacity-80 from-zinc-300 to-zinc-200 dark:from-zinc-600 dark:to-zinc-700 w-1/2 mx-auto" />
+      </div>
+    </div>
+  );
+}
+
+function ContactEmailModal({
+  open,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (templateId: string | null) => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const { templates, loading } = useDeliveryTemplates();
+
+  useEffect(() => {
+    if (!open) { setSelected(null); setSearch(""); }
+  }, [open]);
+
+  const items = templates.filter(
+    (t) => t.channel === "email" && (!search || t.name.toLowerCase().includes(search.toLowerCase())),
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-4">
+        <DialogHeader>
+          <DialogTitle>Choose an Email Template</DialogTitle>
+          <p className="text-sm text-muted-foreground">Pick a template to use as the starting point for your campaign.</p>
+        </DialogHeader>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search templates…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
+
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
+          {loading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-40 bg-muted animate-pulse rounded-xl" />
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
+              <Mail className="h-8 w-8" />
+              <p className="text-sm">{search ? "No matching templates" : "No email templates yet"}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {items.map((t, i) => (
+                <button
+                  key={t.id}
+                  onClick={() => setSelected(selected === t.id ? null : t.id)}
+                  className={cn(
+                    "rounded-xl border text-left overflow-hidden transition-all",
+                    selected === t.id
+                      ? "border-primary ring-2 ring-primary/20"
+                      : "border-border hover:border-muted-foreground/50",
+                  )}
+                >
+                  <EmailTemplateMiniPreview template={t} index={i} />
+                  <div className="px-3 py-2 space-y-1">
+                    <p className="text-xs font-semibold truncate">{t.name}</p>
+                    {t.email_subject && (
+                      <p className="text-[10px] text-muted-foreground truncate">{t.email_subject}</p>
+                    )}
+                    {t.variables.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {t.variables.slice(0, 3).map((v) => (
+                          <span key={v} className="px-1.5 py-px rounded bg-muted text-[9px] font-mono text-muted-foreground">
+                            {`{{${v}}}`}
+                          </span>
+                        ))}
+                        {t.variables.length > 3 && (
+                          <span className="text-[9px] text-muted-foreground">+{t.variables.length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={() => onConfirm(null)} className="text-muted-foreground">
+            <Mail className="h-3.5 w-3.5 mr-1.5" /> Start from Scratch
+          </Button>
+          <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
+            Use Template
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -385,6 +522,9 @@ export default function ContactsPage() {
   // Certificate template picker modal
   const [certModal, setCertModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
 
+  // Email template picker modal
+  const [emailModal, setEmailModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
+
   // Delete recent import confirmation
   const [deleteImportTarget, setDeleteImportTarget] = useState<ImportSession | null>(null);
 
@@ -508,6 +648,15 @@ export default function ContactsPage() {
     router.push(url);
   };
 
+  const handleEmailModalConfirm = (templateId: string | null) => {
+    const ref = emailModal.source_ref;
+    setEmailModal({ open: false });
+    const params = new URLSearchParams({ tab: "campaigns" });
+    if (templateId) params.set("fromTemplate", templateId);
+    if (ref) params.set("source_ref", ref);
+    router.push(`/dashboard/org/${orgSlug}/email-templates?${params.toString()}`);
+  };
+
   return (
     <div
       className="relative space-y-6 max-w-7xl mx-auto"
@@ -600,7 +749,7 @@ export default function ContactsPage() {
               onClick={() => {
                 const ref = recentCard.source_ref;
                 setRecentCard(null);
-                router.push(`/dashboard/org/${orgSlug}/email-templates?tab=campaigns&source_ref=${ref}`);
+                setEmailModal({ open: true, source_ref: ref });
               }}
             >
               <Mail className="h-3.5 w-3.5 mr-1.5" /> Send Email Campaign
@@ -634,7 +783,7 @@ export default function ContactsPage() {
           </div>
           <AccordionActions
             onGenerateCerts={() => setCertModal({ open: true })}
-            onSendEmail={() => router.push(`/dashboard/org/${orgSlug}/email-templates?tab=campaigns`)}
+            onSendEmail={() => setEmailModal({ open: true })}
           />
         </button>
 
@@ -684,7 +833,7 @@ export default function ContactsPage() {
                   key={session.source_ref}
                   session={session}
                   onGenerateCerts={(ref) => setCertModal({ open: true, source_ref: ref })}
-                  onSendEmail={(ref) => router.push(`/dashboard/org/${orgSlug}/email-templates?tab=campaigns&source_ref=${ref}`)}
+                  onSendEmail={(ref) => setEmailModal({ open: true, source_ref: ref })}
                   onUseLater={() => removeFromLog(session.source_ref)}
                   onDelete={() => setDeleteImportTarget(session)}
                 />
@@ -718,6 +867,13 @@ export default function ContactsPage() {
         open={certModal.open}
         onClose={() => setCertModal({ open: false })}
         onConfirm={handleCertModalConfirm}
+      />
+
+      {/* Email template picker */}
+      <ContactEmailModal
+        open={emailModal.open}
+        onClose={() => setEmailModal({ open: false })}
+        onConfirm={handleEmailModalConfirm}
       />
 
       {/* Delete import confirmation */}
