@@ -437,6 +437,7 @@ export default function EmailTemplatesPage() {
   const returnToSend = searchParams.get("returnToSend") === "1";
   const activeTab = searchParams.get("tab") ?? "templates";
   const fromTemplate = searchParams.get("fromTemplate") ?? undefined;
+  const fromSourceRef = searchParams.get("source_ref") ?? undefined;
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sample chooser
@@ -599,7 +600,7 @@ export default function EmailTemplatesPage() {
 
       {/* Campaigns tab */}
       {activeTab === "campaigns" && (
-        <BroadcastsContent embedded initialTemplateId={fromTemplate} />
+        <BroadcastsContent embedded initialTemplateId={fromTemplate} initialSourceRef={fromSourceRef} />
       )}
 
       {/* Templates tab content */}

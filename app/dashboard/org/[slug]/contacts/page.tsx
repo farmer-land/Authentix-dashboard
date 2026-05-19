@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Users, Upload, Loader2,
-  Award, Megaphone, Mail, ChevronDown, FileText, Trash2, Search,
+  Award, Mail, ChevronDown, FileText, Trash2, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailContacts } from "@/lib/hooks/queries/delivery";
@@ -67,14 +67,12 @@ function toTitleCase(str: string): string {
 
 function AccordionActions({
   onGenerateCerts,
-  onBroadcast,
-  onDesignEmail,
+  onSendEmail,
   onUseLater,
   onDelete,
 }: {
   onGenerateCerts: () => void;
-  onBroadcast: () => void;
-  onDesignEmail: () => void;
+  onSendEmail: () => void;
   onUseLater?: () => void;
   onDelete?: () => void;
 }) {
@@ -83,11 +81,8 @@ function AccordionActions({
       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onGenerateCerts}>
         <Award className="h-3 w-3 mr-1" /> Certificates
       </Button>
-      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onBroadcast}>
-        <Megaphone className="h-3 w-3 mr-1" /> Broadcast
-      </Button>
-      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onDesignEmail}>
-        <Mail className="h-3 w-3 mr-1" /> Email
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onSendEmail}>
+        <Mail className="h-3 w-3 mr-1" /> Send Email
       </Button>
       {onUseLater && (
         <Button
@@ -213,15 +208,13 @@ function ContactCertModal({
 function ImportAccordionRow({
   session,
   onGenerateCerts,
-  onBroadcast,
-  onDesignEmail,
+  onSendEmail,
   onUseLater,
   onDelete,
 }: {
   session: ImportSession;
   onGenerateCerts: (source_ref: string) => void;
-  onBroadcast: () => void;
-  onDesignEmail: () => void;
+  onSendEmail: (source_ref: string) => void;
   onUseLater: () => void;
   onDelete: () => void;
 }) {
@@ -254,8 +247,7 @@ function ImportAccordionRow({
         </div>
         <AccordionActions
           onGenerateCerts={() => onGenerateCerts(session.source_ref)}
-          onBroadcast={onBroadcast}
-          onDesignEmail={onDesignEmail}
+          onSendEmail={() => onSendEmail(session.source_ref)}
           onUseLater={onUseLater}
           onDelete={onDelete}
         />
@@ -373,13 +365,7 @@ export default function ContactsPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const dragCounterRef = useRef(0);
 
-  // File parse → name → mapping pipeline
-  const [pendingFile, setPendingFile] = useState<{
-    headers: string[];
-    rows: Record<string, string>[];
-    rawName: string;
-  } | null>(null);
-  const [importName, setImportName] = useState("");
+  // File parse → mapping pipeline (name step removed)
   const [parsedFile, setParsedFile] = useState<{
     headers: string[];
     rows: Record<string, string>[];
@@ -415,20 +401,15 @@ export default function ContactsPage() {
         toast.error("Could not detect any columns in this file");
         return;
       }
-      const rawName = stripExtension(parsed.fileName);
-      setPendingFile({ headers: parsed.headers, rows: parsed.rows, rawName });
-      setImportName(rawName);
+      setParsedFile({
+        headers: parsed.headers,
+        rows: parsed.rows,
+        fileName: stripExtension(parsed.fileName),
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to read file");
     }
   }, []);
-
-  const handleNameConfirm = useCallback(() => {
-    if (!pendingFile) return;
-    const name = importName.trim() || pendingFile.rawName;
-    setParsedFile({ headers: pendingFile.headers, rows: pendingFile.rows, fileName: name });
-    setPendingFile(null);
-  }, [pendingFile, importName]);
 
   const handleMappingConfirm = useCallback(
     async (mapping: Record<string, string>) => {
@@ -616,16 +597,13 @@ export default function ContactsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setRecentCard(null); router.push(`/dashboard/org/${orgSlug}/broadcasts`); }}
+              onClick={() => {
+                const ref = recentCard.source_ref;
+                setRecentCard(null);
+                router.push(`/dashboard/org/${orgSlug}/email-templates?tab=campaigns&source_ref=${ref}`);
+              }}
             >
-              <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Send Broadcast
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setRecentCard(null); router.push(`/dashboard/org/${orgSlug}/email-templates`); }}
-            >
-              <Mail className="h-3.5 w-3.5 mr-1.5" /> Design Email
+              <Mail className="h-3.5 w-3.5 mr-1.5" /> Send Email Campaign
             </Button>
             <Button
               variant="ghost"
@@ -656,8 +634,7 @@ export default function ContactsPage() {
           </div>
           <AccordionActions
             onGenerateCerts={() => setCertModal({ open: true })}
-            onBroadcast={() => router.push(`/dashboard/org/${orgSlug}/broadcasts`)}
-            onDesignEmail={() => router.push(`/dashboard/org/${orgSlug}/email-templates`)}
+            onSendEmail={() => router.push(`/dashboard/org/${orgSlug}/email-templates?tab=campaigns`)}
           />
         </button>
 
@@ -707,8 +684,7 @@ export default function ContactsPage() {
                   key={session.source_ref}
                   session={session}
                   onGenerateCerts={(ref) => setCertModal({ open: true, source_ref: ref })}
-                  onBroadcast={() => router.push(`/dashboard/org/${orgSlug}/broadcasts`)}
-                  onDesignEmail={() => router.push(`/dashboard/org/${orgSlug}/email-templates`)}
+                  onSendEmail={(ref) => router.push(`/dashboard/org/${orgSlug}/email-templates?tab=campaigns&source_ref=${ref}`)}
                   onUseLater={() => removeFromLog(session.source_ref)}
                   onDelete={() => setDeleteImportTarget(session)}
                 />
@@ -725,29 +701,6 @@ export default function ContactsPage() {
           onClose={() => setShowImportDialog(false)}
         />
       )}
-
-      {/* Name import dialog */}
-      <Dialog
-        open={!!pendingFile}
-        onOpenChange={(v) => { if (!v) setPendingFile(null); }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Name this import</DialogTitle>
-          </DialogHeader>
-          <Input
-            value={importName}
-            onChange={(e) => setImportName(e.target.value)}
-            placeholder="e.g. January batch, Marketing list…"
-            autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter") handleNameConfirm(); }}
-          />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setPendingFile(null)}>Cancel</Button>
-            <Button onClick={handleNameConfirm}>Continue</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Field mapping modal */}
       <FieldMappingModal

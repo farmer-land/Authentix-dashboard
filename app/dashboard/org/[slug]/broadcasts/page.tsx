@@ -161,10 +161,12 @@ function CampaignWizard({
   onClose,
   onCreated,
   initialTemplateId,
+  initialSourceRef,
 }: {
   onClose: () => void;
   onCreated: (id: string) => void;
   initialTemplateId?: string;
+  initialSourceRef?: string;
 }) {
   const { segments } = useEmailSegments();
   const createMutation = useCreateBroadcast();
@@ -173,10 +175,11 @@ function CampaignWizard({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const { contacts: allContacts, total: contactTotal, loading: contactsLoading } = useEmailContacts({
-    limit: 200,
+    limit: 500,
     offset: 0,
     search: debouncedContactSearch || undefined,
     unsubscribed: false,
+    source_ref: initialSourceRef || undefined,
   });
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
 
@@ -204,7 +207,7 @@ function CampaignWizard({
     from_name: "",
     from_email: "",
     reply_to: "",
-    recipient_mode: "csv",
+    recipient_mode: initialSourceRef ? "contacts" : "csv",
     recipients: [],
     csv_columns: [],
     manual_emails: "",
@@ -802,6 +805,13 @@ function CampaignWizard({
       {/* Contacts picker */}
       {w.recipient_mode === "contacts" && (
         <div className="space-y-3">
+          {initialSourceRef && (
+            <Alert className="border-primary/30 bg-primary/5 py-2">
+              <AlertDescription className="text-xs text-primary">
+                Showing contacts from your imported file — all {contactTotal > 0 ? contactTotal.toLocaleString() : ""} will be included unless you deselect some.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1333,9 +1343,11 @@ function BroadcastCard({
 
 export function BroadcastsContent({
   initialTemplateId,
+  initialSourceRef,
   embedded,
 }: {
   initialTemplateId?: string;
+  initialSourceRef?: string;
   embedded?: boolean;
 } = {}) {
   const { broadcasts, loading, refetch } = useEmailBroadcasts();
@@ -1378,6 +1390,7 @@ export function BroadcastsContent({
               onClose={() => setShowWizard(false)}
               onCreated={() => { setShowWizard(false); refetch(); }}
               initialTemplateId={initialTemplateId}
+              initialSourceRef={initialSourceRef}
             />
           </CardContent>
         </Card>
