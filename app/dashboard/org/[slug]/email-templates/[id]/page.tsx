@@ -10,7 +10,7 @@ import {
   Save, Loader2, AlertCircle, Monitor, Smartphone,
   SendHorizonal, Send, FlaskConical,
   SlidersHorizontal, X, Layers,
-  Eye, EyeOff, Undo2, Redo2, Keyboard,
+  Eye, EyeOff, Undo2, Redo2, Keyboard, Megaphone,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
@@ -1110,6 +1110,19 @@ export default function EmailTemplateEditorPage() {
               </div>
             </PopoverContent>
           </Popover>
+
+          {/* Send as Campaign */}
+          {!returnToSend && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 h-8 text-xs border-zinc-700 text-zinc-400 hover:text-foreground hover:border-zinc-600 shrink-0"
+              onClick={() => router.push(orgPath(`/email-templates?tab=campaigns&fromTemplate=${templateId}`))}
+            >
+              <Megaphone className="w-3.5 h-3.5" />
+              Send as Campaign
+            </Button>
+          )}
 
           {/* Save */}
           <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5 h-8 text-xs bg-[#3ECF8E] hover:bg-[#34b87a] text-white shrink-0">

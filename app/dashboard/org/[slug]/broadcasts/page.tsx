@@ -30,7 +30,7 @@ import * as XLSX from "@e965/xlsx";
 import {
   useEmailBroadcasts, useCreateBroadcast, useUpdateBroadcast,
   useSendBroadcast, useDeleteBroadcast, useDeliveryIntegrations,
-  useEmailContacts,
+  useEmailContacts, useDeliveryTemplates,
 } from "@/lib/hooks/queries/delivery";
 import { useEmailSegments } from "@/lib/hooks/queries/delivery";
 import type { EmailBroadcast, BroadcastStatus, CreateBroadcastDto } from "@/lib/api/client";
@@ -160,13 +160,17 @@ function Steps({ current }: { current: number }) {
 function CampaignWizard({
   onClose,
   onCreated,
+  initialTemplateId,
 }: {
   onClose: () => void;
   onCreated: (id: string) => void;
+  initialTemplateId?: string;
 }) {
   const { segments } = useEmailSegments();
   const createMutation = useCreateBroadcast();
   const { integrations: rawIntegrations } = useDeliveryIntegrations();
+  const { templates: emailTemplates, loading: templatesLoading } = useDeliveryTemplates();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const { contacts: allContacts, total: contactTotal, loading: contactsLoading } = useEmailContacts({
     limit: 200,
@@ -214,6 +218,19 @@ function CampaignWizard({
 
   const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setW(prev => ({ ...prev, [key]: value }));
+
+  // Auto-populate subject + body when an initial template is provided
+  useEffect(() => {
+    if (!initialTemplateId || !emailTemplates.length) return;
+    const t = emailTemplates.find(et => et.id === initialTemplateId);
+    if (t) {
+      setW(prev => ({
+        ...prev,
+        html_body: t.body,
+        subject: prev.subject || t.email_subject || "",
+      }));
+    }
+  }, [initialTemplateId, emailTemplates]);
 
   // Auto-select default integration once integrations load
   useEffect(() => {
@@ -948,83 +965,96 @@ function CampaignWizard({
     </div>
   );
 
-  // ── Step 2: Design ────────────────────────────────────────────────────────
-  const renderStep2 = () => (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label>Subject line <span className="text-red-500">*</span></Label>
-        <Input
-          placeholder="Welcome to Python Batch — April 2026!"
-          value={w.subject}
-          onChange={e => set("subject", e.target.value)}
-          autoFocus
-        />
-      </div>
-
-      {templateVars.length > 0 && (
-        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-          <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-            <span className="font-medium">Variables available in the editor:</span>{" "}
-            {templateVars.map(v => (
-              <code key={v} className="bg-blue-100 dark:bg-blue-900/50 px-1 rounded mx-0.5">
-                {`{{${v}}}`}
-              </code>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Email design <span className="text-red-500">*</span></Label>
-          {w.html_body && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs h-6"
-              onClick={() => setShowEditor(true)}
-            >
-              <Edit2 className="h-3 w-3 mr-1" /> Redesign
-            </Button>
-          )}
+  // ── Step 2: Choose template (or design from scratch) ────────────────────────
+  const renderStep2 = () => {
+    const savedTemplates = emailTemplates.filter(t => t.is_active);
+    return (
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Subject line <span className="text-red-500">*</span></Label>
+          <Input
+            placeholder="Welcome to Python Batch — April 2026!"
+            value={w.subject}
+            onChange={e => set("subject", e.target.value)}
+          />
         </div>
 
-        {w.html_body ? (
-          <div className="rounded-lg border bg-muted/20 overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 text-xs text-green-700 dark:text-green-400">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Email designed — click "Redesign" to edit
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Email template <span className="text-red-500">*</span></Label>
+            {selectedTemplateId && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowEditor(true)}>
+                <Edit2 className="h-3 w-3" /> Edit in designer
+              </Button>
+            )}
+          </div>
+
+          {templatesLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />)}
             </div>
-            <div className="p-3 max-h-40 overflow-hidden pointer-events-none">
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {savedTemplates.map(t => {
+                const isSelected = selectedTemplateId === t.id;
+                const cleanSubject = (t.email_subject ?? "")
+                  .replace(/\{\{[\w.\s]+\}\}/g, "…").trim() || "No subject set";
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => {
+                      setSelectedTemplateId(t.id);
+                      setW(prev => ({
+                        ...prev,
+                        html_body: t.body,
+                        subject: prev.subject || t.email_subject || "",
+                      }));
+                    }}
+                    className={cn(
+                      "rounded-xl border-2 p-3 cursor-pointer transition-all select-none",
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40 hover:bg-muted/30",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-sm font-medium truncate">{t.name}</p>
+                      {isSelected && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground truncate">{cleanSubject}</p>
+                    {t.is_default && (
+                      <span className="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded border border-primary/30 text-primary font-medium leading-none">
+                        Default
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Design from scratch */}
               <div
-                className="text-xs origin-top-left scale-[0.7]"
-                style={{ width: "143%" }}
-                dangerouslySetInnerHTML={{ __html: w.html_body }}
-              />
+                onClick={() => { setSelectedTemplateId(null); set("html_body", ""); setShowEditor(true); }}
+                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 p-3 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 min-h-[84px]"
+              >
+                <PenLine className="h-5 w-5 text-muted-foreground" />
+                <p className="text-xs font-medium text-center text-muted-foreground">Design from scratch</p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div
-            className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-            onClick={() => setShowEditor(true)}
-          >
-            <MailIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="font-medium text-sm">Design your email</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Use the visual editor to compose a beautiful email
-            </p>
-            <Button
-              size="sm"
-              className="mt-3"
-              onClick={e => { e.stopPropagation(); setShowEditor(true); }}
-            >
-              Open editor
-            </Button>
-          </div>
-        )}
+          )}
+
+          {savedTemplates.length === 0 && !templatesLoading && (
+            <Alert>
+              <AlertDescription className="text-xs">
+                No email templates yet.{" "}
+                <a href="../email-templates" className="underline font-medium">Create one in Email Templates</a>{" "}
+                or use "Design from scratch" to compose a one-off email.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ── Step 3: Review & Send ──────────────────────────────────────────────────
   const renderStep3 = () => {
@@ -1301,18 +1331,24 @@ function BroadcastCard({
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-export default function BroadcastsPage() {
+export function BroadcastsContent({
+  initialTemplateId,
+  embedded,
+}: {
+  initialTemplateId?: string;
+  embedded?: boolean;
+} = {}) {
   const { broadcasts, loading, refetch } = useEmailBroadcasts();
   const deleteMutation = useDeleteBroadcast();
 
-  const [showWizard, setShowWizard] = useState(false);
+  const [showWizard, setShowWizard] = useState(!!initialTemplateId);
   const [deleteTarget, setDeleteTarget] = useState<EmailBroadcast | null>(null);
 
   const drafts = broadcasts.filter(b => b.status === "draft");
   const sent   = broadcasts.filter(b => b.status !== "draft");
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className={embedded ? "space-y-6" : "p-6 space-y-6 max-w-4xl mx-auto"}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1341,6 +1377,7 @@ export default function BroadcastsPage() {
             <CampaignWizard
               onClose={() => setShowWizard(false)}
               onCreated={() => { setShowWizard(false); refetch(); }}
+              initialTemplateId={initialTemplateId}
             />
           </CardContent>
         </Card>
@@ -1414,4 +1451,8 @@ export default function BroadcastsPage() {
       </AlertDialog>
     </div>
   );
+}
+
+export default function BroadcastsPage() {
+  return <BroadcastsContent />;
 }

@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
   Mail, Plus, Edit2, Trash2, Loader2, AlertCircle,
-  Copy, Sparkles, ChevronLeft, ChevronRight, Clock, CheckCircle2, PenLine,
+  Copy, Sparkles, ChevronLeft, ChevronRight, Clock, CheckCircle2, PenLine, Megaphone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type DeliveryTemplate } from "@/lib/api/client";
@@ -28,6 +28,7 @@ import { useOrg } from "@/lib/org";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PREDEFINED_TEMPLATES, type PredefinedTemplate } from "./PREDEFINED_TEMPLATES";
 import { cn } from "@/lib/utils";
+import { BroadcastsContent } from "../broadcasts/page";
 
 // ── localStorage helpers ───────────────────────────────────────────────────────
 
@@ -434,6 +435,8 @@ export default function EmailTemplatesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnToSend = searchParams.get("returnToSend") === "1";
+  const activeTab = searchParams.get("tab") ?? "templates";
+  const fromTemplate = searchParams.get("fromTemplate") ?? undefined;
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sample chooser
@@ -541,36 +544,74 @@ export default function EmailTemplatesPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Email Templates</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Email</h1>
           <p className="text-muted-foreground mt-1.5 text-base">
-            Design and manage the emails sent to recipients when certificates are issued.
+            {activeTab === "campaigns"
+              ? "Send emails to groups of recipients — batches, cohorts, or any list."
+              : "Design and manage the emails sent to recipients when certificates are issued."}
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button variant="outline" onClick={() => setShowSamples(true)}>
-            <Sparkles className="w-4 h-4 mr-2" />
-            Sample Email Templates
-          </Button>
-          <Button
-            onClick={handleCreateBlank}
-            disabled={creating}
-            className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
-          >
-            {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
-            Design from Scratch
-          </Button>
-        </div>
+        {activeTab === "templates" && (
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setShowSamples(true)}>
+              <Sparkles className="w-4 h-4 mr-2" />
+              Sample Email Templates
+            </Button>
+            <Button
+              onClick={handleCreateBlank}
+              disabled={creating}
+              className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
+            >
+              {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
+              Design from Scratch
+            </Button>
+          </div>
+        )}
       </div>
 
-      {error && (
+      {/* Tab switcher */}
+      <div className="flex rounded-lg border overflow-hidden w-fit">
+        <button
+          onClick={() => router.push(orgPath("/email-templates"))}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "templates"
+              ? "bg-primary text-primary-foreground"
+              : "bg-background hover:bg-muted text-muted-foreground",
+          )}
+        >
+          <Mail className="w-4 h-4" />
+          Templates
+        </button>
+        <button
+          onClick={() => router.push(orgPath("/email-templates?tab=campaigns"))}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "campaigns"
+              ? "bg-primary text-primary-foreground"
+              : "bg-background hover:bg-muted text-muted-foreground",
+          )}
+        >
+          <Megaphone className="w-4 h-4" />
+          Campaigns
+        </button>
+      </div>
+
+      {/* Campaigns tab */}
+      {activeTab === "campaigns" && (
+        <BroadcastsContent embedded initialTemplateId={fromTemplate} />
+      )}
+
+      {/* Templates tab content */}
+      {activeTab === "templates" && error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      {/* Content */}
-      {loading ? (
+      {/* Templates content */}
+      {activeTab === "templates" && (loading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-8">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Loading templates…</span>
@@ -657,7 +698,7 @@ export default function EmailTemplatesPage() {
           )}
 
         </div>
-      )}
+      ))}
 
       {/* Sample chooser modal */}
       <Dialog open={showSamples} onOpenChange={setShowSamples}>
