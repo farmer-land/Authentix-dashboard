@@ -459,53 +459,66 @@ function CampaignWizard({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Send From <span className="text-red-500">*</span></Label>
-        {integrationOptions.length > 0 ? (
-          <Select
-            value={selectedIntegrationId}
-            onValueChange={(id) => {
-              const opt = integrationOptions.find(o => o.id === id);
-              if (!opt) return;
-              setSelectedIntegrationId(id);
-              setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
-            }}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue placeholder="Select sender…" />
-            </SelectTrigger>
-            <SelectContent>
-              {integrationOptions.map(opt => (
-                <SelectItem key={opt.id} value={opt.id}>
-                  <span className="flex items-center gap-2">
-                    <span>{opt.name}</span>
-                    <span className="text-xs text-muted-foreground">{opt.email}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              placeholder="Sender name"
-              value={w.from_name}
-              onChange={e => set("from_name", e.target.value)}
-            />
-            <Input
-              placeholder="hello@yourdomain.com"
-              value={w.from_email}
-              onChange={e => set("from_email", e.target.value)}
-            />
-          </div>
-        )}
-        {integrationOptions.length === 0 && (
-          <p className="text-[11px] text-muted-foreground">No email integrations configured. <a href="../settings/delivery" className="underline">Set one up</a> to auto-fill this.</p>
-        )}
-        {w.from_email && (
-          <p className="text-[11px] text-muted-foreground">Sending as: <span className="font-medium text-foreground">{w.from_name} &lt;{w.from_email}&gt;</span></p>
-        )}
-      </div>
+      {/* Send From — hidden when exactly 1 integration (auto-selected) */}
+      {integrationOptions.length !== 1 && (
+        <div className="space-y-1.5">
+          <Label>Send From <span className="text-red-500">*</span></Label>
+          {integrationOptions.length > 1 ? (
+            <Select
+              value={selectedIntegrationId}
+              onValueChange={(id) => {
+                const opt = integrationOptions.find(o => o.id === id);
+                if (!opt) return;
+                setSelectedIntegrationId(id);
+                setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
+              }}
+            >
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="Select sender…" />
+              </SelectTrigger>
+              <SelectContent>
+                {integrationOptions.map(opt => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    <span className="flex items-center gap-2">
+                      <span>{opt.name}</span>
+                      <span className="text-xs text-muted-foreground">{opt.email}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                placeholder="Sender name"
+                value={w.from_name}
+                onChange={e => set("from_name", e.target.value)}
+              />
+              <Input
+                placeholder="hello@yourdomain.com"
+                value={w.from_email}
+                onChange={e => set("from_email", e.target.value)}
+              />
+            </div>
+          )}
+          {integrationOptions.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">No email sender configured. <a href="../settings/delivery" className="underline font-medium">Add one in Settings</a>.</p>
+          )}
+        </div>
+      )}
+      {/* Compact sender confirmation when auto-selected from single integration */}
+      {w.from_email && (
+        <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
+          <MailIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground flex-1 min-w-0">
+            Sending as <span className="font-medium text-foreground">{w.from_name}</span>
+            <span className="ml-1 font-mono">&lt;{w.from_email}&gt;</span>
+          </p>
+          {integrationOptions.length > 1 && (
+            <a href="../settings/delivery" className="text-[10px] text-muted-foreground/60 hover:text-foreground underline shrink-0">Manage</a>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label>Reply-to <span className="text-xs text-muted-foreground">(optional)</span></Label>
