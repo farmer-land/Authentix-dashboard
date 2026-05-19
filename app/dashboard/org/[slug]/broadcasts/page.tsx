@@ -170,7 +170,7 @@ function CampaignWizard({
 }) {
   const { segments } = useEmailSegments();
   const createMutation = useCreateBroadcast();
-  const { integrations: rawIntegrations } = useDeliveryIntegrations();
+  const { integrations: rawIntegrations, loading: integrationsLoading } = useDeliveryIntegrations();
   const { templates: emailTemplates, loading: templatesLoading } = useDeliveryTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
@@ -313,7 +313,7 @@ function CampaignWizard({
     : [];
 
   // ── Step validation ────────────────────────────────────────────────────────
-  const step0Valid = w.name.trim() && w.from_email.trim() && w.from_name.trim();
+  const step0Valid = !!w.name.trim() && !!w.from_email.trim() && !!w.from_name.trim();
   const step1Valid = w.recipient_mode === "segment"
     ? !!w.segment_id
     : w.recipient_mode === "contacts"
@@ -462,8 +462,10 @@ function CampaignWizard({
       {/* Send From — hidden when exactly 1 integration (auto-selected) */}
       {integrationOptions.length !== 1 && (
         <div className="space-y-1.5">
-          <Label>Send From <span className="text-red-500">*</span></Label>
-          {integrationOptions.length > 1 ? (
+          <Label>Send From {integrationOptions.length > 1 && <span className="text-red-500">*</span>}</Label>
+          {integrationsLoading ? (
+            <div className="h-10 rounded-md bg-muted animate-pulse" />
+          ) : integrationOptions.length > 1 ? (
             <Select
               value={selectedIntegrationId}
               onValueChange={(id) => {
@@ -488,21 +490,10 @@ function CampaignWizard({
               </SelectContent>
             </Select>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                placeholder="Sender name"
-                value={w.from_name}
-                onChange={e => set("from_name", e.target.value)}
-              />
-              <Input
-                placeholder="hello@yourdomain.com"
-                value={w.from_email}
-                onChange={e => set("from_email", e.target.value)}
-              />
-            </div>
-          )}
-          {integrationOptions.length === 0 && (
-            <p className="text-[11px] text-muted-foreground">No email sender configured. <a href="../settings/delivery" className="underline font-medium">Add one in Settings</a>.</p>
+            <p className="text-[11px] text-muted-foreground">
+              No email sender configured.{" "}
+              <a href="../settings/delivery" className="underline font-medium">Add one in Settings</a>.
+            </p>
           )}
         </div>
       )}
