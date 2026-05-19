@@ -89,17 +89,17 @@ const NAVIGATION_GROUPS: readonly NavGroup[] = [
   {
     label: "Certificates",
     items: [
-      { name: "Templates", href: "/templates",              icon: FileText  },
-      { name: "Issue",     href: "/generate-certificate",   icon: Sparkles  },
-      { name: "Issued",    href: "/certificates",            icon: FileCheck },
-      { name: "Verify",    href: "/verification-logs",       icon: Shield    },
+      { name: "Templates",      href: "/templates",              icon: FileText  },
+      { name: "Generate",       href: "/generate-certificate",   icon: Sparkles  },
+      { name: "Issued",         href: "/certificates",            icon: FileCheck },
+      { name: "Verify",         href: "/verification-logs",       icon: Shield    },
     ],
   },
   {
     label: "Email",
     items: [
-      { name: "Email",     href: "/email-templates",         icon: Mail      },
-      { name: "Delivery",  href: "/delivery-events",         icon: Activity  },
+      { name: "Email",          href: "/email-templates",         icon: Mail      },
+      { name: "Delivery Logs",  href: "/delivery-events",         icon: Activity  },
     ],
   },
   {

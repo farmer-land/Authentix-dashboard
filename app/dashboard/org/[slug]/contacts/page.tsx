@@ -206,30 +206,28 @@ function ContactCertModal({
 
 // ── Email template picker modal ───────────────────────────────────────────────
 
-const EMAIL_ACCENT_COLORS = [
-  { bg: "from-violet-500 to-indigo-600", bar: "bg-white/30" },
-  { bg: "from-rose-500 to-pink-600",     bar: "bg-white/30" },
-  { bg: "from-amber-500 to-orange-600",  bar: "bg-white/30" },
-  { bg: "from-teal-500 to-emerald-600",  bar: "bg-white/30" },
-  { bg: "from-sky-500 to-blue-600",      bar: "bg-white/30" },
-];
-
-function EmailTemplateMiniPreview({ template, index }: { template: DeliveryTemplate; index: number }) {
-  const accent = EMAIL_ACCENT_COLORS[index % EMAIL_ACCENT_COLORS.length]!;
+function EmailTemplateMiniPreview() {
   return (
-    <div className="aspect-[4/3] overflow-hidden rounded-t-xl flex flex-col">
-      {/* Header bar */}
-      <div className={`bg-gradient-to-br ${accent.bg} px-3 pt-3 pb-2 shrink-0`}>
-        <div className={`h-1.5 ${accent.bar} rounded-full w-2/3 mb-1`} />
-        <div className={`h-1 ${accent.bar} rounded-full w-1/2 opacity-60`} />
+    <div className="aspect-4/3 overflow-hidden rounded-t-xl bg-zinc-950 flex flex-col">
+      {/* Chrome strip */}
+      <div className="h-5 bg-zinc-900 border-b border-zinc-800/80 flex items-center px-2 gap-1 shrink-0">
+        <div className="flex gap-0.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="w-1 h-1 rounded-full bg-zinc-700" />
+          ))}
+        </div>
+        <div className="flex-1 h-2 rounded bg-zinc-800 ml-1 max-w-14" />
       </div>
-      {/* Body mock */}
-      <div className="flex-1 bg-white dark:bg-zinc-900 px-3 py-2 space-y-1.5">
-        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-full" />
-        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-4/5" />
-        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-full" />
-        <div className="h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full w-3/4" />
-        <div className="mt-2 h-4 rounded bg-gradient-to-r opacity-80 from-zinc-300 to-zinc-200 dark:from-zinc-600 dark:to-zinc-700 w-1/2 mx-auto" />
+      {/* Body */}
+      <div className="flex-1 px-3 py-2.5 space-y-1.5">
+        <div className="h-1.5 rounded bg-zinc-700 w-3/5" />
+        <div className="h-1 rounded bg-zinc-800 w-2/5" />
+        <div className="space-y-1 pt-1">
+          <div className="h-1 rounded bg-zinc-800 w-full" />
+          <div className="h-1 rounded bg-zinc-800 w-11/12" />
+          <div className="h-1 rounded bg-zinc-800 w-3/4" />
+        </div>
+        <div className="pt-1 h-3 rounded bg-zinc-700/80 w-14 mx-auto" />
       </div>
     </div>
   );
@@ -301,21 +299,21 @@ function ContactEmailModal({
                       : "border-border hover:border-muted-foreground/50",
                   )}
                 >
-                  <EmailTemplateMiniPreview template={t} index={i} />
+                  <EmailTemplateMiniPreview />
                   <div className="px-3 py-2 space-y-1">
                     <p className="text-xs font-semibold truncate">{t.name}</p>
                     {t.email_subject && (
                       <p className="text-[10px] text-muted-foreground truncate">{t.email_subject}</p>
                     )}
-                    {t.variables.length > 0 && (
+                    {(t.variables ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {t.variables.slice(0, 3).map((v) => (
+                        {(t.variables ?? []).slice(0, 3).map((v) => (
                           <span key={v} className="px-1.5 py-px rounded bg-muted text-[9px] font-mono text-muted-foreground">
                             {`{{${v}}}`}
                           </span>
                         ))}
-                        {t.variables.length > 3 && (
-                          <span className="text-[9px] text-muted-foreground">+{t.variables.length - 3}</span>
+                        {(t.variables ?? []).length > 3 && (
+                          <span className="text-[9px] text-muted-foreground">+{(t.variables ?? []).length - 3}</span>
                         )}
                       </div>
                     )}

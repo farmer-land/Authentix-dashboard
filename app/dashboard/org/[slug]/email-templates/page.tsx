@@ -65,16 +65,6 @@ const CERT_IMAGES = [
   "/email-templates/certificate-premium.avif",
 ];
 
-// ── Card accent palette (deterministic per template) ──────────────────────────
-
-const CARD_ACCENTS = [
-  { from: "#3ECF8E", to: "#1a9f6a" },
-  { from: "#6366f1", to: "#4f46e5" },
-  { from: "#f59e0b", to: "#d97706" },
-  { from: "#ec4899", to: "#db2777" },
-  { from: "#14b8a6", to: "#0d9488" },
-  { from: "#8b5cf6", to: "#7c3aed" },
-];
 
 const BASE_MOCK: Record<string, string> = {
   recipient_name: "Alex Johnson",
@@ -342,33 +332,27 @@ function NameDialog({
 
 // ── Template card ─────────────────────────────────────────────────────────────
 
-function EmailPreviewMock({ accent }: { accent: { from: string; to: string } }) {
+function EmailPreviewMock() {
   return (
-    <div className="w-full h-full flex flex-col" style={{ background: "#18181b" }}>
-      {/* Header bar */}
-      <div className="h-10 shrink-0 flex items-center px-4 gap-2.5" style={{ background: accent.from + "18", borderBottom: `1px solid ${accent.from}22` }}>
-        <div className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${accent.from}, ${accent.to})` }} />
-        <div className="space-y-1 flex-1">
-          <div className="h-1.5 rounded-full w-20" style={{ background: accent.from + "60" }} />
-          <div className="h-1 rounded-full w-12" style={{ background: "#ffffff18" }} />
+    <div className="w-full h-full flex flex-col bg-zinc-950">
+      {/* Email client chrome */}
+      <div className="h-8 bg-zinc-900 border-b border-zinc-800 flex items-center px-3 gap-2 shrink-0">
+        <div className="flex gap-1">
+          {[0, 1, 2].map((i) => <div key={i} className="w-1.5 h-1.5 rounded-full bg-zinc-700" />)}
         </div>
+        <div className="h-3 rounded bg-zinc-800 w-24 ml-1" />
       </div>
-      {/* Body mock */}
-      <div className="flex-1 px-4 py-3 space-y-2.5">
-        {/* Subject line */}
-        <div className="h-2 rounded-full w-4/5" style={{ background: "#ffffff30" }} />
-        {/* Greeting */}
-        <div className="h-1.5 rounded-full w-2/5" style={{ background: "#ffffff18" }} />
-        {/* Content lines */}
-        <div className="space-y-1.5 pt-1">
-          <div className="h-1.5 rounded-full w-full" style={{ background: "#ffffff14" }} />
-          <div className="h-1.5 rounded-full w-5/6" style={{ background: "#ffffff14" }} />
-          <div className="h-1.5 rounded-full w-4/6" style={{ background: "#ffffff14" }} />
+      {/* Email body */}
+      <div className="flex-1 px-4 pt-4 pb-3 flex flex-col gap-2">
+        <div className="h-2 rounded bg-zinc-700 w-3/5" />
+        <div className="h-1.5 rounded bg-zinc-800 w-2/5" />
+        <div className="flex flex-col gap-1.5 pt-1">
+          <div className="h-1.5 rounded bg-zinc-800 w-full" />
+          <div className="h-1.5 rounded bg-zinc-800 w-11/12" />
+          <div className="h-1.5 rounded bg-zinc-800 w-4/5" />
         </div>
-        {/* CTA button */}
-        <div className="h-6 rounded-lg w-28 mx-auto mt-2" style={{ background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`, opacity: 0.85 }} />
-        {/* Footer */}
-        <div className="h-1 rounded-full w-2/5 mx-auto mt-auto pt-2" style={{ background: "#ffffff10" }} />
+        <div className="h-5 rounded bg-zinc-700/70 w-24 mx-auto mt-1" />
+        <div className="h-1 rounded bg-zinc-800/60 w-2/5 mx-auto mt-auto" />
       </div>
     </div>
   );
@@ -393,9 +377,6 @@ function TemplateCard({
   deleting: boolean;
   duplicating: boolean;
 }) {
-  const accentIdx = template.id.charCodeAt(0) % CARD_ACCENTS.length;
-  const accent = CARD_ACCENTS[accentIdx]!;
-
   const cleanSubject = (template.email_subject ?? "")
     .replace(/\{\{[\w.\s]+\}\}/g, "…")
     .replace(/^[\p{Emoji}\s]+/u, "")
@@ -430,9 +411,9 @@ function TemplateCard({
     >
       {/* Preview area */}
       <div className="h-44 overflow-hidden relative shrink-0">
-        <EmailPreviewMock accent={accent} />
+        <EmailPreviewMock />
         {/* Gradient fade bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-card to-transparent pointer-events-none" />
         {/* Status badges */}
         <div className="absolute top-2.5 left-2.5 flex gap-1.5">
           {template.is_default && (

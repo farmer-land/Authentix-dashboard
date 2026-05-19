@@ -137,12 +137,14 @@ export function EmailEditor({
   const [previewText, setPreviewText] = useState("");
 
   // Block canvas state
+  // suppressGallery: if initialHtml was provided (user selected a template), never show
+  // the starter gallery — even if the HTML has no embedded block JSON (raw HTML templates).
+  const suppressGallery = !!initialHtml;
   const [blocks, setBlocks] = useState<EmailBlock[]>(() => {
     if (initialHtml) {
       const saved = extractBlocksFromHtml(initialHtml);
       if (saved) return saved;
     }
-    // No saved content — show template gallery (empty blocks triggers gallery in EmailBlockBuilder)
     return [];
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -630,6 +632,7 @@ export function EmailEditor({
               onSubjectChange={setSubject}
               onSenderNameChange={setFromName}
               onAddBlock={addBlock}
+              suppressGallery={suppressGallery}
             />
           </div>
         </div>
