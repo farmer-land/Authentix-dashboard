@@ -15,7 +15,11 @@ import { Input } from "@/components/ui/input";
 import {
   Mail, Plus, Edit2, Trash2, Loader2, AlertCircle,
   Copy, Sparkles, ChevronLeft, ChevronRight, Clock, CheckCircle2, PenLine, Megaphone,
+  Award, CalendarDays, Users, Newspaper, FileText, MoreHorizontal, Send,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { type DeliveryTemplate } from "@/lib/api/client";
 import {
@@ -52,13 +56,24 @@ function isTemplateSaved(t: DeliveryTemplate, savedIds: Set<string>): boolean {
 const CATEGORY_FILTERS = ["All", "Education", "Awards", "Events", "Corporate", "Membership", "General"] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 
-// ── Certificate image options ─────────────────────────────────────────────────
+// ── Certificate image options (used in sample chooser preview) ───────────────
 
 const CERT_IMAGES = [
   "/email-templates/certificate-modern.avif",
   "/email-templates/certificate-classic.avif",
   "/email-templates/certificate-elegant.avif",
   "/email-templates/certificate-premium.avif",
+];
+
+// ── Card accent palette (deterministic per template) ──────────────────────────
+
+const CARD_ACCENTS = [
+  { from: "#3ECF8E", to: "#1a9f6a" },
+  { from: "#6366f1", to: "#4f46e5" },
+  { from: "#f59e0b", to: "#d97706" },
+  { from: "#ec4899", to: "#db2777" },
+  { from: "#14b8a6", to: "#0d9488" },
+  { from: "#8b5cf6", to: "#7c3aed" },
 ];
 
 const BASE_MOCK: Record<string, string> = {
@@ -327,12 +342,45 @@ function NameDialog({
 
 // ── Template card ─────────────────────────────────────────────────────────────
 
+function EmailPreviewMock({ accent }: { accent: { from: string; to: string } }) {
+  return (
+    <div className="w-full h-full flex flex-col" style={{ background: "#18181b" }}>
+      {/* Header bar */}
+      <div className="h-10 shrink-0 flex items-center px-4 gap-2.5" style={{ background: accent.from + "18", borderBottom: `1px solid ${accent.from}22` }}>
+        <div className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${accent.from}, ${accent.to})` }} />
+        <div className="space-y-1 flex-1">
+          <div className="h-1.5 rounded-full w-20" style={{ background: accent.from + "60" }} />
+          <div className="h-1 rounded-full w-12" style={{ background: "#ffffff18" }} />
+        </div>
+      </div>
+      {/* Body mock */}
+      <div className="flex-1 px-4 py-3 space-y-2.5">
+        {/* Subject line */}
+        <div className="h-2 rounded-full w-4/5" style={{ background: "#ffffff30" }} />
+        {/* Greeting */}
+        <div className="h-1.5 rounded-full w-2/5" style={{ background: "#ffffff18" }} />
+        {/* Content lines */}
+        <div className="space-y-1.5 pt-1">
+          <div className="h-1.5 rounded-full w-full" style={{ background: "#ffffff14" }} />
+          <div className="h-1.5 rounded-full w-5/6" style={{ background: "#ffffff14" }} />
+          <div className="h-1.5 rounded-full w-4/6" style={{ background: "#ffffff14" }} />
+        </div>
+        {/* CTA button */}
+        <div className="h-6 rounded-lg w-28 mx-auto mt-2" style={{ background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`, opacity: 0.85 }} />
+        {/* Footer */}
+        <div className="h-1 rounded-full w-2/5 mx-auto mt-auto pt-2" style={{ background: "#ffffff10" }} />
+      </div>
+    </div>
+  );
+}
+
 function TemplateCard({
   template,
   isDraft,
   onEdit,
   onDelete,
   onDuplicate,
+  onSendCampaign,
   deleting,
   duplicating,
 }: {
@@ -341,90 +389,129 @@ function TemplateCard({
   onEdit: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onSendCampaign: () => void;
   deleting: boolean;
   duplicating: boolean;
 }) {
-  const certImgIndex = template.id.charCodeAt(0) % CERT_IMAGES.length;
-  const certImg = CERT_IMAGES[certImgIndex]!;
+  const accentIdx = template.id.charCodeAt(0) % CARD_ACCENTS.length;
+  const accent = CARD_ACCENTS[accentIdx]!;
 
-  // Clean subject for display — strip variables, trim emoji prefix
   const cleanSubject = (template.email_subject ?? "")
     .replace(/\{\{[\w.\s]+\}\}/g, "…")
     .replace(/^[\p{Emoji}\s]+/u, "")
     .trim() || "No subject set";
 
+  // Extract variable names from body
+  const vars = [...new Set(
+    [...((template.body ?? "").matchAll(/\{\{(\s*[\w.]+\s*)\}\}/g))].map(m => m[1]!.trim())
+  )].slice(0, 4);
+
   const updatedAt = new Date(template.updated_at);
   const now = new Date();
   const diffMs = now.getTime() - updatedAt.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const timeAgo = diffDays === 0 ? "Today" : diffDays === 1 ? "Yesterday" : `${diffDays}d ago`;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const timeAgo =
+    diffMins < 60 ? `${diffMins}m ago` :
+    diffHours < 24 ? `${diffHours}h ago` :
+    diffDays === 1 ? "Yesterday" :
+    diffDays < 30 ? `${diffDays}d ago` :
+    updatedAt.toLocaleDateString("en", { month: "short", day: "numeric" });
 
   return (
-    <Card
+    <div
       className={cn(
-        "group overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer",
-        isDraft && "border-dashed border-zinc-700/60"
+        "group relative flex flex-col rounded-2xl border bg-card overflow-hidden cursor-pointer transition-all duration-200",
+        "hover:shadow-xl hover:-translate-y-0.5 hover:border-border",
+        isDraft ? "border-dashed border-amber-500/30" : "border-border/60",
       )}
       onClick={onEdit}
     >
-      {/* Thumbnail */}
-      <div className="h-28 overflow-hidden relative bg-zinc-900 border-b border-border/20">
-        <img
-          src={certImg}
-          alt="Certificate preview"
-          className="w-full h-full object-cover pointer-events-none select-none opacity-70"
-        />
-        <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-background/90 pointer-events-none" />
-        <div className="absolute top-2 right-2 flex gap-1.5">
+      {/* Preview area */}
+      <div className="h-44 overflow-hidden relative shrink-0">
+        <EmailPreviewMock accent={accent} />
+        {/* Gradient fade bottom */}
+        <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+        {/* Status badges */}
+        <div className="absolute top-2.5 left-2.5 flex gap-1.5">
           {template.is_default && (
-            <Badge className="text-[10px] border-[#3ECF8E]/50 text-[#3ECF8E] bg-background/90" variant="outline">Default</Badge>
-          )}
-          {!template.is_active && (
-            <Badge variant="secondary" className="text-[10px] bg-background/90">Inactive</Badge>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#3ECF8E]/15 text-[#3ECF8E] border border-[#3ECF8E]/30">
+              <CheckCircle2 className="w-2.5 h-2.5" /> Default
+            </span>
           )}
           {isDraft && (
-            <Badge variant="outline" className="text-[10px] bg-background/90 text-amber-500 border-amber-500/40">Draft</Badge>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+              <Clock className="w-2.5 h-2.5" /> Draft
+            </span>
           )}
+          {!template.is_active && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border">
+              Inactive
+            </span>
+          )}
+        </div>
+        {/* Actions menu — top right, visible on hover */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-7 h-7 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 flex items-center justify-center hover:bg-background transition-colors">
+                <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onEdit}>
+                <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit template
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onSendCampaign}>
+                <Send className="w-3.5 h-3.5 mr-2" /> Send as campaign
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDuplicate} disabled={duplicating}>
+                {duplicating ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Copy className="w-3.5 h-3.5 mr-2" />}
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete} disabled={deleting} className="text-destructive focus:text-destructive">
+                {deleting ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <CardHeader className="pb-1 pt-3 px-3">
-        <CardTitle className="text-sm font-semibold truncate leading-tight">{template.name}</CardTitle>
-        <p className="text-[11px] text-muted-foreground/60 truncate mt-0.5 leading-tight">{cleanSubject}</p>
-      </CardHeader>
+      {/* Info */}
+      <div className="flex flex-col flex-1 px-4 pt-3 pb-4 gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold truncate leading-snug">{template.name}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">{cleanSubject}</p>
+        </div>
 
-      <CardContent className="pt-0 pb-3 px-3">
-        <div className="flex items-center gap-1 mb-2">
-          <Clock className="w-2.5 h-2.5 text-muted-foreground/40" />
-          <span className="text-[10px] text-muted-foreground/40">{timeAgo}</span>
-        </div>
-        <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
-          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs gap-1" onClick={onEdit}>
-            <Edit2 className="w-3 h-3" />
-            Edit
-          </Button>
+        {/* Variables */}
+        {vars.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {vars.map(v => (
+              <span key={v} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border/50">
+                {`{{${v}}}`}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Footer row */}
+        <div className="flex items-center justify-between mt-auto pt-1" onClick={e => e.stopPropagation()}>
+          <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5" /> {timeAgo}
+          </span>
           <Button
             size="sm"
-            variant="ghost"
-            title="Duplicate"
-            disabled={duplicating}
-            onClick={onDuplicate}
-            className="shrink-0 h-7 w-7 p-0"
+            className="h-7 text-xs gap-1.5 bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
+            onClick={onEdit}
           >
-            {duplicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={deleting}
-            onClick={onDelete}
-            className="shrink-0 h-7 w-7 p-0"
-          >
-            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-destructive" />}
+            <Edit2 className="w-3 h-3" /> Edit
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -443,6 +530,7 @@ export default function EmailTemplatesPage() {
   // Sample chooser
   const [showSamples, setShowSamples] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showPurposeDialog, setShowPurposeDialog] = useState(false);
 
   // Saved IDs from localStorage (scoped by org slug)
   const [savedIds, setSavedIds] = useState<Set<string>>(() => getSavedIds(slug));
@@ -463,15 +551,15 @@ export default function EmailTemplatesPage() {
   const savedTemplates = templates.filter(t => isTemplateSaved(t, savedIds));
   const draftTemplates = templates.filter(t => !isTemplateSaved(t, savedIds));
 
-  // Create directly — no name dialog. User renames inline in the editor.
-  const handleCreateBlank = () => {
+  const createBlankWithPurpose = (purpose: { name: string; subject: string }) => {
     if (creating) return;
+    setShowPurposeDialog(false);
     setCreating(true);
     createTemplate.mutate(
       {
         channel: "email" as const,
-        name: "Untitled Email Template",
-        email_subject: "Your Certificate from {{organization_name}}",
+        name: purpose.name,
+        email_subject: purpose.subject,
         body: "",
         variables: [] as string[],
         is_default: templates.length === 0,
@@ -559,7 +647,7 @@ export default function EmailTemplatesPage() {
               Sample Email Templates
             </Button>
             <Button
-              onClick={handleCreateBlank}
+              onClick={() => setShowPurposeDialog(true)}
               disabled={creating}
               className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
             >
@@ -635,7 +723,7 @@ export default function EmailTemplatesPage() {
             </Button>
             <Button
               size="lg"
-              onClick={handleCreateBlank}
+              onClick={() => setShowPurposeDialog(true)}
               disabled={creating}
               className="gap-2 bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
             >
@@ -655,7 +743,7 @@ export default function EmailTemplatesPage() {
                 <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Saved Templates</h2>
                 <span className="text-xs text-muted-foreground">({savedTemplates.length})</span>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {savedTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
@@ -664,6 +752,7 @@ export default function EmailTemplatesPage() {
                     onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
+                    onSendCampaign={() => router.push(orgPath(`/email-templates?tab=campaigns&fromTemplate=${template.id}`))}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
                     duplicating={duplicateTemplate.isPending && duplicateTemplate.variables === template.id}
                   />
@@ -681,7 +770,7 @@ export default function EmailTemplatesPage() {
                 <span className="text-xs text-muted-foreground">({draftTemplates.length})</span>
                 <span className="text-[10px] text-muted-foreground/50 ml-1">— auto-saved, not yet published</span>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {draftTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
@@ -690,6 +779,7 @@ export default function EmailTemplatesPage() {
                     onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
+                    onSendCampaign={() => router.push(orgPath(`/email-templates?tab=campaigns&fromTemplate=${template.id}`))}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
                     duplicating={duplicateTemplate.isPending && duplicateTemplate.variables === template.id}
                   />
@@ -700,6 +790,42 @@ export default function EmailTemplatesPage() {
 
         </div>
       ))}
+
+      {/* Purpose dialog — shown before creating a blank template */}
+      <Dialog open={showPurposeDialog} onOpenChange={setShowPurposeDialog}>
+        <DialogContent className="max-w-lg p-0 overflow-hidden">
+          <div className="px-6 pt-6 pb-2">
+            <DialogTitle className="text-lg font-bold">What's this email for?</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">We'll set a starter name and subject so you can dive straight into designing.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 px-6 pb-6 pt-3">
+            {[
+              { icon: Award, label: "Certificate Delivery", desc: "Send a certificate to a recipient after course or event completion", name: "Certificate Email", subject: "Your Certificate from {{organization_name}}" },
+              { icon: Users, label: "Welcome Email", desc: "Greet new members, students, or subscribers", name: "Welcome Email", subject: "Welcome to {{organization_name}}, {{recipient_name}}!" },
+              { icon: CheckCircle2, label: "Course / Workshop Completion", desc: "Celebrate finishing a program or workshop", name: "Completion Email", subject: "You've completed {{course_name}} 🎉" },
+              { icon: CalendarDays, label: "Event Notification", desc: "Invite or remind recipients about an upcoming event", name: "Event Email", subject: "You're invited: {{event_name}}" },
+              { icon: Newspaper, label: "Newsletter / Update", desc: "Regular digest, announcement, or update to your audience", name: "Newsletter", subject: "{{organization_name}} — {{month}} Update" },
+              { icon: FileText, label: "General Purpose", desc: "A blank canvas for any other email type", name: "Untitled Email Template", subject: "Message from {{organization_name}}" },
+            ].map(opt => (
+              <button
+                key={opt.label}
+                disabled={creating}
+                onClick={() => createBlankWithPurpose({ name: opt.name, subject: opt.subject })}
+                className="flex items-center gap-4 rounded-xl border border-border/60 px-4 py-3 text-left hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/5 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:bg-[#3ECF8E]/10 transition-colors">
+                  <opt.icon className="w-4 h-4 text-muted-foreground group-hover:text-[#3ECF8E] transition-colors" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-snug">{opt.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{opt.desc}</p>
+                </div>
+                {creating && <Loader2 className="w-4 h-4 animate-spin ml-auto shrink-0 text-muted-foreground" />}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Sample chooser modal */}
       <Dialog open={showSamples} onOpenChange={setShowSamples}>

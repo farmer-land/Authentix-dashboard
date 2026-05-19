@@ -3924,12 +3924,11 @@ export function EmailBlockBuilder({
 
   const activeBlock = activeId ? blocks.find(b => b.id === activeId) : null;
 
-  // Track whether the user has dismissed the gallery (blank canvas) or selected a template.
-  // Initialized to true when blocks exist, or when the parent suppresses the gallery
-  // (e.g. existing templates that have HTML body but no embedded block JSON).
-  const [galleryDismissed, setGalleryDismissed] = useState(blocks.length > 0 || suppressGallery);
+  // Track whether the user has actively dismissed the gallery (chose blank canvas).
+  // suppressGallery is evaluated each render so async template loads correctly bypass the gallery.
+  const [galleryDismissed, setGalleryDismissed] = useState(blocks.length > 0);
 
-  if (blocks.length === 0 && !galleryDismissed) {
+  if (blocks.length === 0 && !galleryDismissed && !suppressGallery) {
     return (
       <StarterTemplateGallery
         context={context}
