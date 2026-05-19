@@ -69,25 +69,52 @@ interface NavItem {
   readonly icon: React.ComponentType<{ className?: string }>;
 }
 
+interface NavGroup {
+  readonly label?: string;
+  readonly items: readonly NavItem[];
+}
+
 type Theme = "light" | "dark" | "system";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const NAVIGATION_ITEMS: readonly NavItem[] = [
-  { name: "Analytics", href: "", icon: LayoutDashboard },
-  { name: "Certificate Templates", href: "/templates", icon: FileText },
-  { name: "Generate", href: "/generate-certificate", icon: Sparkles },
-  { name: "Certificates", href: "/certificates", icon: FileCheck },
-  { name: "Verification", href: "/verification-logs", icon: Shield },
-  { name: "Email", href: "/email-templates", icon: Mail },
-  { name: "Contacts", href: "/contacts", icon: UserRound },
-  { name: "Segments", href: "/segments", icon: Filter },
-  { name: "Imports", href: "/imports", icon: Upload },
-  { name: "Delivery Events", href: "/delivery-events", icon: Activity },
-  { name: "Billing", href: "/billing", icon: CreditCard },
-  { name: "Settings", href: "/settings", icon: Settings },
+const NAVIGATION_GROUPS: readonly NavGroup[] = [
+  {
+    items: [
+      { name: "Overview", href: "", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Certificates",
+    items: [
+      { name: "Templates", href: "/templates",              icon: FileText  },
+      { name: "Issue",     href: "/generate-certificate",   icon: Sparkles  },
+      { name: "Issued",    href: "/certificates",            icon: FileCheck },
+      { name: "Verify",    href: "/verification-logs",       icon: Shield    },
+    ],
+  },
+  {
+    label: "Email",
+    items: [
+      { name: "Email",     href: "/email-templates",         icon: Mail      },
+      { name: "Delivery",  href: "/delivery-events",         icon: Activity  },
+    ],
+  },
+  {
+    label: "Contacts",
+    items: [
+      { name: "Contacts",  href: "/contacts",                icon: UserRound },
+      { name: "Segments",  href: "/segments",                icon: Filter    },
+      { name: "Imports",   href: "/imports",                 icon: Upload    },
+    ],
+  },
+] as const;
+
+const ACCOUNT_ITEMS: readonly NavItem[] = [
+  { name: "Billing",  href: "/billing",  icon: CreditCard },
+  { name: "Settings", href: "/settings", icon: Settings   },
 ] as const;
 
 const THEME_CYCLE: Record<Theme, Theme> = {
@@ -107,48 +134,84 @@ interface SidebarNavProps {
   readonly pendingJobsCount: number;
 }
 
+function NavLink({
+  item,
+  basePath,
+  pathname,
+  expanded,
+  pendingJobsCount,
+}: {
+  item: NavItem;
+  basePath: string;
+  pathname: string;
+  expanded: boolean;
+  pendingJobsCount: number;
+}) {
+  const fullHref = item.href ? `${basePath}${item.href}` : basePath;
+  const isActive =
+    item.href === ""
+      ? pathname === basePath
+      : pathname.startsWith(fullHref);
+  const Icon = item.icon;
+  const showBadge = item.name === "Imports" && pendingJobsCount > 0;
+
+  return (
+    <Link
+      href={fullHref}
+      className={cn(
+        "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-all",
+        expanded ? "px-3" : "justify-center",
+        isActive
+          ? "text-primary"
+          : "text-muted-foreground hover:text-primary"
+      )}
+      title={!expanded ? item.name : undefined}
+    >
+      <div className="relative shrink-0">
+        <Icon className="h-4 w-4" />
+        {showBadge && (
+          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-background" />
+        )}
+      </div>
+      {expanded && <span className="whitespace-nowrap flex-1">{item.name}</span>}
+      {expanded && showBadge && (
+        <span className="ml-auto text-[10px] font-bold bg-amber-400/15 text-amber-500 rounded-full px-1.5 py-0.5 leading-none">
+          {pendingJobsCount > 99 ? "99+" : pendingJobsCount}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function SidebarNav({ slug, pathname, expanded, pendingJobsCount }: SidebarNavProps) {
   const basePath = `/dashboard/org/${slug}`;
 
   return (
-    <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-      {NAVIGATION_ITEMS.map((item) => {
-        const fullHref = item.href ? `${basePath}${item.href}` : basePath;
-        const isActive =
-          item.href === ""
-            ? pathname === basePath
-            : pathname.startsWith(fullHref);
-        const Icon = item.icon;
-        const showBadge = item.name === "Imports" && pendingJobsCount > 0;
-
-        return (
-          <Link
-            key={item.name}
-            href={fullHref}
-            className={cn(
-              "flex items-center gap-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-              expanded ? "px-3" : "justify-center",
-              isActive
-                ? "text-primary"
-                : "text-muted-foreground hover:text-primary"
-            )}
-            title={!expanded ? item.name : undefined}
-          >
-            <div className="relative shrink-0">
-              <Icon className="h-4.5 w-4.5" />
-              {showBadge && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-background" />
-              )}
-            </div>
-            {expanded && <span className="whitespace-nowrap flex-1">{item.name}</span>}
-            {expanded && showBadge && (
-              <span className="ml-auto text-[10px] font-bold bg-amber-400/15 text-amber-500 rounded-full px-1.5 py-0.5 leading-none">
-                {pendingJobsCount > 99 ? "99+" : pendingJobsCount}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+    <nav className="flex-1 p-2 overflow-y-auto space-y-0.5">
+      {NAVIGATION_GROUPS.map((group, gi) => (
+        <div key={gi} className={gi > 0 ? "mt-3" : undefined}>
+          {/* Section label — visible only when expanded */}
+          {group.label && expanded && (
+            <p className="px-3 pb-1 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 select-none">
+              {group.label}
+            </p>
+          )}
+          {/* Divider — visible when collapsed */}
+          {group.label && !expanded && gi > 0 && (
+            <div className="mx-auto w-5 border-t border-border/50 mb-1" />
+          )}
+          {group.items.map((item) => (
+            <NavLink
+              key={item.name}
+              item={item}
+              basePath={basePath}
+              pathname={pathname}
+              expanded={expanded}
+              pendingJobsCount={pendingJobsCount}
+            />
+          ))}
+        </div>
+      ))}
     </nav>
   );
 }
@@ -405,6 +468,30 @@ export function DashboardShell({
 
             {/* Bottom actions */}
             <div className="p-2 border-t space-y-0.5">
+              {/* Account items — Billing & Settings */}
+              {ACCOUNT_ITEMS.map((item) => {
+                const fullHref = `/dashboard/org/${slug}${item.href}`;
+                const isActive = pathname.startsWith(fullHref);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.name}
+                    href={fullHref}
+                    className={cn(
+                      "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-all",
+                      isExpanded ? "px-3" : "justify-center",
+                      isActive ? "text-primary" : "text-muted-foreground hover:text-primary"
+                    )}
+                    title={!isExpanded ? item.name : undefined}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {isExpanded && <span>{item.name}</span>}
+                  </Link>
+                );
+              })}
+
+              <div className="border-t border-border/40 my-1" />
+
               {/* Notifications */}
               <NotificationPanel expanded={isExpanded} onOpenChange={setNotificationOpen} />
 
