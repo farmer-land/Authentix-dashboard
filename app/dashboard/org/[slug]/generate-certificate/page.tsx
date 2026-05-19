@@ -1784,7 +1784,7 @@ export default function GenerateCertificatePage() {
                   <div
                     className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
-                    onClick={() => { setLeftPanelVisible(true); setFitTrigger(t => t + 1); }}
+                    onClick={() => setLeftPanelVisible(true)}
                     title="Expand layers panel"
                   >
                     <SlidersHorizontal className="w-4 h-4 text-muted-foreground/70" />
@@ -1804,7 +1804,7 @@ export default function GenerateCertificatePage() {
                     <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs font-semibold text-foreground flex-1">Design</span>
                     <button
-                      onClick={() => { setLeftPanelVisible(false); setFitTrigger(t => t + 1); }}
+                      onClick={() => setLeftPanelVisible(false)}
                       className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
