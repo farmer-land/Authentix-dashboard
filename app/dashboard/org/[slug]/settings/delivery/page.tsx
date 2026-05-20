@@ -509,7 +509,7 @@ function IntegrationProviderIcon({ integration }: { integration: DeliveryIntegra
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-const PLATFORM_DEFAULT_EMAIL = "info@digicertificates.in";
+const PLATFORM_DEFAULT_EMAIL = "certificates@digicertificates.in";
 
 export default function EmailDeliverySettingsPage() {
   const { orgPath } = useOrg();

@@ -131,8 +131,8 @@ export function EmailEditor({
   const [editingName, setEditingName] = useState(false);
   // Meta fields
   const [subject, setSubject] = useState(initialSubject);
-  const [fromName, setFromName] = useState(initialFromName);
-  const [fromEmail, setFromEmail] = useState(initialFromEmail);
+  const fromName = initialFromName;
+  const fromEmail = initialFromEmail;
   const [replyTo, setReplyTo] = useState(initialReplyTo);
   const [previewText, setPreviewText] = useState("");
 
@@ -508,10 +508,21 @@ export function EmailEditor({
                 {leftPanelTab === "settings" && (
                   <div className="p-3 space-y-3 pb-4">
                     <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Email settings</p>
+
+                    {/* Sender — read-only; change via Campaign Info step */}
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Sender</p>
+                      <div className="rounded-md border bg-muted/30 px-2.5 py-1.5 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{fromName}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground truncate">{fromEmail}</p>
+                        </div>
+                        <span className="text-[9px] text-muted-foreground/60 shrink-0">locked</span>
+                      </div>
+                    </div>
+
                     {[
                       { id: "bc-subject",  label: "Subject",      val: subject,     set: setSubject,     ph: "Your email subject…" },
-                      { id: "bc-from",     label: "From name",    val: fromName,    set: setFromName,    ph: "DigiCertificates" },
-                      { id: "bc-email",    label: "From email",   val: fromEmail,   set: setFromEmail,   ph: "hello@example.com" },
                       { id: "bc-reply",    label: "Reply-to",     val: replyTo,     set: setReplyTo,     ph: "Same as from" },
                       { id: "bc-preview",  label: "Preview text", val: previewText, set: setPreviewText, ph: "Short inbox preview…" },
                     ].map(f => (
@@ -630,7 +641,7 @@ export function EmailEditor({
               onSelect={setSelectedId}
               onStartFresh={handleStartFresh}
               onSubjectChange={setSubject}
-              onSenderNameChange={setFromName}
+              onSenderNameChange={undefined}
               onAddBlock={addBlock}
               suppressGallery={suppressGallery}
             />

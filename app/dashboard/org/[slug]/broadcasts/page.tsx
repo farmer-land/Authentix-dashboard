@@ -193,13 +193,39 @@ function CampaignWizard({
   const [contactSearch, setContactSearch] = useState("");
   const contactSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const PLATFORM_OPT = {
+    id: '__platform__',
+    name: 'DigiCertificates',
+    email: 'hello@digicertificates.in',
+    replyTo: '',
+    isPlatform: true,
+  } as const;
+
   const activeIntegrations = rawIntegrations.filter(i => i.channel === 'email' && i.is_active);
-  const integrationOptions = activeIntegrations.map(i => ({
+
+  // Real options mapped from org integrations
+  const realOptions = activeIntegrations.map(i => ({
     id: i.id,
     name: i.from_name ?? i.display_name,
     email: i.from_email ?? '',
     replyTo: i.reply_to ?? '',
+    isPlatform: false as const,
   }));
+
+  // All selectable options: real integrations + platform always at the bottom.
+  // Used for the dropdown when multiple senders are available.
+  const allSenderOptions: Array<{ id: string; name: string; email: string; replyTo: string; isPlatform: boolean }> = integrationsLoading
+    ? []
+    : [
+        ...realOptions,
+        { ...PLATFORM_OPT, name: realOptions.length > 0 ? 'Platform Default (DigiCertificates)' : 'DigiCertificates' },
+      ];
+
+  // Show the dropdown only when the org has 2+ real integrations to choose from.
+  // 0 or 1 real integration → auto-selected silently (platform fills in for 0).
+  const showSenderDropdown = !integrationsLoading && realOptions.length > 1;
+  // integrationOptions kept for backwards-compat in the rest of the file
+  const integrationOptions = allSenderOptions;
 
   const [w, setW] = useState<WizardState>({
     name: "",
@@ -235,19 +261,21 @@ function CampaignWizard({
     }
   }, [initialTemplateId, emailTemplates]);
 
-  // Auto-select default integration once integrations load
+  // Auto-select once integrations finish loading (real or platform default)
+  // Auto-select once integrations load.
+  // - 0 real integrations → picks platform default (hello@digicertificates.in)
+  // - 1 real integration  → picks that one
+  // - 2+ real integrations → dropdown is shown; no auto-select
   useEffect(() => {
-    if (didAutoSelect.current || activeIntegrations.length === 0) return;
+    if (didAutoSelect.current || integrationsLoading || showSenderDropdown) return;
+    if (allSenderOptions.length === 0) return;
     didAutoSelect.current = true;
-    const def = activeIntegrations.find(i => i.is_default) ?? activeIntegrations[0]!;
+    const def = realOptions.find(o => activeIntegrations.find(i => i.id === o.id)?.is_default)
+      ?? realOptions[0]
+      ?? allSenderOptions[0]!; // platform default when no real options
     setSelectedIntegrationId(def.id);
-    setW(prev => ({
-      ...prev,
-      from_name: def.from_name ?? def.display_name,
-      from_email: def.from_email ?? '',
-      reply_to: def.reply_to ?? '',
-    }));
-  }, [activeIntegrations]);
+    setW(prev => ({ ...prev, from_name: def.name, from_email: def.email, reply_to: def.replyTo }));
+  }, [integrationsLoading, showSenderDropdown, allSenderOptions.length]);
 
   // ── File upload ────────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file: File) => {
@@ -459,55 +487,59 @@ function CampaignWizard({
         </div>
       </div>
 
-      {/* Send From — hidden when exactly 1 integration (auto-selected) */}
-      {integrationOptions.length !== 1 && (
+      {/* Send From */}
+      {integrationsLoading ? (
         <div className="space-y-1.5">
-          <Label>Send From {integrationOptions.length > 1 && <span className="text-red-500">*</span>}</Label>
-          {integrationsLoading ? (
-            <div className="h-10 rounded-md bg-muted animate-pulse" />
-          ) : integrationOptions.length > 1 ? (
-            <Select
-              value={selectedIntegrationId}
-              onValueChange={(id) => {
-                const opt = integrationOptions.find(o => o.id === id);
-                if (!opt) return;
-                setSelectedIntegrationId(id);
-                setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
-              }}
-            >
-              <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Select sender…" />
-              </SelectTrigger>
-              <SelectContent>
-                {integrationOptions.map(opt => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    <span className="flex items-center gap-2">
-                      <span>{opt.name}</span>
-                      <span className="text-xs text-muted-foreground">{opt.email}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">
-              No email sender configured.{" "}
-              <a href="../settings/delivery" className="underline font-medium">Add one in Settings</a>.
-            </p>
-          )}
+          <Label>Send From</Label>
+          <div className="h-10 rounded-md bg-muted animate-pulse" />
         </div>
-      )}
-      {/* Compact sender confirmation when auto-selected from single integration */}
+      ) : showSenderDropdown ? (
+        <div className="space-y-1.5">
+          <Label>Send From <span className="text-red-500">*</span></Label>
+          <Select
+            value={selectedIntegrationId}
+            onValueChange={(id) => {
+              const opt = allSenderOptions.find(o => o.id === id);
+              if (!opt) return;
+              setSelectedIntegrationId(id);
+              setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
+            }}
+          >
+            <SelectTrigger className="text-sm">
+              <SelectValue placeholder="Select sender…" />
+            </SelectTrigger>
+            <SelectContent>
+              {allSenderOptions.map(opt => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <span className="flex items-center gap-2">
+                    <span>{opt.name}</span>
+                    <span className="text-xs text-muted-foreground">{opt.email}</span>
+                    {opt.isPlatform && (
+                      <span className="text-[10px] text-muted-foreground/60 border rounded px-1">platform</span>
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null /* auto-selected — compact confirmation below handles display */}
+      {/* Compact sender confirmation */}
       {w.from_email && (
         <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
           <MailIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground flex-1 min-w-0">
             Sending as <span className="font-medium text-foreground">{w.from_name}</span>
             <span className="ml-1 font-mono">&lt;{w.from_email}&gt;</span>
+            {selectedIntegrationId === '__platform__' && (
+              <span className="ml-1 text-amber-600 dark:text-amber-400">· Platform default</span>
+            )}
           </p>
-          {integrationOptions.length > 1 && (
+          {selectedIntegrationId === '__platform__' ? (
+            <a href="../settings/delivery" className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-foreground underline shrink-0 whitespace-nowrap">Add own sender</a>
+          ) : showSenderDropdown ? (
             <a href="../settings/delivery" className="text-[10px] text-muted-foreground/60 hover:text-foreground underline shrink-0">Manage</a>
-          )}
+          ) : null}
         </div>
       )}
 
