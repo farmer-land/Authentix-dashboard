@@ -1539,7 +1539,7 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── Broadcast card (list view) ─────────────────────────────────────────────────
+// ── Broadcast card (expandable accordion) ─────────────────────────────────────
 
 function BroadcastCard({
   broadcast,
@@ -1548,20 +1548,49 @@ function BroadcastCard({
   broadcast: EmailBroadcast;
   onDelete: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const cfg = STATUS_CONFIG[broadcast.status];
+  const bc = broadcast as unknown as {
+    from_name?: string; from_email?: string; email_type?: string; failed_count?: number;
+  };
+
+  const sentDate = broadcast.sent_at
+    ? format(new Date(broadcast.sent_at), "dd MMM yyyy, HH:mm")
+    : format(new Date(broadcast.created_at), "dd MMM yyyy");
+
+  const deliveryRate = broadcast.status === "sent" && broadcast.total_recipients > 0
+    ? Math.round((broadcast.delivered_count / broadcast.total_recipients) * 100)
+    : null;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="text-base truncate">{broadcast.name}</CardTitle>
-            <CardDescription className="text-xs mt-0.5 truncate">{broadcast.subject}</CardDescription>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className={cn("text-xs flex items-center gap-1", cfg.className)}>
-              {cfg.icon} {cfg.label}
-            </Badge>
+    <div className={cn(
+      "rounded-xl border bg-card overflow-hidden transition-all",
+      expanded ? "shadow-sm" : "",
+    )}>
+      {/* ── Header row (always visible, click to expand) ── */}
+      <div
+        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-muted/20 transition-colors select-none"
+        onClick={() => setExpanded(v => !v)}
+      >
+        <ChevronRight className={cn(
+          "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
+          expanded && "rotate-90",
+        )} />
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold truncate leading-snug">{broadcast.name}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">{broadcast.subject}</p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant="outline" className={cn("text-xs flex items-center gap-1 shrink-0", cfg.className)}>
+            {cfg.icon} {cfg.label}
+          </Badge>
+          <span className="text-xs text-muted-foreground tabular-nums hidden sm:flex items-center gap-1">
+            <Users className="h-3 w-3" /> {broadcast.total_recipients.toLocaleString()}
+          </span>
+          <span className="text-xs text-muted-foreground hidden md:block tabular-nums shrink-0">{sentDate}</span>
+          <div onClick={e => e.stopPropagation()}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -1576,29 +1605,76 @@ function BroadcastCard({
             </DropdownMenu>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <Users className="h-3.5 w-3.5" />
-            {broadcast.total_recipients.toLocaleString()} recipients
-          </span>
-          {broadcast.status === "sent" && (
-            <>
-              <span className="text-green-600">{broadcast.delivered_count} delivered</span>
-              {(broadcast as unknown as { failed_count?: number }).failed_count
-                ? <span className="text-red-600">{(broadcast as unknown as { failed_count: number }).failed_count} failed</span>
-                : null}
-            </>
-          )}
-          <span className="ml-auto">
-            {broadcast.sent_at
-              ? format(new Date(broadcast.sent_at), "dd MMM yyyy, HH:mm")
-              : format(new Date(broadcast.created_at), "dd MMM yyyy")}
-          </span>
+      </div>
+
+      {/* ── Expanded details ── */}
+      {expanded && (
+        <div className="border-t bg-muted/5 px-4 py-4 space-y-4">
+          {/* Delivery stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border bg-card px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Recipients</p>
+              <p className="text-base font-bold tabular-nums">{broadcast.total_recipients.toLocaleString()}</p>
+            </div>
+            {broadcast.status === "sent" ? (
+              <>
+                <div className="rounded-lg border bg-card px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Delivered</p>
+                  <p className="text-base font-bold tabular-nums text-green-600 dark:text-green-400">
+                    {broadcast.delivered_count.toLocaleString()}
+                    {deliveryRate !== null && (
+                      <span className="text-xs font-normal text-muted-foreground ml-1">({deliveryRate}%)</span>
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-card px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Failed</p>
+                  <p className={cn(
+                    "text-base font-bold tabular-nums",
+                    (bc.failed_count ?? 0) > 0 ? "text-red-500" : "text-muted-foreground",
+                  )}>
+                    {(bc.failed_count ?? 0).toLocaleString()}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg border bg-card px-3 py-2.5 col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Status</p>
+                <p className="text-sm font-medium">{cfg.label}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Meta rows */}
+          <div className="space-y-2 text-xs">
+            {bc.from_email && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <MailIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>From</span>
+                <span className="font-medium text-foreground">
+                  {bc.from_name || bc.from_email}
+                </span>
+                {bc.from_name && (
+                  <span className="font-mono text-muted-foreground/70">&lt;{bc.from_email}&gt;</span>
+                )}
+              </div>
+            )}
+            {bc.email_type && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span>Type</span>
+                <span className="font-medium text-foreground capitalize">{bc.email_type.replace(/_/g, " ")}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              <span>{broadcast.sent_at ? "Sent" : "Created"}</span>
+              <span className="font-medium text-foreground">{sentDate}</span>
+            </div>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 

@@ -208,9 +208,9 @@ function CertificateEventsTable({ certificateId }: { certificateId: string }) {
   }
 
   return (
-    <div>
+    <div className="overflow-x-auto">
       {/* Column headers */}
-      <div className="grid grid-cols-[140px_90px_180px_140px_1fr] gap-2 px-5 py-2 bg-muted/20 border-t border-b border-border/60 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[140px_90px_180px_140px_1fr] gap-2 px-5 py-2 bg-muted/20 border-t border-b border-border/60 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground min-w-160">
         <span>Time</span>
         <span>Result</span>
         <span>Device / Browser</span>
@@ -229,7 +229,7 @@ function CertificateEventsTable({ certificateId }: { certificateId: string }) {
             <div
               key={ev.id}
               className={cn(
-                "grid grid-cols-[140px_90px_180px_140px_1fr] gap-2 px-5 py-3 text-xs items-center hover:bg-muted/10 transition-colors",
+                "grid grid-cols-[140px_90px_180px_140px_1fr] gap-2 px-5 py-3 text-xs items-center hover:bg-muted/10 transition-colors min-w-160",
                 idx % 2 === 0 ? "" : "bg-muted/5",
               )}
             >
@@ -282,8 +282,13 @@ function CertificateEventsTable({ certificateId }: { certificateId: string }) {
                         <p className="text-muted-foreground/60 text-[10px]">{ev.geo_city}</p>
                       )}
                     </>
+                  ) : ev.ip_partial ? (
+                    <>
+                      <p className="text-muted-foreground/70">Unknown</p>
+                      <p className="text-muted-foreground/50 font-mono text-[10px] mt-0.5">{ev.ip_partial}.*</p>
+                    </>
                   ) : (
-                    <p className="text-muted-foreground">—</p>
+                    <p className="text-muted-foreground/40">—</p>
                   )}
                 </div>
               </div>
@@ -351,8 +356,8 @@ function CertificateAccordionRow({ item }: { item: CertificateVerificationSummar
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
       >
-        {/* Toggle icon */}
-        <div className="text-muted-foreground shrink-0">
+        {/* Toggle icon — matches the w-4 placeholder in the column header */}
+        <div className="w-4 text-muted-foreground shrink-0 flex items-center justify-center">
           {open
             ? <ChevronUp className="h-4 w-4" />
             : <ChevronDown className="h-4 w-4" />}
@@ -369,14 +374,14 @@ function CertificateAccordionRow({ item }: { item: CertificateVerificationSummar
           </div>
         </div>
 
-        {/* Certificate # */}
-        <div className="flex items-center gap-1.5 shrink-0 hidden sm:flex">
-          <Hash className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs font-mono text-muted-foreground">{item.certificate_number}</span>
+        {/* Certificate # — matches w-36 in header */}
+        <div className="flex items-center gap-1.5 w-36 shrink-0 max-md:hidden overflow-hidden">
+          <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-mono text-muted-foreground truncate">{item.certificate_number}</span>
         </div>
 
-        {/* Count badges */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Count badges — matches w-40 in header */}
+        <div className="flex items-center gap-2 w-40 shrink-0">
           {item.valid_count > 0 && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <CheckCircle2 className="w-3 h-3" />
@@ -394,8 +399,8 @@ function CertificateAccordionRow({ item }: { item: CertificateVerificationSummar
           </span>
         </div>
 
-        {/* Last verified */}
-        <div className="text-xs text-muted-foreground shrink-0 hidden md:block">
+        {/* Last verified — matches w-28 in header */}
+        <div className="text-xs text-muted-foreground w-28 shrink-0 hidden md:block">
           {formatDistanceToNow(new Date(item.last_verified_at), { addSuffix: true })}
         </div>
       </button>
