@@ -168,31 +168,37 @@ function parseManualEmails(raw: string): ParsedRecipient[] {
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
-function Steps({ current }: { current: number }) {
+function Steps({ current, skippedIndex }: { current: number; skippedIndex?: number }) {
   const steps = ["Campaign info", "Design email", "Recipients", "Review & Send"];
   return (
     <div className="flex items-center gap-0 mb-6">
-      {steps.map((label, i) => (
-        <div key={i} className="flex items-center">
-          <div className={cn(
-            "flex items-center gap-2 text-sm font-medium",
-            i < current  ? "text-primary" : i === current ? "text-foreground" : "text-muted-foreground",
-          )}>
+      {steps.map((label, i) => {
+        const isSkipped = i === skippedIndex;
+        const isDone = i < current || isSkipped;
+        const isCurrent = i === current;
+        return (
+          <div key={i} className="flex items-center">
             <div className={cn(
-              "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2",
-              i < current  ? "border-primary bg-primary text-primary-foreground" :
-              i === current ? "border-foreground bg-background text-foreground" :
-                              "border-muted-foreground/30 bg-background text-muted-foreground",
+              "flex items-center gap-2 text-sm font-medium",
+              isDone ? "text-primary" : isCurrent ? "text-foreground" : "text-muted-foreground",
+              isSkipped && "opacity-50",
             )}>
-              {i < current ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+              <div className={cn(
+                "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2",
+                isDone    ? "border-primary bg-primary text-primary-foreground" :
+                isCurrent ? "border-foreground bg-background text-foreground" :
+                            "border-muted-foreground/30 bg-background text-muted-foreground",
+              )}>
+                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+              </div>
+              <span className="hidden sm:block">{label}</span>
             </div>
-            <span className="hidden sm:block">{label}</span>
+            {i < steps.length - 1 && (
+              <div className={cn("h-px w-8 mx-2", isDone ? "bg-primary" : "bg-border")} />
+            )}
           </div>
-          {i < steps.length - 1 && (
-            <div className={cn("h-px w-8 mx-2", i < current ? "bg-primary" : "bg-border")} />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -227,7 +233,9 @@ function CampaignWizard({
   });
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
 
-  const [step, setStep] = useState(0);
+  // When both template + contacts source are pre-configured, start at recipients step
+  const [step, setStep] = useState(initialTemplateId && initialSourceRef ? 2 : 0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
@@ -279,7 +287,9 @@ function CampaignWizard({
     from_name: "",
     from_email: "",
     reply_to: "",
-    recipient_mode: initialSourceRef ? "contacts" : "csv",
+    // Default to contacts mode whenever we have a pre-selected template or source_ref.
+    // For "Send as campaign" from template list, this pre-loads the user's existing contacts.
+    recipient_mode: (initialSourceRef || initialTemplateId) ? "contacts" : "csv",
     recipients: [],
     csv_columns: [],
     manual_emails: "",
@@ -296,14 +306,16 @@ function CampaignWizard({
   const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setW(prev => ({ ...prev, [key]: value }));
 
-  // Auto-populate subject + body when an initial template is provided
+  // Auto-populate name, subject + body when an initial template is provided
   useEffect(() => {
     if (!initialTemplateId || !emailTemplates.length) return;
     const t = emailTemplates.find(et => et.id === initialTemplateId);
     if (t) {
       setW(prev => ({
         ...prev,
-        html_body: t.body,
+        // Auto-generate a campaign name so the user doesn't have to type one
+        name: prev.name || `${t.name} — ${format(new Date(), 'MMM d, yyyy')}`,
+        html_body: prev.html_body || t.body,
         subject: prev.subject || t.email_subject || "",
       }));
     }
@@ -452,6 +464,18 @@ function CampaignWizard({
     }, 350);
   }, []);
 
+  // ── Smart step navigation ─────────────────────────────────────────────────
+  // Step index 1 is the Design step. Skip it when template is already pre-selected
+  // so the user never sees a pointless "template already chosen → Continue" screen.
+  const handleContinue = () => {
+    const next = step + 1;
+    setStep(next === 1 && selectedTemplateId ? 2 : next);
+  };
+  const handleBack = () => {
+    const prev = step - 1;
+    setStep(prev === 1 && selectedTemplateId ? 0 : prev);
+  };
+
   // ── Send ───────────────────────────────────────────────────────────────────
   const handleSend = async () => {
     if (sending) return; // guard against double-click before re-render
@@ -519,34 +543,7 @@ function CampaignWizard({
           onChange={e => set("name", e.target.value)}
           autoFocus
         />
-        <p className="text-xs text-muted-foreground">For your reference only, not shown to recipients.</p>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Email type</Label>
-        <div className="grid grid-cols-1 gap-2">
-          {EMAIL_TYPES.map(t => (
-            <div
-              key={t.value}
-              className={cn(
-                "flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors",
-                w.email_type === t.value
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:bg-muted/30",
-              )}
-              onClick={() => set("email_type", t.value)}
-            >
-              <div className={cn(
-                "w-4 h-4 rounded-full border-2 shrink-0",
-                w.email_type === t.value ? "border-primary bg-primary" : "border-muted-foreground",
-              )} />
-              <div>
-                <p className="text-sm font-medium">{t.label}</p>
-                <p className="text-xs text-muted-foreground">{t.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <p className="text-xs text-muted-foreground">For your reference only — not shown to recipients.</p>
       </div>
 
       {/* Send From */}
@@ -585,7 +582,7 @@ function CampaignWizard({
             </SelectContent>
           </Select>
         </div>
-      ) : null /* auto-selected — compact confirmation below handles display */}
+      ) : null}
       {/* Compact sender confirmation */}
       {w.from_email && (
         <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
@@ -605,14 +602,43 @@ function CampaignWizard({
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <Label>Reply-to <span className="text-xs text-muted-foreground">(optional)</span></Label>
-        <Input
-          placeholder="Same as from email"
-          value={w.reply_to}
-          onChange={e => set("reply_to", e.target.value)}
-        />
-      </div>
+      {/* Advanced — email type + reply-to, collapsed by default */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(v => !v)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-90")} />
+        Advanced settings
+      </button>
+      {showAdvanced && (
+        <div className="space-y-4 pl-4 border-l-2 border-border">
+          <div className="space-y-1.5">
+            <Label>Email type</Label>
+            <Select value={w.email_type} onValueChange={v => set("email_type", v)}>
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EMAIL_TYPES.map(t => (
+                  <SelectItem key={t.value} value={t.value}>
+                    <span>{t.label}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{t.desc}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Reply-to <span className="text-xs text-muted-foreground">(optional)</span></Label>
+            <Input
+              placeholder="Same as from email"
+              value={w.reply_to}
+              onChange={e => set("reply_to", e.target.value)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1440,8 +1466,10 @@ function CampaignWizard({
   };
 
   // Order: Campaign info → Design email → Recipients → Review & Send
+  // When template is pre-selected, design step (index 1) is skipped via handleContinue/handleBack.
+  // stepValid[1] is forced true so the wizard never blocks on a step the user can't reach.
   const steps = [renderStep0, renderStep2, renderStep1, renderStep3];
-  const stepValid = [step0Valid, step2Valid, step1Valid, true];
+  const stepValid = [step0Valid, selectedTemplateId ? true : step2Valid, step1Valid, true];
 
   return (
     <>
@@ -1460,7 +1488,7 @@ function CampaignWizard({
       />
     )}
     {!showEditor && <div className="space-y-4">
-      <Steps current={step} />
+      <Steps current={step} skippedIndex={selectedTemplateId ? 1 : undefined} />
 
       <div className="min-h-64">
         {steps[step]?.()}
@@ -1469,7 +1497,7 @@ function CampaignWizard({
       <div className="flex items-center justify-between pt-2 border-t">
         <div className="flex gap-2">
           {step > 0 && (
-            <Button variant="ghost" onClick={() => setStep(s => s - 1)}>
+            <Button variant="ghost" onClick={handleBack}>
               <ChevronLeft className="h-4 w-4 mr-1" /> Back
             </Button>
           )}
@@ -1481,7 +1509,7 @@ function CampaignWizard({
         {step < 3 ? (
           <Button
             disabled={!stepValid[step]}
-            onClick={() => setStep(s => s + 1)}
+            onClick={handleContinue}
           >
             Continue <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
