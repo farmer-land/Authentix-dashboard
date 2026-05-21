@@ -44,8 +44,11 @@ function ResultBadge({ result }: { result: VerificationEvent["result"] }) {
   const cfg = RESULT_CONFIG[result];
   const Icon = cfg.Icon;
   return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border", cfg.badge)}>
-      <Icon className="w-3 h-3 shrink-0" />
+    <span
+      className={cn("inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold border", cfg.badge)}
+      title={cfg.label}
+    >
+      <Icon className="w-3.5 h-3.5 shrink-0" />
       {cfg.label}
     </span>
   );
@@ -216,7 +219,7 @@ function CertificateEventsTable({ certificateId }: { certificateId: string }) {
       </div>
 
       <div className="divide-y divide-border/40">
-        {events.map((ev, idx) => {
+        {events.filter(ev => ev.result !== "not_found").map((ev, idx) => {
           const { browser, os } = parseUserAgent(ev.user_agent);
           const referrerLabel   = parseReferrer(ev.referrer);
           const flag            = countryFlag(ev.geo_country);
@@ -338,7 +341,7 @@ function CertificateEventsTable({ certificateId }: { certificateId: string }) {
 function CertificateAccordionRow({ item }: { item: CertificateVerificationSummary }) {
   const [open, setOpen] = useState(false);
 
-  const invalid = item.invalid_count + item.expired_count + item.revoked_count + item.not_found_count;
+  const invalid = item.invalid_count + item.expired_count + item.revoked_count;
 
   return (
     <div className="border-b border-border/60 last:border-0">
@@ -573,10 +576,30 @@ export default function VerificationRequestsPage() {
       )}
 
       {/* Legal compliance note */}
-      <p className="text-[11px] text-muted-foreground/60 text-center">
-        Verification data captured: timestamp, partial IP (first 2 octets), device type, browser, geo-country, referrer source.
-        Stored in compliance with IT Act 2000 &amp; DPDP Act 2023. Full IP is stored as a one-way hash only.
-      </p>
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/50">
+          <span className="flex items-center gap-1 font-medium text-muted-foreground/70">
+            <Shield className="w-3 h-3" />
+            IT Act 2000 · DPDP Act 2023
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" /> Timestamp
+          </span>
+          <span className="flex items-center gap-1">
+            <Globe className="w-3 h-3" /> Geo-country
+          </span>
+          <span className="flex items-center gap-1">
+            <Monitor className="w-3 h-3" /> Device &amp; browser
+          </span>
+          <span className="flex items-center gap-1">
+            <Hash className="w-3 h-3" /> Partial IP (first 2 octets)
+          </span>
+          <span className="flex items-center gap-1">
+            <Link2 className="w-3 h-3" /> Referrer source
+          </span>
+        </div>
+        <p className="text-[10px] text-muted-foreground/40">Full IP is stored as a one-way hash only · not_found lookups excluded from display</p>
+      </div>
     </div>
   );
 }
