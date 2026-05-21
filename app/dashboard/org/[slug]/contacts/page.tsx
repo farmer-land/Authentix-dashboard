@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Users, Upload, Loader2,
-  Award, Mail, ChevronDown, FileText, Trash2, Search,
+  Award, Mail, ChevronDown, FileText, Trash2, Search, PenLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
@@ -250,28 +250,37 @@ function ContactEmailModal({
     if (!open) { setSelected(null); setSearch(""); }
   }, [open]);
 
-  const items = templates.filter(
-    (t) => t.channel === "email" && (!search || t.name.toLowerCase().includes(search.toLowerCase())),
+  // Only show active (published) email templates — drafts should not be selectable here
+  const activeItems = templates.filter(t => t.channel === "email" && t.is_active);
+  const items = activeItems.filter(
+    (t) => !search || t.name.toLowerCase().includes(search.toLowerCase()),
   );
+  const hasTemplates = activeItems.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-4">
         <DialogHeader>
           <DialogTitle>Choose an Email Template</DialogTitle>
-          <p className="text-sm text-muted-foreground">Pick a template to use as the starting point for your campaign.</p>
+          <p className="text-sm text-muted-foreground">
+            {hasTemplates
+              ? "Pick a template to use as the starting point for your campaign."
+              : "Design a new email template and your contacts will be pre-loaded."}
+          </p>
         </DialogHeader>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search templates…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9"
-          />
-        </div>
+        {/* Search — only when there are templates to search */}
+        {hasTemplates && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search templates…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+        )}
 
         {/* Grid */}
         <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
@@ -281,14 +290,33 @@ function ContactEmailModal({
                 <div key={i} className="h-40 bg-muted animate-pulse rounded-xl" />
               ))}
             </div>
+          ) : !hasTemplates ? (
+            /* Empty state — no published templates exist yet */
+            <div className="flex flex-col items-center justify-center py-10 gap-4 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+                <Mail className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">No email templates yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                  You haven&apos;t published any email templates. Click &ldquo;Design from Scratch&rdquo; below — your contacts will be automatically loaded when you send.
+                </p>
+              </div>
+              <Button
+                className="gap-2"
+                onClick={() => onConfirm(null)}
+              >
+                <PenLine className="h-4 w-4" /> Design from Scratch
+              </Button>
+            </div>
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
               <Mail className="h-8 w-8" />
-              <p className="text-sm">{search ? "No matching templates" : "No email templates yet"}</p>
+              <p className="text-sm">No matching templates</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {items.map((t, i) => (
+              {items.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setSelected(selected === t.id ? null : t.id)}
@@ -324,15 +352,23 @@ function ContactEmailModal({
           )}
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="outline" onClick={() => onConfirm(null)} className="text-muted-foreground">
-            <Mail className="h-3.5 w-3.5 mr-1.5" /> Start from Scratch
-          </Button>
-          <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
-            Use Template
-          </Button>
-        </DialogFooter>
+        {/* Footer — only show scratch/use buttons when templates exist */}
+        {hasTemplates && (
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" onClick={() => onConfirm(null)} className="text-muted-foreground">
+              <PenLine className="h-3.5 w-3.5 mr-1.5" /> Design from Scratch
+            </Button>
+            <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
+              Use Template
+            </Button>
+          </DialogFooter>
+        )}
+        {!hasTemplates && !loading && (
+          <DialogFooter>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -649,10 +685,12 @@ export default function ContactsPage() {
   const handleEmailModalConfirm = (templateId: string | null) => {
     const ref = emailModal.source_ref;
     setEmailModal({ open: false });
-    const params = new URLSearchParams({ tab: "campaigns" });
-    if (templateId) params.set("fromTemplate", templateId);
-    if (ref) params.set("source_ref", ref);
-    router.push(`/dashboard/org/${orgSlug}/email-templates?${params.toString()}`);
+    // Navigate directly to the broadcast wizard — contacts are auto-loaded from source_ref.
+    // If no template was chosen (design from scratch), the wizard opens without a pre-selected template.
+    const qs = new URLSearchParams();
+    if (templateId) qs.set("fromTemplate", templateId);
+    if (ref) qs.set("source_ref", ref);
+    router.push(`/dashboard/org/${orgSlug}/broadcasts?${qs.toString()}`);
   };
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1486,7 +1487,8 @@ export function BroadcastsContent({
   const { broadcasts, loading, refetch } = useEmailBroadcasts();
   const deleteMutation = useDeleteBroadcast();
 
-  const [showWizard, setShowWizard] = useState(!!initialTemplateId);
+  // Open wizard automatically when coming from contacts (source_ref) or with a pre-selected template
+  const [showWizard, setShowWizard] = useState(!!(initialTemplateId || initialSourceRef));
   const [deleteTarget, setDeleteTarget] = useState<EmailBroadcast | null>(null);
 
   const drafts = broadcasts.filter(b => b.status === "draft");
@@ -1599,6 +1601,17 @@ export function BroadcastsContent({
   );
 }
 
+function BroadcastsPageInner() {
+  const searchParams = useSearchParams();
+  const fromTemplate = searchParams.get("fromTemplate") ?? undefined;
+  const sourceRef = searchParams.get("source_ref") ?? undefined;
+  return <BroadcastsContent initialTemplateId={fromTemplate} initialSourceRef={sourceRef} />;
+}
+
 export default function BroadcastsPage() {
-  return <BroadcastsContent />;
+  return (
+    <Suspense fallback={<BroadcastsContent />}>
+      <BroadcastsPageInner />
+    </Suspense>
+  );
 }
