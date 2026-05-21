@@ -38,7 +38,6 @@ import { useOrg } from "@/lib/org";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PREDEFINED_TEMPLATES, type PredefinedTemplate } from "./PREDEFINED_TEMPLATES";
 import { cn } from "@/lib/utils";
-import { BroadcastsContent } from "../broadcasts/page";
 
 // ── localStorage helpers ───────────────────────────────────────────────────────
 
@@ -540,9 +539,6 @@ export default function EmailTemplatesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnToSend = searchParams.get("returnToSend") === "1";
-  const activeTab = searchParams.get("tab") ?? "templates";
-  const fromTemplate = searchParams.get("fromTemplate") ?? undefined;
-  const fromSourceRef = searchParams.get("source_ref") ?? undefined;
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sample chooser
@@ -659,66 +655,29 @@ export default function EmailTemplatesPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Email</h1>
-          <p className="text-muted-foreground mt-1.5 text-base">
-            {activeTab === "campaigns"
-              ? "Send emails to groups of recipients — batches, cohorts, or any list."
-              : "Design and manage the emails sent to recipients when certificates are issued."}
+          <h1 className="text-3xl font-bold tracking-tight">Email Templates</h1>
+          <p className="text-muted-foreground mt-1.5 text-sm">
+            Design reusable emails for certificate delivery and broadcast campaigns.
           </p>
         </div>
-        {activeTab === "templates" && (
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" onClick={() => setShowSamplePurposeDialog(true)}>
-              <Sparkles className="w-4 h-4 mr-2" />
-              Sample Email Templates
-            </Button>
-            <Button
-              onClick={() => setShowPurposeDialog(true)}
-              disabled={creating}
-              className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
-            >
-              {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
-              Design from Scratch
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" onClick={() => setShowSamplePurposeDialog(true)}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Browse Samples
+          </Button>
+          <Button
+            onClick={() => setShowPurposeDialog(true)}
+            disabled={creating}
+            className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
+          >
+            {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
+            New Template
+          </Button>
+        </div>
       </div>
 
-      {/* Tab switcher */}
-      <div className="flex rounded-lg border overflow-hidden w-fit">
-        <button
-          onClick={() => router.push(orgPath("/email-templates"))}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
-            activeTab === "templates"
-              ? "bg-primary text-primary-foreground"
-              : "bg-background hover:bg-muted text-muted-foreground",
-          )}
-        >
-          <Mail className="w-4 h-4" />
-          Templates
-        </button>
-        <button
-          onClick={() => router.push(orgPath("/email-templates?tab=campaigns"))}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
-            activeTab === "campaigns"
-              ? "bg-primary text-primary-foreground"
-              : "bg-background hover:bg-muted text-muted-foreground",
-          )}
-        >
-          <Megaphone className="w-4 h-4" />
-          Campaigns
-        </button>
-      </div>
-
-      {/* Campaigns tab */}
-      {activeTab === "campaigns" && (
-        <BroadcastsContent embedded initialTemplateId={fromTemplate} initialSourceRef={fromSourceRef} />
-      )}
-
-      {/* Templates tab content */}
-      {activeTab === "templates" && error && (
+      {/* Error */}
+      {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -726,10 +685,21 @@ export default function EmailTemplatesPage() {
       )}
 
       {/* Templates content */}
-      {activeTab === "templates" && (loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground py-8">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Loading templates…</span>
+      {loading ? (
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+            <div key={i} className="rounded-2xl border bg-card overflow-hidden animate-pulse">
+              <div className="h-28 bg-muted" />
+              <div className="px-4 pt-3 pb-4 space-y-2">
+                <div className="h-3 bg-muted rounded w-3/4" />
+                <div className="h-2.5 bg-muted/60 rounded w-1/2" />
+                <div className="flex gap-1 pt-1">
+                  <div className="h-4 w-16 bg-muted/50 rounded" />
+                  <div className="h-4 w-12 bg-muted/50 rounded" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : templates.length === 0 ? (
         /* Empty state */
@@ -778,7 +748,7 @@ export default function EmailTemplatesPage() {
                     onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
-                    onSendCampaign={() => router.push(orgPath(`/email-templates?tab=campaigns&fromTemplate=${template.id}`))}
+                    onSendCampaign={() => router.push(orgPath(`/broadcasts?fromTemplate=${template.id}`))}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
                     duplicating={duplicateTemplate.isPending && duplicateTemplate.variables === template.id}
                   />
@@ -805,7 +775,7 @@ export default function EmailTemplatesPage() {
                     onEdit={() => router.push(orgPath(`/email-templates/${template.id}${returnToSend ? "?returnToSend=1" : ""}`))}
                     onDelete={() => setConfirmDeleteId(template.id)}
                     onDuplicate={() => handleDuplicate(template.id)}
-                    onSendCampaign={() => router.push(orgPath(`/email-templates?tab=campaigns&fromTemplate=${template.id}`))}
+                    onSendCampaign={() => router.push(orgPath(`/broadcasts?fromTemplate=${template.id}`))}
                     deleting={deleteTemplate.isPending && deleteTemplate.variables === template.id}
                     duplicating={duplicateTemplate.isPending && duplicateTemplate.variables === template.id}
                   />
@@ -815,7 +785,7 @@ export default function EmailTemplatesPage() {
           )}
 
         </div>
-      ))}
+      )}
 
       {/* Sample purpose — asked before the sample chooser opens */}
       <Dialog open={showSamplePurposeDialog} onOpenChange={setShowSamplePurposeDialog}>

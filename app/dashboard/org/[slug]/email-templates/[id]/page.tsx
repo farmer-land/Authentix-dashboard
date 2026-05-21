@@ -1121,7 +1121,7 @@ export default function EmailTemplateEditorPage() {
               size="sm"
               variant="outline"
               className="gap-1.5 h-8 text-xs border-zinc-700 text-zinc-400 hover:text-foreground hover:border-zinc-600 shrink-0"
-              onClick={() => router.push(orgPath(`/email-templates?tab=campaigns&fromTemplate=${templateId}`))}
+              onClick={() => router.push(orgPath(`/broadcasts?fromTemplate=${templateId}`))}
             >
               <Megaphone className="w-3.5 h-3.5" />
               Send as Campaign

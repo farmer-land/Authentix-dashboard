@@ -39,6 +39,7 @@ import { api } from "@/lib/api/client";
 import { EmailEditor, type EmailEditorResult } from "./EmailEditor";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useOrg } from "@/lib/org";
 
 // ── Template type inference ────────────────────────────────────────────────────
 
@@ -152,6 +153,43 @@ function parseFile(file: File): Promise<{ rows: ParsedRecipient[]; columns: stri
   });
 }
 
+const EMAIL_RE = /^[^\s@"(),:;<>[\]\\]+@[^\s@"(),:;<>[\]\\]+\.[^\s@"(),:;<>[\]\\]{2,}$/;
+
+// ── Wizard draft persistence ────────────────────────────────────────────────────
+// Lightweight state (no CSV rows — too large) saved to sessionStorage so navigating
+// away and back doesn't wipe the user's campaign setup.
+
+interface DraftState {
+  name: string;
+  email_type: string;
+  from_name: string;
+  from_email: string;
+  reply_to: string;
+  subject: string;
+  html_body: string;
+  recipient_mode: RecipientMode;
+  segment_id: string;
+  manual_emails: string;
+  extra_manual_emails: string;
+  selectedTemplateId: string | null;
+  step: number;
+}
+
+function saveDraft(slug: string, draft: DraftState) {
+  try { sessionStorage.setItem(`campaign_draft:${slug}`, JSON.stringify(draft)); } catch { /* quota */ }
+}
+
+function loadDraft(slug: string): DraftState | null {
+  try {
+    const raw = sessionStorage.getItem(`campaign_draft:${slug}`);
+    return raw ? (JSON.parse(raw) as DraftState) : null;
+  } catch { return null; }
+}
+
+function clearDraft(slug: string) {
+  try { sessionStorage.removeItem(`campaign_draft:${slug}`); } catch { /* ignore */ }
+}
+
 function parseManualEmails(raw: string): ParsedRecipient[] {
   return raw
     .split(/[\n,;]+/)
@@ -209,10 +247,20 @@ function CampaignWizard({
   initialSourceRef?: string;
 }) {
   const { segments } = useEmailSegments();
+  const { slug } = useOrg();
   const createMutation = useCreateBroadcast();
   const { integrations: rawIntegrations, loading: integrationsLoading } = useDeliveryIntegrations();
   const { templates: emailTemplates, loading: templatesLoading } = useDeliveryTemplates();
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplateId ?? null);
+
+  // Load draft once on mount (lazy useState initializer) — before any state that uses it
+  const draftRestoredRef = useRef(false);
+  const [savedDraft] = useState<DraftState | null>(() =>
+    !initialTemplateId && !initialSourceRef ? loadDraft(slug) : null
+  );
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    initialTemplateId ?? savedDraft?.selectedTemplateId ?? null
+  );
   // Default to broadcast-only so certificate delivery templates (which need generated cert data) are hidden by default
   const [templateFilter, setTemplateFilter] = useState<"all" | "broadcast" | "certificate">("broadcast");
   const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
@@ -226,7 +274,9 @@ function CampaignWizard({
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
 
   // When both template + contacts source are pre-configured, skip compose and start at recipients
-  const [step, setStep] = useState(initialTemplateId && initialSourceRef ? 1 : 0);
+  const [step, setStep] = useState(
+    initialTemplateId && initialSourceRef ? 1 : (savedDraft?.step ?? 0)
+  );
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -274,29 +324,50 @@ function CampaignWizard({
   const integrationOptions = allSenderOptions;
 
   const [w, setW] = useState<WizardState>({
-    name: "",
-    email_type: "lifecycle",
-    from_name: "",
-    from_email: "",
-    reply_to: "",
+    name: savedDraft?.name ?? "",
+    email_type: savedDraft?.email_type ?? "lifecycle",
+    from_name: savedDraft?.from_name ?? "",
+    from_email: savedDraft?.from_email ?? "",
+    reply_to: savedDraft?.reply_to ?? "",
     // Default to contacts mode whenever we have a pre-selected template or source_ref.
-    // For "Send as campaign" from template list, this pre-loads the user's existing contacts.
-    recipient_mode: (initialSourceRef || initialTemplateId) ? "contacts" : "csv",
+    recipient_mode: initialSourceRef || initialTemplateId
+      ? "contacts"
+      : (savedDraft?.recipient_mode ?? "csv"),
     recipients: [],
     csv_columns: [],
-    manual_emails: "",
-    segment_id: "",
+    manual_emails: savedDraft?.manual_emails ?? "",
+    segment_id: savedDraft?.segment_id ?? "",
     contacts_search: "",
     extra_recipients: [],
-    extra_manual_emails: "",
-    subject: "",
+    extra_manual_emails: savedDraft?.extra_manual_emails ?? "",
+    subject: savedDraft?.subject ?? "",
     preview_text: "",
-    html_body: "",
+    html_body: savedDraft?.html_body ?? "",
     content_json: null,
   });
 
   const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setW(prev => ({ ...prev, [key]: value }));
+
+  // Mark draft as restored so we don't re-load on re-renders
+  useEffect(() => { draftRestoredRef.current = true; }, []);
+
+  // Auto-save draft to sessionStorage whenever lightweight fields change
+  // (recipients/CSV rows are excluded — too large)
+  useEffect(() => {
+    if (!slug || initialTemplateId || initialSourceRef) return;
+    const draft: DraftState = {
+      name: w.name, email_type: w.email_type, from_name: w.from_name,
+      from_email: w.from_email, reply_to: w.reply_to, subject: w.subject,
+      html_body: w.html_body, recipient_mode: w.recipient_mode,
+      segment_id: w.segment_id, manual_emails: w.manual_emails,
+      extra_manual_emails: w.extra_manual_emails, selectedTemplateId, step,
+    };
+    saveDraft(slug, draft);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [w.name, w.email_type, w.from_name, w.from_email, w.reply_to, w.subject,
+      w.html_body, w.recipient_mode, w.segment_id, w.manual_emails,
+      w.extra_manual_emails, selectedTemplateId, step, slug]);
 
   // Auto-populate name, subject + body when an initial template is provided
   useEffect(() => {
@@ -474,8 +545,6 @@ function CampaignWizard({
   };
 
   // ── Send ───────────────────────────────────────────────────────────────────
-  const EMAIL_RE = /^[^\s@"(),:;<>[\]\\]+@[^\s@"(),:;<>[\]\\]+\.[^\s@"(),:;<>[\]\\]{2,}$/;
-
   const handleSend = async () => {
     if (sending) return; // guard against double-click before re-render
     setSending(true);
@@ -504,6 +573,7 @@ function CampaignWizard({
           : undefined,
       };
       const broadcast = await createMutation.mutateAsync(dto);
+      clearDraft(slug);
       try {
         await api.delivery.sendBroadcast(broadcast.id);
         toast.success(`Campaign sent to ${recipientCount} recipients!`);
@@ -535,6 +605,7 @@ function CampaignWizard({
         segment_id: w.recipient_mode === "segment" ? w.segment_id : null,
         inline_recipients: w.recipient_mode !== "segment" ? effectiveRecipients : undefined,
       });
+      clearDraft(slug);
       toast.success("Saved as draft");
       onCreated(broadcast.id);
     } catch {
@@ -1656,6 +1727,7 @@ export function BroadcastsContent({
           <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-muted/20">
             <Megaphone className="h-4 w-4 text-[#3ECF8E] shrink-0" />
             <h2 className="text-sm font-semibold flex-1">New Campaign</h2>
+            <span className="text-[10px] text-muted-foreground/60 mr-1 hidden sm:block">Draft auto-saved</span>
             <Button
               variant="ghost"
               size="sm"
@@ -1697,7 +1769,19 @@ export function BroadcastsContent({
 
       {loading && (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-28 bg-muted animate-pulse rounded-xl" />)}
+          {[1, 2, 3].map(i => (
+            <div key={i} className="rounded-xl border bg-card animate-pulse overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3.5">
+                <div className="h-9 w-9 rounded-xl bg-muted shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-muted rounded w-1/3" />
+                  <div className="h-2.5 bg-muted/60 rounded w-1/4" />
+                </div>
+                <div className="h-6 w-14 bg-muted rounded-full shrink-0" />
+                <div className="h-7 w-7 bg-muted rounded-lg shrink-0" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -753,15 +753,8 @@ export default function GenerateCertificatePage() {
     }
   };
 
-  // Auto-resume session on refresh — fires once when pendingResumeSession is first set.
-  // This replaces the manual "Resume" button click so the user lands back where they were.
-  useEffect(() => {
-    if (pendingResumeSession && !autoResumedRef.current) {
-      autoResumedRef.current = true;
-      handleResumeSession();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingResumeSession]);
+  // Auto-resume intentionally removed — the banner at the template chooser lets the
+  // user choose between resuming or starting fresh without being silently redirected.
 
   // Multi-mode: load all selected templates in parallel, navigate to design
   const handleSelectMultipleTemplates = async (selectedTemplates: any[]) => {
@@ -1625,31 +1618,36 @@ export default function GenerateCertificatePage() {
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Resume session banner */}
               {pendingResumeSession && (
-                <div className="shrink-0 mx-6 mt-4 flex items-center gap-3 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Resume previous session?</p>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      You were working on <span className="font-medium text-foreground">{pendingResumeSession.templateName}</span>
-                    </p>
+                <div className="shrink-0 mx-6 mt-4 rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                      <span className="text-sm">↩</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Continue where you left off?</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        Last session: <span className="font-medium text-foreground">{pendingResumeSession.templateName}</span>
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleResumeSession}
+                      className="shrink-0 bg-primary/90 hover:bg-primary gap-1.5 h-8 px-3 text-xs"
+                    >
+                      Resume session
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setPendingResumeSession(null);
+                        sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+                      }}
+                      className="shrink-0 text-muted-foreground hover:text-foreground h-8 px-3 text-xs"
+                    >
+                      Start fresh
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handleResumeSession}
-                    className="shrink-0 gap-1.5"
-                  >
-                    Resume
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setPendingResumeSession(null);
-                      sessionStorage.removeItem(`gencert_session:${orgSlug}`);
-                    }}
-                    className="shrink-0 text-muted-foreground"
-                  >
-                    Start fresh
-                  </Button>
                 </div>
               )}
               <div className="flex-1 overflow-hidden">

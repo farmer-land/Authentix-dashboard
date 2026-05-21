@@ -23,6 +23,7 @@ import {
   UserRound,
   Filter,
   Activity,
+  Megaphone,
 } from "lucide-react";
 import Image from "next/image";
 import { api } from "@/lib/api/client";
@@ -98,7 +99,8 @@ const NAVIGATION_GROUPS: readonly NavGroup[] = [
   {
     label: "Email",
     items: [
-      { name: "Email",          href: "/email-templates",         icon: Mail      },
+      { name: "Templates",      href: "/email-templates",         icon: Mail      },
+      { name: "Campaigns",      href: "/broadcasts",              icon: Megaphone },
       { name: "Delivery Logs",  href: "/delivery-events",         icon: Activity  },
     ],
   },
