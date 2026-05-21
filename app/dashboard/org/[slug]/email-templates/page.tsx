@@ -332,28 +332,23 @@ function NameDialog({
 
 // ── Template card ─────────────────────────────────────────────────────────────
 
-function EmailPreviewMock() {
+function EmailHtmlPreview({ html }: { html: string }) {
   return (
-    <div className="w-full h-full flex flex-col bg-zinc-950">
-      {/* Email client chrome */}
-      <div className="h-8 bg-zinc-900 border-b border-zinc-800 flex items-center px-3 gap-2 shrink-0">
-        <div className="flex gap-1">
-          {[0, 1, 2].map((i) => <div key={i} className="w-1.5 h-1.5 rounded-full bg-zinc-700" />)}
-        </div>
-        <div className="h-3 rounded bg-zinc-800 w-24 ml-1" />
-      </div>
-      {/* Email body */}
-      <div className="flex-1 px-4 pt-4 pb-3 flex flex-col gap-2">
-        <div className="h-2 rounded bg-zinc-700 w-3/5" />
-        <div className="h-1.5 rounded bg-zinc-800 w-2/5" />
-        <div className="flex flex-col gap-1.5 pt-1">
-          <div className="h-1.5 rounded bg-zinc-800 w-full" />
-          <div className="h-1.5 rounded bg-zinc-800 w-11/12" />
-          <div className="h-1.5 rounded bg-zinc-800 w-4/5" />
-        </div>
-        <div className="h-5 rounded bg-zinc-700/70 w-24 mx-auto mt-1" />
-        <div className="h-1 rounded bg-zinc-800/60 w-2/5 mx-auto mt-auto" />
-      </div>
+    <div className="w-full h-full overflow-hidden bg-white">
+      <iframe
+        srcDoc={html || '<p style="color:#ccc;text-align:center;padding:48px 16px;font-family:sans-serif;font-size:13px;">No content yet</p>'}
+        sandbox=""
+        title="email preview"
+        style={{
+          width: 600,
+          height: 800,
+          transform: "scale(0.46)",
+          transformOrigin: "top left",
+          border: "none",
+          pointerEvents: "none",
+          display: "block",
+        }}
+      />
     </div>
   );
 }
@@ -411,7 +406,7 @@ function TemplateCard({
     >
       {/* Preview area */}
       <div className="h-44 overflow-hidden relative shrink-0">
-        <EmailPreviewMock />
+        <EmailHtmlPreview html={template.body ?? ""} />
         {/* Gradient fade bottom */}
         <div className="absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-card to-transparent pointer-events-none" />
         {/* Status badges */}
