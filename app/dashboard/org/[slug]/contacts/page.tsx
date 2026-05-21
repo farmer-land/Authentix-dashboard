@@ -14,6 +14,7 @@ import {
 import {
   Users, Upload, Loader2,
   Award, Mail, ChevronDown, FileText, Trash2, Search, PenLine,
+  Megaphone, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
@@ -206,29 +207,36 @@ function ContactCertModal({
 
 // ── Email template picker modal ───────────────────────────────────────────────
 
-function EmailTemplateMiniPreview() {
+const CERT_VARS_MODAL = ["certificate_number", "cert_number", "certificate_id", "recipient_name", "course_name", "issue_date", "expiry_date"];
+const CERT_BLOCKS_MODAL = ["qr_code", "details_box", "certificate_number"];
+
+function inferEmailTemplateType(body: string): "broadcast" | "certificate" {
+  const lower = body.toLowerCase();
+  const hasCertVar = CERT_VARS_MODAL.some(v => lower.includes(`{{${v}}}`));
+  const hasCertBlock = CERT_BLOCKS_MODAL.some(b => lower.includes(`"type":"${b}"`) || lower.includes(`"blockType":"${b}"`));
+  return hasCertVar || hasCertBlock ? "certificate" : "broadcast";
+}
+
+function EmailHtmlThumbnail({ html }: { html: string }) {
+  const SCALE = 0.315;
+  const SRC_W = 620;
+  const SRC_H = 500;
   return (
-    <div className="aspect-4/3 overflow-hidden rounded-t-xl bg-zinc-950 flex flex-col">
-      {/* Chrome strip */}
-      <div className="h-5 bg-zinc-900 border-b border-zinc-800/80 flex items-center px-2 gap-1 shrink-0">
-        <div className="flex gap-0.5">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="w-1 h-1 rounded-full bg-zinc-700" />
-          ))}
-        </div>
-        <div className="flex-1 h-2 rounded bg-zinc-800 ml-1 max-w-14" />
-      </div>
-      {/* Body */}
-      <div className="flex-1 px-3 py-2.5 space-y-1.5">
-        <div className="h-1.5 rounded bg-zinc-700 w-3/5" />
-        <div className="h-1 rounded bg-zinc-800 w-2/5" />
-        <div className="space-y-1 pt-1">
-          <div className="h-1 rounded bg-zinc-800 w-full" />
-          <div className="h-1 rounded bg-zinc-800 w-11/12" />
-          <div className="h-1 rounded bg-zinc-800 w-3/4" />
-        </div>
-        <div className="pt-1 h-3 rounded bg-zinc-700/80 w-14 mx-auto" />
-      </div>
+    <div className="relative overflow-hidden bg-white" style={{ height: Math.round(SRC_H * SCALE) }}>
+      <iframe
+        srcDoc={html || '<p style="color:#bbb;text-align:center;padding:40px 20px;font-family:sans-serif;font-size:13px;">No content</p>'}
+        sandbox=""
+        title="preview"
+        style={{
+          width: SRC_W,
+          height: SRC_H,
+          transform: `scale(${SCALE})`,
+          transformOrigin: "top left",
+          border: "none",
+          pointerEvents: "none",
+          display: "block",
+        }}
+      />
     </div>
   );
 }
@@ -316,54 +324,77 @@ function ContactEmailModal({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {items.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelected(selected === t.id ? null : t.id)}
-                  className={cn(
-                    "rounded-xl border text-left overflow-hidden transition-all",
-                    selected === t.id
-                      ? "border-primary ring-2 ring-primary/20"
-                      : "border-border hover:border-muted-foreground/50",
-                  )}
-                >
-                  <EmailTemplateMiniPreview />
-                  <div className="px-3 py-2 space-y-1">
-                    <p className="text-xs font-semibold truncate">{t.name}</p>
-                    {t.email_subject && (
-                      <p className="text-[10px] text-muted-foreground truncate">{t.email_subject}</p>
+              {items.map((t) => {
+                const isSelected = selected === t.id;
+                const tplType = inferEmailTemplateType(t.body ?? "");
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelected(isSelected ? null : t.id)}
+                    className={cn(
+                      "rounded-xl border-2 text-left overflow-hidden transition-all select-none group",
+                      isSelected
+                        ? "border-primary shadow-md"
+                        : "border-border hover:border-primary/40 hover:shadow-sm",
                     )}
-                    {(t.variables ?? []).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-0.5">
-                        {(t.variables ?? []).slice(0, 3).map((v) => (
-                          <span key={v} className="px-1.5 py-px rounded bg-muted text-[9px] font-mono text-muted-foreground">
-                            {`{{${v}}}`}
-                          </span>
-                        ))}
-                        {(t.variables ?? []).length > 3 && (
-                          <span className="text-[9px] text-muted-foreground">+{(t.variables ?? []).length - 3}</span>
-                        )}
+                  >
+                    {/* Real HTML thumbnail */}
+                    <div className="relative">
+                      <EmailHtmlThumbnail html={t.body ?? ""} />
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+                          <CheckCircle2 className="h-6 w-6 text-primary drop-shadow" />
+                        </div>
+                      )}
+                      {/* Type badge */}
+                      <div className={cn(
+                        "absolute top-1.5 right-1.5 flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
+                        tplType === "certificate"
+                          ? "bg-amber-50 border-amber-200 text-amber-700"
+                          : "bg-blue-50 border-blue-200 text-blue-700",
+                      )}>
+                        {tplType === "certificate"
+                          ? <><Award className="h-2.5 w-2.5" /> Cert</>
+                          : <><Megaphone className="h-2.5 w-2.5" /> Broadcast</>}
                       </div>
-                    )}
-                  </div>
-                </button>
-              ))}
+                    </div>
+                    {/* Footer */}
+                    <div className="px-3 py-2 border-t bg-card space-y-0.5">
+                      <p className="text-xs font-semibold truncate">{t.name}</p>
+                      {t.email_subject && (
+                        <p className="text-[10px] text-muted-foreground truncate">{t.email_subject}</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Footer — only show scratch/use buttons when templates exist */}
-        {hasTemplates && (
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button variant="outline" onClick={() => onConfirm(null)} className="text-muted-foreground">
-              <PenLine className="h-3.5 w-3.5 mr-1.5" /> Design from Scratch
-            </Button>
-            <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
-              Use Template
-            </Button>
-          </DialogFooter>
-        )}
+        {hasTemplates && (() => {
+          const selectedTpl = selected ? items.find(t => t.id === selected) : null;
+          const selectedType = selectedTpl ? inferEmailTemplateType(selectedTpl.body ?? "") : null;
+          const ctaLabel = selectedType === "certificate"
+            ? "Use for Certificate Delivery"
+            : selectedType === "broadcast"
+            ? "Use for Broadcast"
+            : "Use Template";
+          return (
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button variant="outline" onClick={() => onConfirm(null)} className="text-muted-foreground">
+                <PenLine className="h-3.5 w-3.5 mr-1.5" /> Design from Scratch
+              </Button>
+              <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
+                {selectedType === "certificate" && <Award className="h-3.5 w-3.5 mr-1.5" />}
+                {selectedType === "broadcast" && <Megaphone className="h-3.5 w-3.5 mr-1.5" />}
+                {ctaLabel}
+              </Button>
+            </DialogFooter>
+          );
+        })()}
         {!hasTemplates && !loading && (
           <DialogFooter>
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
