@@ -14,10 +14,10 @@ import {
 import {
   Users, Upload, Loader2,
   Award, Mail, ChevronDown, FileText, Trash2, Search, PenLine,
-  Megaphone,
+  Megaphone, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEmailContacts } from "@/lib/hooks/queries/delivery";
+import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
 import { useTemplates } from "@/lib/hooks/queries/templates";
 import { api } from "@/lib/api/client";
 import { formatDistanceToNow } from "date-fns";
@@ -197,6 +197,157 @@ function ContactCertModal({
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
             Open in Designer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Broadcast template picker modal ───────────────────────────────────────────
+
+const CERT_VARS_BCAST = ["certificate_number", "cert_number", "certificate_id", "course_name", "issue_date", "expiry_date"];
+const CERT_BLOCKS_BCAST = ["qr_code", "details_box", "certificate_number"];
+
+function inferBroadcastTemplateType(body: string): "broadcast" | "certificate" {
+  const lower = body.toLowerCase();
+  const hasCertVar = CERT_VARS_BCAST.some(v => lower.includes(`{{${v}}}`));
+  const hasCertBlock = CERT_BLOCKS_BCAST.some(b => lower.includes(`"type":"${b}"`) || lower.includes(`"blockType":"${b}"`));
+  return hasCertVar || hasCertBlock ? "certificate" : "broadcast";
+}
+
+function EmailHtmlThumbnail({ html }: { html: string }) {
+  const SCALE = 0.26;
+  const SRC_W = 620;
+  const SRC_H = 480;
+  return (
+    <div className="relative overflow-hidden bg-white" style={{ height: Math.round(SRC_H * SCALE) }}>
+      <iframe
+        srcDoc={html || '<p style="color:#bbb;text-align:center;padding:40px 20px;font-family:sans-serif;font-size:13px;">No content</p>'}
+        sandbox=""
+        title="preview"
+        style={{
+          width: SRC_W,
+          height: SRC_H,
+          transform: `scale(${SCALE})`,
+          transformOrigin: "top left",
+          border: "none",
+          pointerEvents: "none",
+          display: "block",
+        }}
+      />
+    </div>
+  );
+}
+
+function BroadcastTemplateModal({
+  open,
+  onClose,
+  onSelect,
+  onScratch,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (templateId: string) => void;
+  onScratch: () => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const { templates, loading } = useDeliveryTemplates();
+
+  useEffect(() => {
+    if (!open) { setSelected(null); setSearch(""); }
+  }, [open]);
+
+  const broadcastTemplates = (templates as Array<{ id: string; name: string; body: string; email_subject?: string | null; is_active?: boolean }>)
+    .filter(t => t.is_active && inferBroadcastTemplateType(t.body ?? "") === "broadcast")
+    .filter(t => !search || t.name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-primary" /> New Broadcast Campaign
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">Pick an email template or design a new one</p>
+        </DialogHeader>
+
+        {broadcastTemplates.length > 0 || loading ? (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search templates…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+        ) : null}
+
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-36 bg-muted animate-pulse rounded-xl" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
+              {broadcastTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setSelected(t.id)}
+                  className={cn(
+                    "rounded-xl border-2 text-left overflow-hidden transition-all select-none",
+                    selected === t.id
+                      ? "border-primary shadow-md"
+                      : "border-border hover:border-primary/40 hover:shadow-sm",
+                  )}
+                >
+                  <div className="relative">
+                    <EmailHtmlThumbnail html={t.body ?? ""} />
+                    {selected === t.id && (
+                      <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+                        <CheckCircle2 className="h-6 w-6 text-primary drop-shadow" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-2.5 py-2 border-t bg-card">
+                    <p className="text-xs font-semibold truncate leading-tight">{t.name}</p>
+                    {t.email_subject && (
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                        {t.email_subject.replace(/\{\{[\w.\s]+\}\}/g, "…")}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))}
+
+              {/* Design from scratch */}
+              <button
+                onClick={onScratch}
+                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 transition-all flex flex-col items-center justify-center gap-2 min-h-36"
+              >
+                <PenLine className="h-5 w-5 text-muted-foreground" />
+                <p className="text-xs font-medium text-muted-foreground">Design from scratch</p>
+              </button>
+            </div>
+          )}
+
+          {!loading && broadcastTemplates.length === 0 && !search && (
+            <div className="text-center py-6 text-sm text-muted-foreground">
+              <Megaphone className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p>No broadcast templates yet</p>
+              <p className="text-xs mt-1">Use "Design from scratch" to compose your email</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button disabled={!selected} onClick={() => selected && onSelect(selected)}>
+            Use Template
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -386,6 +537,9 @@ export default function ContactsPage() {
   // Certificate template picker modal
   const [certModal, setCertModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
 
+  // Broadcast template picker modal
+  const [broadcastModal, setBroadcastModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
+
   // Delete recent import confirmation
   const [deleteImportTarget, setDeleteImportTarget] = useState<ImportSession | null>(null);
 
@@ -510,8 +664,21 @@ export default function ContactsPage() {
   };
 
   const handleBroadcast = (source_ref?: string) => {
+    setBroadcastModal({ open: true, source_ref });
+  };
+
+  const handleBroadcastTemplateSelect = (templateId: string) => {
     const qs = new URLSearchParams();
-    if (source_ref) qs.set("source_ref", source_ref);
+    if (broadcastModal.source_ref) qs.set("source_ref", broadcastModal.source_ref);
+    qs.set("fromTemplate", templateId);
+    setBroadcastModal({ open: false });
+    router.push(`/dashboard/org/${orgSlug}/broadcasts?${qs.toString()}`);
+  };
+
+  const handleBroadcastScratch = () => {
+    const qs = new URLSearchParams();
+    if (broadcastModal.source_ref) qs.set("source_ref", broadcastModal.source_ref);
+    setBroadcastModal({ open: false });
     router.push(`/dashboard/org/${orgSlug}/broadcasts?${qs.toString()}`);
   };
 
@@ -725,6 +892,14 @@ export default function ContactsPage() {
         open={certModal.open}
         onClose={() => setCertModal({ open: false })}
         onConfirm={handleCertModalConfirm}
+      />
+
+      {/* Broadcast template picker */}
+      <BroadcastTemplateModal
+        open={broadcastModal.open}
+        onClose={() => setBroadcastModal({ open: false })}
+        onSelect={handleBroadcastTemplateSelect}
+        onScratch={handleBroadcastScratch}
       />
 
       {/* Delete import confirmation */}

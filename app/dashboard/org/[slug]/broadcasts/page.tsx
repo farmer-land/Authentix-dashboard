@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -102,6 +102,9 @@ interface WizardState {
   manual_emails: string;                  // raw textarea value
   segment_id: string;
   contacts_search: string;
+  // Extra recipients stacked on top of contacts when initialSourceRef is set
+  extra_recipients: ParsedRecipient[];   // from additional file upload
+  extra_manual_emails: string;           // from additional manual entry
 
   // Step 3 — Design / Compose
   subject: string;
@@ -228,7 +231,9 @@ function CampaignWizard({
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
+  const [showAddMore, setShowAddMore] = useState<"file" | "manual" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const extraFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>('');
   const didAutoSelect = useRef(false);
   const [contactSearch, setContactSearch] = useState("");
@@ -280,6 +285,8 @@ function CampaignWizard({
     manual_emails: "",
     segment_id: "",
     contacts_search: "",
+    extra_recipients: [],
+    extra_manual_emails: "",
     subject: "",
     preview_text: "",
     html_body: "",
@@ -333,6 +340,17 @@ function CampaignWizard({
     }
   }, []);
 
+  // Extra file upload — adds to contacts mode recipients without replacing them
+  const handleExtraFile = useCallback(async (file: File) => {
+    try {
+      const { rows } = await parseFile(file);
+      setW(prev => ({ ...prev, extra_recipients: [...prev.extra_recipients, ...rows] }));
+      toast.success(`Added ${rows.length} more recipients from ${file.name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to parse file");
+    }
+  }, []);
+
   // ── Template variables used in the composed HTML ──────────────────────────
   const templateVarsFromHtml: string[] = w.html_body
     ? [...new Set([...w.html_body.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]!))]
@@ -356,12 +374,15 @@ function CampaignWizard({
         }))
     : [];
 
+  const extraManualRecipients = parseManualEmails(w.extra_manual_emails);
   const effectiveRecipients = isStructuredManual
     ? w.recipients.filter(r => r.email?.includes("@"))
     : w.recipient_mode === "manual"
     ? parseManualEmails(w.manual_emails)
     : w.recipient_mode === "csv" ? w.recipients
-    : w.recipient_mode === "contacts" ? contactRecipients
+    : w.recipient_mode === "contacts"
+    // When contacts mode, combine pre-loaded contacts + any extra file/manual additions
+    ? [...contactRecipients, ...w.extra_recipients, ...extraManualRecipients]
     : [];
 
   const recipientCount = w.recipient_mode === "segment"
@@ -1011,6 +1032,85 @@ function CampaignWizard({
               )}
             </>
           )}
+
+          {/* Add more recipients — stacked below contacts when coming from contacts page */}
+          {initialSourceRef && (
+            <div className="rounded-lg border overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b">
+                <span className="text-xs font-medium text-muted-foreground">Add more recipients</span>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setShowAddMore(showAddMore === "file" ? null : "file")}
+                    className={cn(
+                      "flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors",
+                      showAddMore === "file" ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted/30 text-muted-foreground",
+                    )}
+                  >
+                    <Upload className="h-3 w-3" /> Upload file
+                  </button>
+                  <button
+                    onClick={() => setShowAddMore(showAddMore === "manual" ? null : "manual")}
+                    className={cn(
+                      "flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors",
+                      showAddMore === "manual" ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted/30 text-muted-foreground",
+                    )}
+                  >
+                    <PenLine className="h-3 w-3" /> Enter manually
+                  </button>
+                </div>
+              </div>
+
+              {showAddMore === "file" && (
+                <div className="p-3 space-y-2">
+                  <div
+                    className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
+                    onClick={() => extraFileInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleExtraFile(f); }}
+                  >
+                    <Upload className="h-5 w-5 mx-auto text-muted-foreground mb-1" />
+                    <p className="text-xs text-muted-foreground">Drop a CSV / Excel file or click to browse</p>
+                    <input
+                      ref={extraFileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleExtraFile(f); e.target.value = ""; }}
+                    />
+                  </div>
+                  {w.extra_recipients.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                        <CheckCircle2 className="h-3 w-3 inline mr-1" />{w.extra_recipients.length} extra recipients added
+                      </span>
+                      <button
+                        className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={() => set("extra_recipients", [])}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {showAddMore === "manual" && (
+                <div className="p-3 space-y-2">
+                  <Textarea
+                    placeholder={"ravi@example.com\npriya@example.com\nananya@example.com"}
+                    value={w.extra_manual_emails}
+                    onChange={e => set("extra_manual_emails", e.target.value)}
+                    className="min-h-24 font-mono text-xs"
+                  />
+                  {extraManualRecipients.length > 0 && (
+                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                      <CheckCircle2 className="h-3 w-3 inline mr-1" />{extraManualRecipients.length} additional emails detected
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1487,6 +1587,7 @@ export function BroadcastsContent({
 } = {}) {
   const { broadcasts, loading, refetch } = useEmailBroadcasts();
   const deleteMutation = useDeleteBroadcast();
+  const router = useRouter();
 
   // Open wizard automatically when coming from contacts (source_ref) or with a pre-selected template
   const [showWizard, setShowWizard] = useState(!!(initialTemplateId || initialSourceRef));
@@ -1494,6 +1595,32 @@ export function BroadcastsContent({
 
   const drafts = broadcasts.filter(b => b.status === "draft");
   const sent   = broadcasts.filter(b => b.status !== "draft");
+
+  // ── Focused wizard-only view (entered from contacts page) ──────────────────
+  if (initialSourceRef) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-4">
+        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 text-muted-foreground" onClick={() => router.back()}>
+          <ChevronLeft className="h-4 w-4" /> Back to Contacts
+        </Button>
+        <Card className="border-primary/20 shadow-sm">
+          <CardHeader className="pb-2 border-b">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Megaphone className="h-4 w-4 text-primary" /> New Broadcast Campaign
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <CampaignWizard
+              onClose={() => router.back()}
+              onCreated={() => router.replace(window.location.pathname.replace(/\?.*$/, ""))}
+              initialTemplateId={initialTemplateId}
+              initialSourceRef={initialSourceRef}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className={embedded ? "space-y-6" : "p-6 space-y-6 max-w-4xl mx-auto"}>
