@@ -24,7 +24,7 @@ import {
   Megaphone, Plus, Loader2, Send, Trash2, MoreHorizontal, Clock,
   CheckCircle2, AlertCircle, Edit2, Users, Upload, FileSpreadsheet,
   ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw, Info,
-  Search, Award, Layers,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
@@ -52,30 +52,24 @@ function inferTemplateType(body: string): "broadcast" | "certificate" {
   return hasCertVar || hasCertBlock ? "certificate" : "broadcast";
 }
 
-// ── Scaled HTML thumbnail ─────────────────────────────────────────────────────
+// ── Template gradient tiles (no iframes — consistent, dark-mode-safe) ────────
 
-function EmailHtmlPreview({ html }: { html: string }) {
-  const SCALE = 0.315;
-  const SRC_W = 620;
-  const SRC_H = 500;
-  return (
-    <div className="relative overflow-hidden bg-white" style={{ height: Math.round(SRC_H * SCALE) }}>
-      <iframe
-        srcDoc={html || '<p style="color:#bbb;text-align:center;padding:40px 20px;font-family:sans-serif;font-size:13px;">No content</p>'}
-        sandbox=""
-        title="preview"
-        style={{
-          width: SRC_W,
-          height: SRC_H,
-          transform: `scale(${SCALE})`,
-          transformOrigin: "top left",
-          border: "none",
-          pointerEvents: "none",
-          display: "block",
-        }}
-      />
-    </div>
-  );
+const TPL_GRADIENTS: [string, string][] = [
+  ["#6366f1", "#8b5cf6"],
+  ["#0ea5e9", "#06b6d4"],
+  ["#10b981", "#14b8a6"],
+  ["#f59e0b", "#f97316"],
+  ["#ec4899", "#f43f5e"],
+  ["#3b82f6", "#6366f1"],
+  ["#22c55e", "#10b981"],
+  ["#a855f7", "#ec4899"],
+  ["#64748b", "#475569"],
+  ["#f97316", "#ef4444"],
+];
+
+function tplGradient(id: string): [string, string] {
+  const hash = id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return TPL_GRADIENTS[hash % TPL_GRADIENTS.length]!;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -168,33 +162,31 @@ function parseManualEmails(raw: string): ParsedRecipient[] {
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
-function Steps({ current, skippedIndex }: { current: number; skippedIndex?: number }) {
-  const steps = ["Campaign info", "Design email", "Recipients", "Review & Send"];
+function WizardSteps({ current }: { current: number }) {
+  const labels = ["Compose", "Recipients"];
   return (
-    <div className="flex items-center gap-0 mb-6">
-      {steps.map((label, i) => {
-        const isSkipped = i === skippedIndex;
-        const isDone = i < current || isSkipped;
-        const isCurrent = i === current;
+    <div className="flex items-center gap-1">
+      {labels.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
         return (
           <div key={i} className="flex items-center">
             <div className={cn(
-              "flex items-center gap-2 text-sm font-medium",
-              isDone ? "text-primary" : isCurrent ? "text-foreground" : "text-muted-foreground",
-              isSkipped && "opacity-50",
+              "flex items-center gap-1.5 text-xs font-semibold",
+              done ? "text-[#3ECF8E]" : active ? "text-foreground" : "text-muted-foreground/50",
             )}>
               <div className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2",
-                isDone    ? "border-primary bg-primary text-primary-foreground" :
-                isCurrent ? "border-foreground bg-background text-foreground" :
-                            "border-muted-foreground/30 bg-background text-muted-foreground",
+                "w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold",
+                done ? "bg-[#3ECF8E] text-white" :
+                active ? "bg-foreground text-background" :
+                "bg-muted text-muted-foreground",
               )}>
-                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                {done ? <CheckCircle2 className="h-3 w-3" /> : i + 1}
               </div>
               <span className="hidden sm:block">{label}</span>
             </div>
-            {i < steps.length - 1 && (
-              <div className={cn("h-px w-8 mx-2", isDone ? "bg-primary" : "bg-border")} />
+            {i < labels.length - 1 && (
+              <ChevronRight className={cn("h-3.5 w-3.5 mx-2 shrink-0", done ? "text-[#3ECF8E]" : "text-muted-foreground/30")} />
             )}
           </div>
         );
@@ -233,8 +225,8 @@ function CampaignWizard({
   });
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
 
-  // When both template + contacts source are pre-configured, start at recipients step
-  const [step, setStep] = useState(initialTemplateId && initialSourceRef ? 2 : 0);
+  // When both template + contacts source are pre-configured, skip compose and start at recipients
+  const [step, setStep] = useState(initialTemplateId && initialSourceRef ? 1 : 0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -440,7 +432,7 @@ function CampaignWizard({
       content_json: result.content_json,
     }));
     setShowEditor(false);
-    setStep(2); // advance to Recipients step after design is done
+    setStep(1); // advance to Recipients step after design is done
   }, []);
 
   // ── Structured manual row helpers ─────────────────────────────────────────
@@ -537,115 +529,246 @@ function CampaignWizard({
     }
   };
 
-  // ── Step 0: Campaign info ──────────────────────────────────────────────────
-  const renderStep0 = () => (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label>Campaign name <span className="text-red-500">*</span></Label>
-        <Input
-          placeholder="e.g. Python Batch April 2026 — Welcome"
-          value={w.name}
-          onChange={e => set("name", e.target.value)}
-          autoFocus
-        />
-        <p className="text-xs text-muted-foreground">For your reference only — not shown to recipients.</p>
-      </div>
+  // ── Step 0: Compose (name + sender + subject + template) ──────────────────
+  const renderCompose = () => {
+    const savedTemplates = emailTemplates.filter(t => t.is_active);
+    const filteredTemplates = savedTemplates.filter(t => {
+      if (templateFilter === "all") return true;
+      return inferTemplateType(t.body ?? "") === templateFilter;
+    });
 
-      {/* Send From */}
-      {integrationsLoading ? (
-        <div className="space-y-1.5">
-          <Label>Send From</Label>
-          <div className="h-10 rounded-md bg-muted animate-pulse" />
+    return (
+      <div className="space-y-5">
+        {/* Campaign name — auto-filled, editable inline */}
+        <div className="rounded-xl border bg-muted/20 px-4 py-3 space-y-1 focus-within:border-[#3ECF8E]/60 transition-colors">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaign Name</p>
+          <input
+            className="w-full text-sm font-semibold bg-transparent outline-none placeholder:text-muted-foreground/50 text-foreground"
+            placeholder="e.g. Python Batch April 2026 — Welcome"
+            value={w.name}
+            onChange={e => set("name", e.target.value)}
+            autoFocus
+          />
         </div>
-      ) : showSenderDropdown ? (
-        <div className="space-y-1.5">
-          <Label>Send From <span className="text-red-500">*</span></Label>
-          <Select
-            value={selectedIntegrationId}
-            onValueChange={(id) => {
-              const opt = allSenderOptions.find(o => o.id === id);
-              if (!opt) return;
-              setSelectedIntegrationId(id);
-              setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
-            }}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue placeholder="Select sender…" />
-            </SelectTrigger>
-            <SelectContent>
-              {allSenderOptions.map(opt => (
-                <SelectItem key={opt.id} value={opt.id}>
-                  <span className="flex items-center gap-2">
-                    <span>{opt.name}</span>
-                    <span className="text-xs text-muted-foreground">{opt.email}</span>
-                    {opt.isPlatform && (
-                      <span className="text-[10px] text-muted-foreground/60 border rounded px-1">platform</span>
-                    )}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
-      {/* Compact sender confirmation */}
-      {w.from_email && (
-        <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
-          <MailIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <p className="text-xs text-muted-foreground flex-1 min-w-0">
-            Sending as <span className="font-medium text-foreground">{w.from_name}</span>
-            <span className="ml-1 font-mono">&lt;{w.from_email}&gt;</span>
-            {selectedIntegrationId === '__platform__' && (
-              <span className="ml-1 text-amber-600 dark:text-amber-400">· Platform default</span>
+
+        {/* Sender — compact pill, auto-selected */}
+        {integrationsLoading ? (
+          <div className="h-9 rounded-lg bg-muted/60 animate-pulse" />
+        ) : (
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="w-7 h-7 rounded-full bg-[#3ECF8E]/10 flex items-center justify-center shrink-0">
+              <MailIcon className="h-3.5 w-3.5 text-[#3ECF8E]" />
+            </div>
+            <p className="text-xs flex-1 min-w-0 truncate">
+              <span className="font-semibold text-foreground">{w.from_name || "—"}</span>
+              {w.from_email && (
+                <span className="text-muted-foreground ml-1.5 font-mono">&lt;{w.from_email}&gt;</span>
+              )}
+              {selectedIntegrationId === "__platform__" && (
+                <span className="ml-1.5 text-amber-500 text-[10px]">· platform sender</span>
+              )}
+            </p>
+            {selectedIntegrationId === "__platform__" && (
+              <a href="../settings/delivery" className="text-[10px] text-amber-500 hover:text-foreground underline shrink-0 whitespace-nowrap">
+                Add custom sender
+              </a>
             )}
-          </p>
-          {selectedIntegrationId === '__platform__' ? (
-            <a href="../settings/delivery" className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-foreground underline shrink-0 whitespace-nowrap">Add own sender</a>
-          ) : showSenderDropdown ? (
-            <a href="../settings/delivery" className="text-[10px] text-muted-foreground/60 hover:text-foreground underline shrink-0">Manage</a>
-          ) : null}
-        </div>
-      )}
+            {showSenderDropdown && (
+              <Select
+                value={selectedIntegrationId}
+                onValueChange={(id) => {
+                  const opt = allSenderOptions.find(o => o.id === id);
+                  if (!opt) return;
+                  setSelectedIntegrationId(id);
+                  setW(prev => ({ ...prev, from_name: opt.name, from_email: opt.email, reply_to: opt.replyTo }));
+                }}
+              >
+                <SelectTrigger className="h-7 text-xs border-border bg-muted/40 px-2 w-fit">
+                  <SelectValue placeholder="Change" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allSenderOptions.map(opt => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.name} — {opt.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
 
-      {/* Advanced — email type + reply-to, collapsed by default */}
-      <button
-        type="button"
-        onClick={() => setShowAdvanced(v => !v)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-90")} />
-        Advanced settings
-      </button>
-      {showAdvanced && (
-        <div className="space-y-4 pl-4 border-l-2 border-border">
-          <div className="space-y-1.5">
-            <Label>Email type</Label>
-            <Select value={w.email_type} onValueChange={v => set("email_type", v)}>
-              <SelectTrigger className="text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EMAIL_TYPES.map(t => (
-                  <SelectItem key={t.value} value={t.value}>
-                    <span>{t.label}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{t.desc}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Reply-to <span className="text-xs text-muted-foreground">(optional)</span></Label>
-            <Input
-              placeholder="Same as from email"
-              value={w.reply_to}
-              onChange={e => set("reply_to", e.target.value)}
-            />
-          </div>
+        {/* Subject */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+            Subject line <span className="text-red-400 normal-case font-normal">*</span>
+          </Label>
+          <Input
+            placeholder="What's this email about?"
+            value={w.subject}
+            onChange={e => set("subject", e.target.value)}
+            className="h-10"
+          />
         </div>
-      )}
-    </div>
-  );
+
+        {/* Template picker */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+              Email template <span className="text-red-400 normal-case font-normal">*</span>
+            </Label>
+            {savedTemplates.length > 0 && (
+              <div className="flex gap-1">
+                {(["broadcast", "certificate", "all"] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setTemplateFilter(f)}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full border transition-colors font-medium",
+                      templateFilter === f
+                        ? "bg-foreground text-background border-foreground"
+                        : "text-muted-foreground border-border hover:border-foreground/40 hover:text-foreground",
+                    )}
+                  >
+                    {f === "all" ? "All" : f === "broadcast" ? "Broadcast" : "Certificate"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {templatesLoading ? (
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-muted animate-pulse rounded-xl" />)}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {filteredTemplates.map(t => {
+                  const isSelected = selectedTemplateId === t.id;
+                  const [from, to] = tplGradient(t.id);
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => {
+                        setSelectedTemplateId(t.id);
+                        setW(prev => ({
+                          ...prev,
+                          html_body: t.body,
+                          subject: prev.subject || t.email_subject || "",
+                        }));
+                      }}
+                      className={cn(
+                        "rounded-xl border-2 cursor-pointer transition-all overflow-hidden select-none group",
+                        isSelected
+                          ? "border-[#3ECF8E] shadow-md shadow-[#3ECF8E]/15"
+                          : "border-border hover:border-[#3ECF8E]/50 hover:shadow-sm",
+                      )}
+                    >
+                      <div
+                        className="relative h-16 flex items-center justify-center"
+                        style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
+                      >
+                        <MailIcon className="h-5 w-5 text-white/40" />
+                        {isSelected && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                            <CheckCircle2 className="h-6 w-6 text-white drop-shadow" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-2.5 py-2 border-t bg-card">
+                        <p className="text-[10px] font-semibold truncate leading-tight">{t.name}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Design from scratch */}
+                <div
+                  onClick={() => { setSelectedTemplateId(null); set("html_body", ""); setShowEditor(true); }}
+                  className="rounded-xl border-2 border-dashed border-border hover:border-[#3ECF8E]/50 hover:bg-muted/20 cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5 select-none"
+                  style={{ minHeight: 96 }}
+                >
+                  <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+                    <PenLine className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                  <p className="text-[10px] font-medium text-muted-foreground text-center leading-tight">
+                    Design<br />from scratch
+                  </p>
+                </div>
+              </div>
+
+              {filteredTemplates.length === 0 && savedTemplates.length > 0 && (
+                <p className="text-xs text-muted-foreground text-center py-1">
+                  No {templateFilter} templates.{" "}
+                  <button className="underline" onClick={() => setTemplateFilter("all")}>Show all</button>
+                </p>
+              )}
+              {savedTemplates.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No templates yet.{" "}
+                  <a href="../email-templates" className="underline font-medium">Create one in Email Templates</a>
+                  {" "}or click "Design from scratch".
+                </p>
+              )}
+            </>
+          )}
+
+          {selectedTemplateId && (
+            <button
+              onClick={() => setShowEditor(true)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Eye className="h-3.5 w-3.5" /> Preview &amp; edit this template
+            </button>
+          )}
+        </div>
+
+        {/* Advanced — email type + reply-to, collapsed */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(v => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-90")} />
+            Advanced settings
+          </button>
+          {showAdvanced && (
+            <div className="space-y-3 pl-4 border-l-2 border-border mt-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Email type</Label>
+                <Select value={w.email_type} onValueChange={v => set("email_type", v)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMAIL_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                        <span className="ml-2 text-xs text-muted-foreground">{t.desc}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Reply-to <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Input
+                  placeholder={w.from_email || "Same as from email"}
+                  value={w.reply_to}
+                  onChange={e => set("reply_to", e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // ── Step 1: Recipients ─────────────────────────────────────────────────────
   const renderStep1 = () => (
@@ -1183,298 +1306,19 @@ function CampaignWizard({
     </div>
   );
 
-  // ── Step 2: Choose template (or design from scratch) ────────────────────────
-  const renderStep2 = () => {
-    const savedTemplates = emailTemplates.filter(t => t.is_active);
-    const filteredTemplates = savedTemplates.filter(t => {
-      if (templateFilter === "all") return true;
-      const type = inferTemplateType(t.body ?? "");
-      return type === templateFilter;
-    });
+  // ── 2-step wizard: Compose → Recipients ───────────────────────────────────
+  const composeValid = !!w.name.trim() && !!w.from_email.trim() && !!w.subject.trim() && !!w.html_body.trim();
+  const stepRenders = [renderCompose, renderStep1];
+  const stepValid   = [composeValid, step1Valid];
 
-    return (
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Subject line <span className="text-red-500">*</span></Label>
-          <Input
-            placeholder="Welcome to Python Batch — April 2026!"
-            value={w.subject}
-            onChange={e => set("subject", e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Email template <span className="text-red-500">*</span></Label>
-            {selectedTemplateId && (
-              <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowEditor(true)}>
-                <Edit2 className="h-3 w-3" /> Edit in designer
-              </Button>
-            )}
-          </div>
-
-          {/* Type filter pills */}
-          {savedTemplates.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              {(["all", "broadcast", "certificate"] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setTemplateFilter(f)}
-                  className={cn(
-                    "flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors",
-                    templateFilter === f
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/30",
-                  )}
-                >
-                  {f === "certificate" && <Award className="h-3 w-3" />}
-                  {f === "broadcast" && <Megaphone className="h-3 w-3" />}
-                  {f === "all" && <Layers className="h-3 w-3" />}
-                  {f === "all" ? "All" : f === "broadcast" ? "Broadcast" : "Certificate delivery"}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {templatesLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[1, 2, 3].map(i => <div key={i} className="h-44 bg-muted animate-pulse rounded-xl" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {filteredTemplates.map(t => {
-                const isSelected = selectedTemplateId === t.id;
-                const cleanSubject = (t.email_subject ?? "")
-                  .replace(/\{\{[\w.\s]+\}\}/g, "…").trim() || "No subject";
-                const tplType = inferTemplateType(t.body ?? "");
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => {
-                      setSelectedTemplateId(t.id);
-                      setW(prev => ({
-                        ...prev,
-                        html_body: t.body,
-                        subject: prev.subject || t.email_subject || "",
-                      }));
-                    }}
-                    className={cn(
-                      "rounded-xl border-2 cursor-pointer transition-all select-none overflow-hidden group",
-                      isSelected
-                        ? "border-primary shadow-md"
-                        : "border-border hover:border-primary/40 hover:shadow-sm",
-                    )}
-                  >
-                    {/* HTML preview thumbnail */}
-                    <div className="relative">
-                      <EmailHtmlPreview html={t.body ?? ""} />
-                      {isSelected && (
-                        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
-                          <CheckCircle2 className="h-6 w-6 text-primary drop-shadow" />
-                        </div>
-                      )}
-                      <div className={cn(
-                        "absolute top-1.5 right-1.5 flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
-                        tplType === "certificate"
-                          ? "bg-amber-50 border-amber-200 text-amber-700"
-                          : "bg-blue-50 border-blue-200 text-blue-700",
-                      )}>
-                        {tplType === "certificate"
-                          ? <><Award className="h-2.5 w-2.5" /> Cert</>
-                          : <><Megaphone className="h-2.5 w-2.5" /> Broadcast</>}
-                      </div>
-                    </div>
-
-                    {/* Card footer */}
-                    <div className="p-2.5 border-t bg-card">
-                      <p className="text-xs font-semibold truncate leading-tight">{t.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{cleanSubject}</p>
-                      {t.is_default && (
-                        <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded-sm border border-primary/30 text-primary font-medium leading-none">
-                          Default
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Design from scratch */}
-              <div
-                onClick={() => { setSelectedTemplateId(null); set("html_body", ""); setShowEditor(true); }}
-                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 min-h-39.5"
-              >
-                <PenLine className="h-5 w-5 text-muted-foreground" />
-                <p className="text-xs font-medium text-center text-muted-foreground">Design from scratch</p>
-              </div>
-            </div>
-          )}
-
-          {savedTemplates.length === 0 && !templatesLoading && (
-            <Alert>
-              <AlertDescription className="text-xs">
-                No email templates yet.{" "}
-                <a href="../email-templates" className="underline font-medium">Create one in Email Templates</a>{" "}
-                or use "Design from scratch" to compose a one-off email.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {filteredTemplates.length === 0 && savedTemplates.length > 0 && !templatesLoading && (
-            <p className="text-xs text-muted-foreground text-center py-2">
-              No {templateFilter} templates found.{" "}
-              <button className="underline" onClick={() => setTemplateFilter("all")}>Show all</button>
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // ── Step 3: Review & Send ──────────────────────────────────────────────────
-  const renderStep3 = () => {
-    // Detect {{variables}} actually used in the composed HTML body
-    const htmlVars = [...new Set(
-      [...(w.html_body.matchAll(/\{\{(\w+)\}\}/g))].map(m => m[1]!)
-    )];
-
-    // Case-insensitive set of column names available from the recipient data
-    const availableCols = new Set(
-      w.csv_columns.map(c => c.toLowerCase()).filter(c => c !== "email")
-    );
-
-    // Variables in the HTML that have no corresponding data column
-    const missingVars = htmlVars.filter(v => !availableCols.has(v.toLowerCase()));
-
-    // Show warning when variables can't be filled
-    const showVarWarning =
-      htmlVars.length > 0 &&
-      (w.recipient_mode === "manual" ||
-        (w.recipient_mode === "csv" && missingVars.length > 0));
-
-    const sample = effectiveRecipients[0];
-    // Build a case-insensitive lookup from the first recipient row
-    const sampleLower: Record<string, string> = {};
-    if (sample) {
-      for (const [k, v] of Object.entries(sample)) {
-        sampleLower[k.toLowerCase()] = String(v);
-      }
-    }
-
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border divide-y overflow-hidden">
-          <ReviewRow label="Campaign" value={w.name} />
-          <ReviewRow label="Email type" value={EMAIL_TYPES.find(t => t.value === w.email_type)?.label ?? w.email_type} />
-          <ReviewRow label="From" value={`${w.from_name} <${w.from_email}>`} />
-
-          {/* Editable subject — user can tweak it right before sending */}
-          <div className="flex items-center gap-4 px-4 py-2">
-            <span className="text-xs font-medium text-muted-foreground w-28 shrink-0">Subject</span>
-            <input
-              type="text"
-              value={w.subject}
-              onChange={e => set("subject", e.target.value)}
-              className="flex-1 text-sm bg-transparent outline-none border-b border-transparent focus:border-border transition-colors py-1 min-w-0"
-              placeholder="Enter subject line…"
-            />
-          </div>
-
-          <ReviewRow
-            label="Recipients"
-            value={
-              w.recipient_mode === "segment"
-                ? `${recipientCount} contacts in "${segments.find(s => s.id === w.segment_id)?.name ?? "segment"}"`
-                : w.recipient_mode === "csv"
-                ? `${recipientCount} recipients from file`
-                : w.recipient_mode === "contacts"
-                ? selectedContactIds.size > 0
-                  ? `${selectedContactIds.size} selected contacts`
-                  : `All ${contactTotal} subscribed contacts`
-                : `${recipientCount} emails entered manually`
-            }
-          />
-          {htmlVars.length > 0 && (
-            <ReviewRow label="Variables" value={htmlVars.map(v => `{{${v}}}`).join(", ")} />
-          )}
-        </div>
-
-        {/* Variable mismatch warning */}
-        {showVarWarning && (
-          <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
-            <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-            <AlertDescription className="text-orange-800 dark:text-orange-200 text-xs">
-              {w.recipient_mode === "manual" ? (
-                <>
-                  <span className="font-medium">No data columns for variables.</span>{" "}
-                  Your email uses{" "}
-                  {htmlVars.map(v => (
-                    <code key={v} className="bg-orange-100 dark:bg-orange-900/40 px-1 rounded mx-0.5">{`{{${v}}}`}</code>
-                  ))}{" "}
-                  but manual entry has no named columns — these will be left blank in each email.
-                </>
-              ) : (
-                <>
-                  <span className="font-medium">{missingVars.length} variable{missingVars.length !== 1 ? "s" : ""} not in CSV.</span>{" "}
-                  {missingVars.map(v => (
-                    <code key={v} className="bg-orange-100 dark:bg-orange-900/40 px-1 rounded mx-0.5">{`{{${v}}}`}</code>
-                  ))}{" "}
-                  {missingVars.length === 1 ? "is" : "are"} used in the email but not found as a column in your CSV — {missingVars.length === 1 ? "it" : "they"} will be sent blank.
-                  {availableCols.size > 0 && (
-                    <span className="block mt-1">
-                      Available columns:{" "}
-                      {[...availableCols].map(c => (
-                        <code key={c} className="bg-orange-100 dark:bg-orange-900/40 px-1 rounded mx-0.5">{`{{${c}}}`}</code>
-                      ))}
-                    </span>
-                  )}
-                </>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Body preview with first-recipient substitution */}
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Email preview</p>
-          <div className="rounded-lg border p-4 bg-white dark:bg-gray-950 text-sm max-h-64 overflow-y-auto">
-            <div
-              className="prose prose-sm dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{
-                __html: w.html_body.replace(
-                  /\{\{(\w+)\}\}/g,
-                  (_, key: string) => {
-                    // Try exact match first, then case-insensitive
-                    const val = sample?.[key] ?? sampleLower[key.toLowerCase()];
-                    return val !== undefined
-                      ? val
-                      : `<span style="background:#fef3c7;color:#92400e;padding:0 3px;border-radius:3px;font-size:0.8em">{{${key}}}</span>`;
-                  },
-                ),
-              }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {sample
-              ? "Preview shows first recipient's data. Highlighted variables have no matching column."
-              : "No recipient data to preview — variables will appear blank in sent emails."}
-          </p>
-        </div>
-
-        <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-          <AlertDescription className="text-amber-800 dark:text-amber-200 text-xs">
-            <span className="font-medium">Ready to send to {recipientCount} recipients.</span> This cannot be undone once sent.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  };
-
-  // Order: Campaign info → Design email → Recipients → Review & Send
-  // When template is pre-selected, design step (index 1) is skipped via handleContinue/handleBack.
-  // stepValid[1] is forced true so the wizard never blocks on a step the user can't reach.
-  const steps = [renderStep0, renderStep2, renderStep1, renderStep3];
-  const stepValid = [step0Valid, selectedTemplateId ? true : step2Valid, step1Valid, true];
+  const recipientSummary =
+    w.recipient_mode === "segment"
+      ? `${recipientCount} in "${segments.find(s => s.id === w.segment_id)?.name ?? "segment"}"`
+      : w.recipient_mode === "contacts"
+      ? selectedContactIds.size > 0
+        ? `${selectedContactIds.size} selected`
+        : `All ${contactTotal} contacts`
+      : `${recipientCount} recipients`;
 
   return (
     <>
@@ -1492,55 +1336,62 @@ function CampaignWizard({
         onBack={() => setShowEditor(false)}
       />
     )}
-    {!showEditor && <div className="space-y-4">
-      <Steps current={step} skippedIndex={selectedTemplateId ? 1 : undefined} />
+    {!showEditor && (
+      <div className="space-y-5">
+        <WizardSteps current={step} />
 
-      <div className="min-h-64">
-        {steps[step]?.()}
-      </div>
-
-      <div className="flex items-center justify-between pt-2 border-t">
-        <div className="flex gap-2">
-          {step > 0 && (
-            <Button variant="ghost" onClick={handleBack}>
-              <ChevronLeft className="h-4 w-4 mr-1" /> Back
-            </Button>
-          )}
-          <Button variant="ghost" className="text-muted-foreground" onClick={handleSaveDraft}>
-            Save draft
-          </Button>
+        <div className="min-h-48">
+          {stepRenders[step]?.()}
         </div>
 
-        {step < 3 ? (
-          <Button
-            disabled={!stepValid[step]}
-            onClick={handleContinue}
-          >
-            Continue <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-        ) : (
-          <Button
-            disabled={sending}
-            onClick={handleSend}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            {sending
-              ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Sending…</>
-              : <><Send className="h-4 w-4 mr-2" /> Send campaign</>}
-          </Button>
-        )}
-      </div>
-    </div>}
-    </>
-  );
-}
+        {/* Footer */}
+        <div className="flex items-center justify-between pt-3 border-t border-border/60">
+          <div className="flex gap-2">
+            {step > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setStep(0)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground/70 hover:text-foreground text-xs"
+              onClick={handleSaveDraft}
+            >
+              Save draft
+            </Button>
+          </div>
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-4 px-4 py-3">
-      <span className="text-xs font-medium text-muted-foreground w-28 shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm">{value}</span>
-    </div>
+          {step === 0 ? (
+            <Button
+              disabled={!composeValid}
+              onClick={() => setStep(1)}
+              className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white gap-1.5 h-9 px-4"
+            >
+              Choose recipients <ChevronRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <div className="flex items-center gap-3">
+              {recipientCount > 0 && (
+                <p className="text-xs text-muted-foreground hidden sm:block">
+                  <span className="font-semibold text-foreground">{recipientSummary}</span>
+                </p>
+              )}
+              <Button
+                disabled={!step1Valid || sending}
+                onClick={handleSend}
+                className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white gap-2 h-9 px-5"
+              >
+                {sending
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
+                  : <><Send className="h-4 w-4" /> Send Campaign</>}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -1705,83 +1556,94 @@ export function BroadcastsContent({
   const drafts = broadcasts.filter(b => b.status === "draft");
   const sent   = broadcasts.filter(b => b.status !== "draft");
 
-  // ── Focused wizard-only view (entered from contacts page) ──────────────────
+  // ── Focused view when entering from contacts page ─────────────────────────
   if (initialSourceRef) {
     return (
-      <div className="p-6 max-w-3xl mx-auto space-y-4">
-        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 text-muted-foreground" onClick={() => router.back()}>
-          <ChevronLeft className="h-4 w-4" /> Back to Contacts
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" className="gap-1.5 -ml-1 text-muted-foreground h-8" onClick={() => router.back()}>
+          <ChevronLeft className="h-3.5 w-3.5" /> Back to Contacts
         </Button>
-        <Card className="border-primary/20 shadow-sm">
-          <CardHeader className="pb-2 border-b">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Megaphone className="h-4 w-4 text-primary" /> New Broadcast Campaign
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
+        <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-3.5 border-b bg-muted/20">
+            <Megaphone className="h-4 w-4 text-[#3ECF8E]" />
+            <h2 className="text-sm font-semibold">New Broadcast Campaign</h2>
+          </div>
+          <div className="px-5 py-5">
             <CampaignWizard
               onClose={() => router.back()}
               onCreated={() => router.replace(window.location.pathname.replace(/\?.*$/, ""))}
               initialTemplateId={initialTemplateId}
               initialSourceRef={initialSourceRef}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={embedded ? "space-y-6" : "p-6 space-y-6 max-w-4xl mx-auto"}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Email Campaigns</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Send emails to batches, courses, or any group of recipients
-          </p>
+    <div className={embedded ? "space-y-5" : "space-y-5"}>
+      {/* Header — only shown when wizard is closed */}
+      {!showWizard && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Email Campaigns</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Send emails to batches, courses, or any group of recipients
+            </p>
+          </div>
+          <Button
+            onClick={() => setShowWizard(true)}
+            className="bg-[#3ECF8E] hover:bg-[#34b87a] text-white h-9 px-4 gap-2"
+          >
+            <Plus className="h-4 w-4" /> New campaign
+          </Button>
         </div>
-        <Button size="sm" onClick={() => setShowWizard(true)}>
-          <Plus className="h-4 w-4 mr-2" /> New campaign
-        </Button>
-      </div>
+      )}
 
-      {/* Wizard */}
+      {/* Wizard — full-width panel, no card-in-card */}
       {showWizard && (
-        <Card className="border-primary/30 shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">New campaign</CardTitle>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowWizard(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+        <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-muted/20">
+            <Megaphone className="h-4 w-4 text-[#3ECF8E] shrink-0" />
+            <h2 className="text-sm font-semibold flex-1">New Campaign</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowWizard(false)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="px-5 py-5">
             <CampaignWizard
               onClose={() => setShowWizard(false)}
               onCreated={() => { setShowWizard(false); refetch(); }}
               initialTemplateId={initialTemplateId}
               initialSourceRef={initialSourceRef}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Empty state — only shown when wizard is closed */}
+      {/* Empty state */}
       {!loading && broadcasts.length === 0 && !showWizard && (
-        <Card className="border-dashed">
-          <CardContent className="py-12 text-center">
-            <Megaphone className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium">No campaigns yet</p>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              Send emails to a new batch, course cohort, or any group — upload a CSV or type emails directly
-            </p>
-            <Button size="sm" className="mt-4" onClick={() => setShowWizard(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Create first campaign
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-[#3ECF8E]/10 flex items-center justify-center mb-4">
+            <Megaphone className="h-7 w-7 text-[#3ECF8E]" />
+          </div>
+          <p className="font-semibold text-lg">No campaigns yet</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+            Send emails to a batch, course cohort, or any group of recipients
+          </p>
+          <Button
+            className="mt-5 bg-[#3ECF8E] hover:bg-[#34b87a] text-white gap-2"
+            onClick={() => setShowWizard(true)}
+          >
+            <Plus className="h-4 w-4" /> Create first campaign
+          </Button>
+        </div>
       )}
 
       {loading && (
