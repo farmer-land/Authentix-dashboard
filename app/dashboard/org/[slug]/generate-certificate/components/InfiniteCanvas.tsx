@@ -230,7 +230,7 @@ export function InfiniteCanvas({
   });
   const dismissAddFieldsTip = useCallback(() => {
     setAddFieldsTipSeen(true);
-    try { sessionStorage.setItem('cert_add_fields_tip_seen', '1'); } catch {}
+    try { sessionStorage.setItem('cert_add_fields_tip_seen', '1'); } catch (_) { /* ignore storage errors */ }
   }, []);
   useEffect(() => {
     if (addFieldsTipSeen) return;
