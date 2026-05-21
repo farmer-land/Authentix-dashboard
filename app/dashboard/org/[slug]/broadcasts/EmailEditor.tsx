@@ -51,6 +51,8 @@ interface EmailEditorProps {
   availableVars?: string[];
   /** Actual CSV rows for preview simulation (column → value) */
   csvRows?: Record<string, string>[];
+  /** When true, never show the starter gallery even if blocks are empty */
+  suppressGallery?: boolean;
   onDone: (result: EmailEditorResult) => void;
   onBack: () => void;
 }
@@ -124,6 +126,7 @@ export function EmailEditor({
   initialHtml,
   availableVars = [],
   csvRows = [],
+  suppressGallery: suppressGalleryProp,
   onDone,
   onBack,
 }: EmailEditorProps) {
@@ -137,9 +140,9 @@ export function EmailEditor({
   const [previewText, setPreviewText] = useState("");
 
   // Block canvas state
-  // suppressGallery: if initialHtml was provided (user selected a template), never show
-  // the starter gallery — even if the HTML has no embedded block JSON (raw HTML templates).
-  const suppressGallery = !!initialHtml;
+  // suppressGallery: explicit prop wins; fallback to "was initialHtml provided?"
+  // Handles the case where t.body = "" → initialHtml = undefined but user did select a template.
+  const suppressGallery = suppressGalleryProp ?? !!initialHtml;
   const [blocks, setBlocks] = useState<EmailBlock[]>(() => {
     if (initialHtml) {
       const saved = extractBlocksFromHtml(initialHtml);

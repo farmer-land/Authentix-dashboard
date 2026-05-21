@@ -23,7 +23,7 @@ import {
   Megaphone, Plus, Loader2, Send, Trash2, MoreHorizontal, Clock,
   CheckCircle2, AlertCircle, Edit2, Users, Upload, FileSpreadsheet,
   ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw, Info,
-  Search,
+  Search, Award, Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
@@ -38,6 +38,44 @@ import { api } from "@/lib/api/client";
 import { EmailEditor, type EmailEditorResult } from "./EmailEditor";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+
+// ── Template type inference ────────────────────────────────────────────────────
+
+const CERT_VARS = ["certificate_number", "cert_number", "certificate_id", "recipient_name", "course_name", "issue_date", "expiry_date"];
+const CERT_BLOCKS = ["qr_code", "details_box", "certificate_number"];
+
+function inferTemplateType(body: string): "broadcast" | "certificate" {
+  const lower = body.toLowerCase();
+  const hasCertVar = CERT_VARS.some(v => lower.includes(`{{${v}}}`));
+  const hasCertBlock = CERT_BLOCKS.some(b => lower.includes(`"type":"${b}"`) || lower.includes(`"blockType":"${b}"`));
+  return hasCertVar || hasCertBlock ? "certificate" : "broadcast";
+}
+
+// ── Scaled HTML thumbnail ─────────────────────────────────────────────────────
+
+function EmailHtmlPreview({ html }: { html: string }) {
+  const SCALE = 0.315;
+  const SRC_W = 620;
+  const SRC_H = 500;
+  return (
+    <div className="relative overflow-hidden bg-white" style={{ height: Math.round(SRC_H * SCALE) }}>
+      <iframe
+        srcDoc={html || '<p style="color:#bbb;text-align:center;padding:40px 20px;font-family:sans-serif;font-size:13px;">No content</p>'}
+        sandbox=""
+        title="preview"
+        style={{
+          width: SRC_W,
+          height: SRC_H,
+          transform: `scale(${SCALE})`,
+          transformOrigin: "top left",
+          border: "none",
+          pointerEvents: "none",
+          display: "block",
+        }}
+      />
+    </div>
+  );
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -173,6 +211,7 @@ function CampaignWizard({
   const { integrations: rawIntegrations, loading: integrationsLoading } = useDeliveryIntegrations();
   const { templates: emailTemplates, loading: templatesLoading } = useDeliveryTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplateId ?? null);
+  const [templateFilter, setTemplateFilter] = useState<"all" | "broadcast" | "certificate">("all");
   const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const { contacts: allContacts, total: contactTotal, loading: contactsLoading } = useEmailContacts({
     limit: 500,
@@ -1014,6 +1053,12 @@ function CampaignWizard({
   // ── Step 2: Choose template (or design from scratch) ────────────────────────
   const renderStep2 = () => {
     const savedTemplates = emailTemplates.filter(t => t.is_active);
+    const filteredTemplates = savedTemplates.filter(t => {
+      if (templateFilter === "all") return true;
+      const type = inferTemplateType(t.body ?? "");
+      return type === templateFilter;
+    });
+
     return (
       <div className="space-y-4">
         <div className="space-y-1.5">
@@ -1035,16 +1080,40 @@ function CampaignWizard({
             )}
           </div>
 
+          {/* Type filter pills */}
+          {savedTemplates.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              {(["all", "broadcast", "certificate"] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setTemplateFilter(f)}
+                  className={cn(
+                    "flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors",
+                    templateFilter === f
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/30",
+                  )}
+                >
+                  {f === "certificate" && <Award className="h-3 w-3" />}
+                  {f === "broadcast" && <Megaphone className="h-3 w-3" />}
+                  {f === "all" && <Layers className="h-3 w-3" />}
+                  {f === "all" ? "All" : f === "broadcast" ? "Broadcast" : "Certificate delivery"}
+                </button>
+              ))}
+            </div>
+          )}
+
           {templatesLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />)}
+              {[1, 2, 3].map(i => <div key={i} className="h-44 bg-muted animate-pulse rounded-xl" />)}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {savedTemplates.map(t => {
+              {filteredTemplates.map(t => {
                 const isSelected = selectedTemplateId === t.id;
                 const cleanSubject = (t.email_subject ?? "")
-                  .replace(/\{\{[\w.\s]+\}\}/g, "…").trim() || "No subject set";
+                  .replace(/\{\{[\w.\s]+\}\}/g, "…").trim() || "No subject";
+                const tplType = inferTemplateType(t.body ?? "");
                 return (
                   <div
                     key={t.id}
@@ -1057,22 +1126,42 @@ function CampaignWizard({
                       }));
                     }}
                     className={cn(
-                      "rounded-xl border-2 p-3 cursor-pointer transition-all select-none",
+                      "rounded-xl border-2 cursor-pointer transition-all select-none overflow-hidden group",
                       isSelected
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/40 hover:bg-muted/30",
+                        ? "border-primary shadow-md"
+                        : "border-border hover:border-primary/40 hover:shadow-sm",
                     )}
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <p className="text-sm font-medium truncate">{t.name}</p>
-                      {isSelected && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                    {/* HTML preview thumbnail */}
+                    <div className="relative">
+                      <EmailHtmlPreview html={t.body ?? ""} />
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+                          <CheckCircle2 className="h-6 w-6 text-primary drop-shadow" />
+                        </div>
+                      )}
+                      <div className={cn(
+                        "absolute top-1.5 right-1.5 flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
+                        tplType === "certificate"
+                          ? "bg-amber-50 border-amber-200 text-amber-700"
+                          : "bg-blue-50 border-blue-200 text-blue-700",
+                      )}>
+                        {tplType === "certificate"
+                          ? <><Award className="h-2.5 w-2.5" /> Cert</>
+                          : <><Megaphone className="h-2.5 w-2.5" /> Broadcast</>}
+                      </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground truncate">{cleanSubject}</p>
-                    {t.is_default && (
-                      <span className="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded border border-primary/30 text-primary font-medium leading-none">
-                        Default
-                      </span>
-                    )}
+
+                    {/* Card footer */}
+                    <div className="p-2.5 border-t bg-card">
+                      <p className="text-xs font-semibold truncate leading-tight">{t.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{cleanSubject}</p>
+                      {t.is_default && (
+                        <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded-sm border border-primary/30 text-primary font-medium leading-none">
+                          Default
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1080,7 +1169,7 @@ function CampaignWizard({
               {/* Design from scratch */}
               <div
                 onClick={() => { setSelectedTemplateId(null); set("html_body", ""); setShowEditor(true); }}
-                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 p-3 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 min-h-[84px]"
+                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 min-h-[158px]"
               >
                 <PenLine className="h-5 w-5 text-muted-foreground" />
                 <p className="text-xs font-medium text-center text-muted-foreground">Design from scratch</p>
@@ -1096,6 +1185,13 @@ function CampaignWizard({
                 or use "Design from scratch" to compose a one-off email.
               </AlertDescription>
             </Alert>
+          )}
+
+          {filteredTemplates.length === 0 && savedTemplates.length > 0 && !templatesLoading && (
+            <p className="text-xs text-muted-foreground text-center py-2">
+              No {templateFilter} templates found.{" "}
+              <button className="underline" onClick={() => setTemplateFilter("all")}>Show all</button>
+            </p>
           )}
         </div>
       </div>
@@ -1256,6 +1352,7 @@ function CampaignWizard({
         replyTo={w.reply_to}
         initialHtml={w.html_body || undefined}
         availableVars={templateVars}
+        suppressGallery={selectedTemplateId !== null}
         onDone={handleEditorDone}
         onBack={() => setShowEditor(false)}
       />
