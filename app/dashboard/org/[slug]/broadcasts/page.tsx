@@ -212,7 +212,8 @@ function CampaignWizard({
   const { integrations: rawIntegrations, loading: integrationsLoading } = useDeliveryIntegrations();
   const { templates: emailTemplates, loading: templatesLoading } = useDeliveryTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplateId ?? null);
-  const [templateFilter, setTemplateFilter] = useState<"all" | "broadcast" | "certificate">("all");
+  // Default to broadcast-only so certificate delivery templates (which need generated cert data) are hidden by default
+  const [templateFilter, setTemplateFilter] = useState<"all" | "broadcast" | "certificate">("broadcast");
   const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const { contacts: allContacts, total: contactTotal, loading: contactsLoading } = useEmailContacts({
     limit: 500,
@@ -1170,7 +1171,7 @@ function CampaignWizard({
               {/* Design from scratch */}
               <div
                 onClick={() => { setSelectedTemplateId(null); set("html_body", ""); setShowEditor(true); }}
-                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 min-h-[158px]"
+                className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 min-h-39.5"
               >
                 <PenLine className="h-5 w-5 text-muted-foreground" />
                 <p className="text-xs font-medium text-center text-muted-foreground">Design from scratch</p>

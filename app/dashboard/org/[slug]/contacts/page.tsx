@@ -14,11 +14,10 @@ import {
 import {
   Users, Upload, Loader2,
   Award, Mail, ChevronDown, FileText, Trash2, Search, PenLine,
-  Megaphone, CheckCircle2,
+  Megaphone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
-import type { DeliveryTemplate } from "@/lib/api/delivery";
+import { useEmailContacts } from "@/lib/hooks/queries/delivery";
 import { useTemplates } from "@/lib/hooks/queries/templates";
 import { api } from "@/lib/api/client";
 import { formatDistanceToNow } from "date-fns";
@@ -69,12 +68,12 @@ function toTitleCase(str: string): string {
 
 function AccordionActions({
   onGenerateCerts,
-  onSendEmail,
+  onBroadcast,
   onUseLater,
   onDelete,
 }: {
   onGenerateCerts: () => void;
-  onSendEmail: () => void;
+  onBroadcast: () => void;
   onUseLater?: () => void;
   onDelete?: () => void;
 }) {
@@ -83,8 +82,8 @@ function AccordionActions({
       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onGenerateCerts}>
         <Award className="h-3 w-3 mr-1" /> Certificates
       </Button>
-      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onSendEmail}>
-        <Mail className="h-3 w-3 mr-1" /> Send Email
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onBroadcast}>
+        <Megaphone className="h-3 w-3 mr-1" /> Broadcast
       </Button>
       {onUseLater && (
         <Button
@@ -205,218 +204,18 @@ function ContactCertModal({
   );
 }
 
-// ── Email template picker modal ───────────────────────────────────────────────
-
-const CERT_VARS_MODAL = ["certificate_number", "cert_number", "certificate_id", "recipient_name", "course_name", "issue_date", "expiry_date"];
-const CERT_BLOCKS_MODAL = ["qr_code", "details_box", "certificate_number"];
-
-function inferEmailTemplateType(body: string): "broadcast" | "certificate" {
-  const lower = body.toLowerCase();
-  const hasCertVar = CERT_VARS_MODAL.some(v => lower.includes(`{{${v}}}`));
-  const hasCertBlock = CERT_BLOCKS_MODAL.some(b => lower.includes(`"type":"${b}"`) || lower.includes(`"blockType":"${b}"`));
-  return hasCertVar || hasCertBlock ? "certificate" : "broadcast";
-}
-
-function EmailHtmlThumbnail({ html }: { html: string }) {
-  const SCALE = 0.315;
-  const SRC_W = 620;
-  const SRC_H = 500;
-  return (
-    <div className="relative overflow-hidden bg-white" style={{ height: Math.round(SRC_H * SCALE) }}>
-      <iframe
-        srcDoc={html || '<p style="color:#bbb;text-align:center;padding:40px 20px;font-family:sans-serif;font-size:13px;">No content</p>'}
-        sandbox=""
-        title="preview"
-        style={{
-          width: SRC_W,
-          height: SRC_H,
-          transform: `scale(${SCALE})`,
-          transformOrigin: "top left",
-          border: "none",
-          pointerEvents: "none",
-          display: "block",
-        }}
-      />
-    </div>
-  );
-}
-
-function ContactEmailModal({
-  open,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (templateId: string | null) => void;
-}) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const { templates, loading } = useDeliveryTemplates();
-
-  useEffect(() => {
-    if (!open) { setSelected(null); setSearch(""); }
-  }, [open]);
-
-  // Only show active (published) email templates — drafts should not be selectable here
-  const activeItems = templates.filter(t => t.channel === "email" && t.is_active);
-  const items = activeItems.filter(
-    (t) => !search || t.name.toLowerCase().includes(search.toLowerCase()),
-  );
-  const hasTemplates = activeItems.length > 0;
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-4">
-        <DialogHeader>
-          <DialogTitle>Choose an Email Template</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            {hasTemplates
-              ? "Pick a template to use as the starting point for your campaign."
-              : "Design a new email template and your contacts will be pre-loaded."}
-          </p>
-        </DialogHeader>
-
-        {/* Search — only when there are templates to search */}
-        {hasTemplates && (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search templates…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9"
-            />
-          </div>
-        )}
-
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
-          {loading ? (
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-40 bg-muted animate-pulse rounded-xl" />
-              ))}
-            </div>
-          ) : !hasTemplates ? (
-            /* Empty state — no published templates exist yet */
-            <div className="flex flex-col items-center justify-center py-10 gap-4 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-                <Mail className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">No email templates yet</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-                  You haven&apos;t published any email templates. Click &ldquo;Design from Scratch&rdquo; below — your contacts will be automatically loaded when you send.
-                </p>
-              </div>
-              <Button
-                className="gap-2"
-                onClick={() => onConfirm(null)}
-              >
-                <PenLine className="h-4 w-4" /> Design from Scratch
-              </Button>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
-              <Mail className="h-8 w-8" />
-              <p className="text-sm">No matching templates</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {items.map((t) => {
-                const isSelected = selected === t.id;
-                const tplType = inferEmailTemplateType(t.body ?? "");
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelected(isSelected ? null : t.id)}
-                    className={cn(
-                      "rounded-xl border-2 text-left overflow-hidden transition-all select-none group",
-                      isSelected
-                        ? "border-primary shadow-md"
-                        : "border-border hover:border-primary/40 hover:shadow-sm",
-                    )}
-                  >
-                    {/* Real HTML thumbnail */}
-                    <div className="relative">
-                      <EmailHtmlThumbnail html={t.body ?? ""} />
-                      {isSelected && (
-                        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
-                          <CheckCircle2 className="h-6 w-6 text-primary drop-shadow" />
-                        </div>
-                      )}
-                      {/* Type badge */}
-                      <div className={cn(
-                        "absolute top-1.5 right-1.5 flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
-                        tplType === "certificate"
-                          ? "bg-amber-50 border-amber-200 text-amber-700"
-                          : "bg-blue-50 border-blue-200 text-blue-700",
-                      )}>
-                        {tplType === "certificate"
-                          ? <><Award className="h-2.5 w-2.5" /> Cert</>
-                          : <><Megaphone className="h-2.5 w-2.5" /> Broadcast</>}
-                      </div>
-                    </div>
-                    {/* Footer */}
-                    <div className="px-3 py-2 border-t bg-card space-y-0.5">
-                      <p className="text-xs font-semibold truncate">{t.name}</p>
-                      {t.email_subject && (
-                        <p className="text-[10px] text-muted-foreground truncate">{t.email_subject}</p>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Footer — only show scratch/use buttons when templates exist */}
-        {hasTemplates && (() => {
-          const selectedTpl = selected ? items.find(t => t.id === selected) : null;
-          const selectedType = selectedTpl ? inferEmailTemplateType(selectedTpl.body ?? "") : null;
-          const ctaLabel = selectedType === "certificate"
-            ? "Use for Certificate Delivery"
-            : selectedType === "broadcast"
-            ? "Use for Broadcast"
-            : "Use Template";
-          return (
-            <DialogFooter className="gap-2">
-              <Button variant="ghost" onClick={onClose}>Cancel</Button>
-              <Button variant="outline" onClick={() => onConfirm(null)} className="text-muted-foreground">
-                <PenLine className="h-3.5 w-3.5 mr-1.5" /> Design from Scratch
-              </Button>
-              <Button disabled={!selected} onClick={() => selected && onConfirm(selected)}>
-                {selectedType === "certificate" && <Award className="h-3.5 w-3.5 mr-1.5" />}
-                {selectedType === "broadcast" && <Megaphone className="h-3.5 w-3.5 mr-1.5" />}
-                {ctaLabel}
-              </Button>
-            </DialogFooter>
-          );
-        })()}
-        {!hasTemplates && !loading && (
-          <DialogFooter>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ── File import accordion row ──────────────────────────────────────────────────
 
 function ImportAccordionRow({
   session,
   onGenerateCerts,
-  onSendEmail,
+  onBroadcast,
   onUseLater,
   onDelete,
 }: {
   session: ImportSession;
   onGenerateCerts: (source_ref: string) => void;
-  onSendEmail: (source_ref: string) => void;
+  onBroadcast: (source_ref: string) => void;
   onUseLater: () => void;
   onDelete: () => void;
 }) {
@@ -449,7 +248,7 @@ function ImportAccordionRow({
         </div>
         <AccordionActions
           onGenerateCerts={() => onGenerateCerts(session.source_ref)}
-          onSendEmail={() => onSendEmail(session.source_ref)}
+          onBroadcast={() => onBroadcast(session.source_ref)}
           onUseLater={onUseLater}
           onDelete={onDelete}
         />
@@ -587,9 +386,6 @@ export default function ContactsPage() {
   // Certificate template picker modal
   const [certModal, setCertModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
 
-  // Email template picker modal
-  const [emailModal, setEmailModal] = useState<{ open: boolean; source_ref?: string }>({ open: false });
-
   // Delete recent import confirmation
   const [deleteImportTarget, setDeleteImportTarget] = useState<ImportSession | null>(null);
 
@@ -713,14 +509,9 @@ export default function ContactsPage() {
     router.push(url);
   };
 
-  const handleEmailModalConfirm = (templateId: string | null) => {
-    const ref = emailModal.source_ref;
-    setEmailModal({ open: false });
-    // Navigate directly to the broadcast wizard — contacts are auto-loaded from source_ref.
-    // If no template was chosen (design from scratch), the wizard opens without a pre-selected template.
+  const handleBroadcast = (source_ref?: string) => {
     const qs = new URLSearchParams();
-    if (templateId) qs.set("fromTemplate", templateId);
-    if (ref) qs.set("source_ref", ref);
+    if (source_ref) qs.set("source_ref", source_ref);
     router.push(`/dashboard/org/${orgSlug}/broadcasts?${qs.toString()}`);
   };
 
@@ -816,10 +607,10 @@ export default function ContactsPage() {
               onClick={() => {
                 const ref = recentCard.source_ref;
                 setRecentCard(null);
-                setEmailModal({ open: true, source_ref: ref });
+                handleBroadcast(ref);
               }}
             >
-              <Mail className="h-3.5 w-3.5 mr-1.5" /> Send Email Campaign
+              <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Broadcast
             </Button>
             <Button
               variant="ghost"
@@ -850,7 +641,7 @@ export default function ContactsPage() {
           </div>
           <AccordionActions
             onGenerateCerts={() => setCertModal({ open: true })}
-            onSendEmail={() => setEmailModal({ open: true })}
+            onBroadcast={() => handleBroadcast()}
           />
         </button>
 
@@ -900,7 +691,7 @@ export default function ContactsPage() {
                   key={session.source_ref}
                   session={session}
                   onGenerateCerts={(ref) => setCertModal({ open: true, source_ref: ref })}
-                  onSendEmail={(ref) => setEmailModal({ open: true, source_ref: ref })}
+                  onBroadcast={(ref) => handleBroadcast(ref)}
                   onUseLater={() => removeFromLog(session.source_ref)}
                   onDelete={() => setDeleteImportTarget(session)}
                 />
@@ -934,13 +725,6 @@ export default function ContactsPage() {
         open={certModal.open}
         onClose={() => setCertModal({ open: false })}
         onConfirm={handleCertModalConfirm}
-      />
-
-      {/* Email template picker */}
-      <ContactEmailModal
-        open={emailModal.open}
-        onClose={() => setEmailModal({ open: false })}
-        onConfirm={handleEmailModalConfirm}
       />
 
       {/* Delete import confirmation */}
