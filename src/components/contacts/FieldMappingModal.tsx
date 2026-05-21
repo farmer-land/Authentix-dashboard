@@ -6,7 +6,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, ArrowRight, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, ArrowRight, AlertTriangle, Sparkles } from "lucide-react";
 import { autoMapHeaders } from "@/lib/file-parser";
 
 export interface PlatformField {
@@ -17,6 +18,8 @@ export interface PlatformField {
   requiresOneOf?: string[];
   aliases: string[];
   description?: string;
+  /** Short format hint shown in the dropdown, e.g. "email format", "YYYY-MM-DD". */
+  typeHint?: string;
 }
 
 export interface FieldMappingModalProps {
@@ -36,6 +39,7 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     required: true,
     requiresOneOf: ["recipient_name", "first_name"],
     description: "Full name shown on certificates",
+    typeHint: "text, max 200 chars",
     aliases: [
       "recipient_name", "recipient name", "full_name", "full name",
       "name", "recipient",
@@ -45,6 +49,7 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     key: "first_name",
     label: "First Name",
     required: false,
+    typeHint: "text, max 200 chars",
     aliases: [
       "first_name", "first name", "firstname", "given_name", "given name",
       "first", "fname",
@@ -54,6 +59,7 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     key: "last_name",
     label: "Last Name",
     required: false,
+    typeHint: "text, max 200 chars",
     aliases: [
       "last_name", "last name", "lastname", "surname", "family_name",
       "family name", "last", "lname",
@@ -64,6 +70,7 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     label: "Email",
     required: false,
     description: "Required for email campaigns",
+    typeHint: "valid email address",
     aliases: ["email", "e_mail", "email_address", "mail", "email address"],
   },
 ];
@@ -81,26 +88,46 @@ export function FieldMappingModal({
 }: FieldMappingModalProps) {
   // Column-centric mapping: csvHeader → platformFieldKey | "__custom__"
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  // Track which CSV headers were auto-detected (not manually changed by the user)
+  const [autoDetected, setAutoDetected] = useState<Set<string>>(new Set());
 
   // Auto-detect on open: invert autoMapHeaders result, unmatched → custom
   useEffect(() => {
     if (!open || !headers.length) return;
     const autoResult = autoMapHeaders(headers, platformFields); // {platformKey → csvHeader}
     const detected: Record<string, string> = {};
+    const detectedHeaders = new Set<string>();
     for (const [pk, ch] of Object.entries(autoResult)) {
       detected[ch] = pk;
+      detectedHeaders.add(ch);
     }
     for (const h of headers) {
       if (!detected[h]) detected[h] = CUSTOM;
     }
     setColumnMapping(detected);
+    setAutoDetected(detectedHeaders);
   }, [open, headers, platformFields]);
 
-  const sample = sampleRows[0] ?? {};
+  // Preview: up to 3 sample values per column, excluding blanks
+  const previewValues = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const h of headers) {
+      out[h] = sampleRows
+        .map((r) => r[h] ?? "")
+        .filter((v) => v !== "")
+        .slice(0, 3);
+    }
+    return out;
+  }, [headers, sampleRows]);
 
   // When a user picks a platform field that's already assigned to another column,
   // auto-reset the other column to "Custom property" to avoid duplicates.
   const handleChange = (csvHeader: string, newTarget: string) => {
+    setAutoDetected((prev) => {
+      const next = new Set(prev);
+      next.delete(csvHeader); // user touched it → no longer auto-detected
+      return next;
+    });
     setColumnMapping((prev) => {
       const next = { ...prev };
       if (newTarget !== CUSTOM) {
@@ -128,11 +155,18 @@ export function FieldMappingModal({
 
   const matchedCount = Object.values(columnMapping).filter((v) => v !== CUSTOM).length;
 
-  // Dropdown options: platform fields + custom property
-  const targetOptions = [
-    ...platformFields.map((f) => ({ value: f.key, label: f.label })),
-    { value: CUSTOM, label: "Custom property" },
-  ];
+  // Build a map of required field keys so we can mark them in the dropdown
+  const requiredFieldKeys = useMemo(
+    () => new Set(platformFields.filter((f) => f.required).map((f) => f.key)),
+    [platformFields],
+  );
+
+  // Look up the PlatformField for a given key
+  const fieldByKey = useMemo(() => {
+    const m = new Map<string, PlatformField>();
+    for (const f of platformFields) m.set(f.key, f);
+    return m;
+  }, [platformFields]);
 
   function handleConfirm() {
     // Produce {platformFieldKey → csvHeader} — same shape the page already expects
@@ -159,7 +193,7 @@ export function FieldMappingModal({
         </DialogHeader>
 
         {/* Column header */}
-        <div className="grid grid-cols-[1fr_16px_180px_20px] gap-3 px-1 pb-1 shrink-0">
+        <div className="grid grid-cols-[1fr_16px_200px_24px] gap-3 px-1 pb-1 shrink-0">
           <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
             Your column
           </span>
@@ -175,56 +209,111 @@ export function FieldMappingModal({
           {headers.map((h) => {
             const target = columnMapping[h] ?? CUSTOM;
             const isMapped = target !== CUSTOM;
-            const sampleVal = sample[h];
+            const isAutoDetected = autoDetected.has(h);
+            const preview = previewValues[h] ?? [];
+            const mappedField = isMapped ? fieldByKey.get(target) : undefined;
+            const isRequiredField = mappedField ? requiredFieldKeys.has(mappedField.key) : false;
 
             return (
               <div
                 key={h}
-                className="grid grid-cols-[1fr_16px_180px_20px] items-center gap-3 rounded-lg border bg-card px-3 py-2.5"
+                className={`grid grid-cols-[1fr_16px_200px_24px] items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                  isMapped
+                    ? "bg-primary/5 border-primary/20"
+                    : "bg-card border-border"
+                }`}
               >
-                {/* Column name + sample */}
-                <div className="min-w-0">
+                {/* Column name + preview values */}
+                <div className="min-w-0 pt-0.5">
                   <p className="text-sm font-medium truncate">{h}</p>
-                  {sampleVal ? (
-                    <p className="text-[11px] text-muted-foreground font-mono truncate mt-0.5">
-                      {sampleVal}
-                    </p>
+                  {preview.length > 0 ? (
+                    <div className="mt-0.5 space-y-0.5">
+                      {preview.map((v, vi) => (
+                        <p
+                          key={vi}
+                          className="text-[11px] text-muted-foreground font-mono truncate leading-tight"
+                        >
+                          {v}
+                        </p>
+                      ))}
+                    </div>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground/40 italic mt-0.5">empty</p>
+                    <p className="text-[11px] text-muted-foreground/40 italic mt-0.5">empty column</p>
                   )}
                 </div>
 
-                <ArrowRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-2" />
 
-                {/* Target picker */}
-                <Select value={target} onValueChange={(v) => handleChange(h, v)}>
-                  <SelectTrigger
-                    className={
-                      isMapped
-                        ? "border-primary/40 bg-primary/5 text-sm h-8"
-                        : "text-sm h-8 text-muted-foreground"
-                    }
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {targetOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value} className="text-sm">
-                        {o.label}
-                        {o.value === CUSTOM && (
-                          <span className="text-muted-foreground/60 ml-1">(variable)</span>
-                        )}
+                {/* Target picker + meta */}
+                <div className="space-y-1">
+                  <Select value={target} onValueChange={(v) => handleChange(h, v)}>
+                    <SelectTrigger
+                      className={
+                        isMapped
+                          ? "border-primary/40 bg-primary/5 text-sm h-8"
+                          : "text-sm h-8 text-muted-foreground"
+                      }
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {platformFields.map((f) => (
+                        <SelectItem key={f.key} value={f.key} className="text-sm">
+                          <div className="flex items-center gap-1.5">
+                            <span>{f.label}</span>
+                            {requiredFieldKeys.has(f.key) && (
+                              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                required
+                              </span>
+                            )}
+                          </div>
+                          {f.typeHint && (
+                            <span className="text-[11px] text-muted-foreground block leading-none mt-0.5">
+                              {f.typeHint}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CUSTOM} className="text-sm">
+                        <span className="text-muted-foreground">Custom property</span>
+                        <span className="text-[11px] text-muted-foreground/60 block leading-none mt-0.5">
+                          stored as {"{{variable}}"}
+                        </span>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
 
-                {/* Status */}
-                {isMapped ? (
-                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                ) : (
-                  <div className="h-4 w-4 shrink-0" />
-                )}
+                  {/* Auto-detected badge + type hint */}
+                  {isMapped && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {isAutoDetected && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-primary/70 font-medium">
+                          <Sparkles className="h-2.5 w-2.5" />
+                          Auto-detected
+                        </span>
+                      )}
+                      {mappedField?.typeHint && (
+                        <span className="text-[10px] text-muted-foreground/60 font-mono">
+                          {mappedField.typeHint}
+                        </span>
+                      )}
+                      {isRequiredField && (
+                        <Badge variant="outline" className="h-4 text-[10px] px-1 border-amber-300 text-amber-600 dark:text-amber-400">
+                          required
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Status icon */}
+                <div className="mt-2">
+                  {isMapped ? (
+                    <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                  ) : (
+                    <div className="h-4 w-4 shrink-0" />
+                  )}
+                </div>
               </div>
             );
           })}

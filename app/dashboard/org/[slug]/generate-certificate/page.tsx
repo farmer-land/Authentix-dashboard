@@ -89,13 +89,14 @@ export default function GenerateCertificatePage() {
   const [pendingResumeSession, setPendingResumeSession] = useState<{
     templateId: string;
     templateName: string;
-    fields: any[];
+    fields: CertificateField[];
     currentPage?: number;
     canvasScale?: number;
     templateVersionId: string | null;
     currentStep: string | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     importedDataMeta: any;
-    fieldMappings: any[];
+    fieldMappings: FieldMapping[];
   } | null>(null);
 
   // Tracks previous field IDs so we can detect when field composition changes

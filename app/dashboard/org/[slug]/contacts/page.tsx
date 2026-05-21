@@ -600,6 +600,7 @@ export default function ContactsPage() {
       let totalImported = 0;
       let totalSkipped = 0;
       const allErrors: string[] = [];
+      const allSkippedDetails: Array<{ index: number; email?: string; reason: string }> = [];
 
       try {
         for (let i = 0; i < batches.length; i++) {
@@ -610,22 +611,30 @@ export default function ContactsPage() {
           totalImported += result.imported;
           totalSkipped += result.skipped;
           allErrors.push(...result.errors);
+          if (result.skipped_details) allSkippedDetails.push(...result.skipped_details);
         }
 
         const parts = [`${totalImported.toLocaleString()} imported`];
         if (totalSkipped > 0) parts.push(`${totalSkipped.toLocaleString()} skipped`);
 
+        // Build actionable skip description
+        const invalidEmailCount = allSkippedDetails.filter(d => d.reason === 'invalid email format').length;
+        const dupCount = allSkippedDetails.filter(d => d.reason.startsWith('duplicate')).length;
+        const skipReasons: string[] = [];
+        if (invalidEmailCount > 0) skipReasons.push(`${invalidEmailCount} invalid email${invalidEmailCount !== 1 ? 's' : ''}`);
+        if (dupCount > 0) skipReasons.push(`${dupCount} duplicate row${dupCount !== 1 ? 's' : ''} in file`);
+        const skipDescription = skipReasons.length > 0 ? skipReasons.join(', ') : undefined;
+
         if (allErrors.length > 0) {
           console.error('[Import] batch errors:', allErrors);
-          // If nothing was imported at all, show as an error with the actual message
           if (totalImported === 0) {
             toast.error('Import failed', { id: toastId, description: allErrors[0] });
           } else {
-            toast.success(parts.join(", "), { id: toastId });
+            toast.success(parts.join(", "), { id: toastId, description: skipDescription });
             toast.error('Some rows failed', { description: allErrors[0] });
           }
         } else {
-          toast.success(parts.join(", "), { id: toastId });
+          toast.success(parts.join(", "), { id: toastId, description: skipDescription });
         }
 
         const session: ImportSession = {

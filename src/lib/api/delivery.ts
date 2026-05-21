@@ -401,8 +401,18 @@ export const deliveryApi = {
     return data.data!;
   },
 
-  importContactsBatch: async (rows: Array<Record<string, string>>, source_ref?: string): Promise<{ imported: number; skipped: number; errors: string[] }> => {
-    const response = await apiRequest<{ imported: number; skipped: number; errors: string[] }>(
+  importContactsBatch: async (rows: Array<Record<string, string>>, source_ref?: string): Promise<{
+    imported: number;
+    skipped: number;
+    errors: string[];
+    skipped_details: Array<{ index: number; email?: string; reason: string }>;
+  }> => {
+    const response = await apiRequest<{
+      imported: number;
+      skipped: number;
+      errors: string[];
+      skipped_details: Array<{ index: number; email?: string; reason: string }>;
+    }>(
       "/delivery/contacts/import-batch",
       { method: "POST", body: JSON.stringify({ rows, source_ref }) },
     );

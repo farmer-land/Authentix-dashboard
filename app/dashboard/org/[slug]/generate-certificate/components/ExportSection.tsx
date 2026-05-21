@@ -1614,6 +1614,34 @@ export function ExportSection({
       }
     }
 
+    // Pre-generation preflight: check required field mappings and data quality
+    const nameField = fields.find(f => f.type === 'name');
+    const nameMapped = nameField ? fieldMappings.some(m => m.fieldId === nameField.id) : false;
+    if (nameField && !nameMapped) {
+      toast.error('Map the recipient name field before generating', {
+        description: 'Go to the Data step and map a column to the name field.',
+      });
+      return;
+    }
+
+    // Warn about invalid emails in inline data (backend will null them out — surface it early)
+    if (importedData.rows && importedData.rows.length > 0) {
+      const EMAIL_RE = /^[^\s@"(),:;<>[\]\\]+@[^\s@"(),:;<>[\]\\]+\.[^\s@"(),:;<>[\]\\]{2,}$/;
+      const emailCol = importedData.headers.find(h => h.toLowerCase() === 'email' || h.toLowerCase() === 'e-mail');
+      if (emailCol) {
+        const invalidEmailCount = importedData.rows.filter(row => {
+          const v = String(row[emailCol] ?? '').trim();
+          return v && (v.length > 320 || !EMAIL_RE.test(v));
+        }).length;
+        if (invalidEmailCount > 0) {
+          toast.warning(`${invalidEmailCount} row${invalidEmailCount !== 1 ? 's have' : ' has'} an invalid email address`, {
+            description: 'Those recipients will have no email — they won\'t receive certificate emails.',
+          });
+          // Non-blocking: continue generation, backend will null out invalid emails
+        }
+      }
+    }
+
     setOverlayState('generating');
     setGenerationStatus('generating');
     setGenerationError(null);
