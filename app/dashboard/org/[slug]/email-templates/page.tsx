@@ -367,23 +367,32 @@ function NameDialog({
 
 // ── Template card ─────────────────────────────────────────────────────────────
 
-function EmailHtmlPreview({ html }: { html: string }) {
+const CARD_GRADIENTS: [string, string][] = [
+  ["#6366f1", "#8b5cf6"],   // indigo → violet
+  ["#0ea5e9", "#06b6d4"],   // sky → cyan
+  ["#10b981", "#14b8a6"],   // emerald → teal
+  ["#f59e0b", "#f97316"],   // amber → orange
+  ["#ec4899", "#f43f5e"],   // pink → rose
+  ["#3b82f6", "#6366f1"],   // blue → indigo
+  ["#22c55e", "#10b981"],   // green → emerald
+  ["#a855f7", "#ec4899"],   // purple → pink
+  ["#64748b", "#475569"],   // slate
+  ["#f97316", "#ef4444"],   // orange → red
+];
+
+function cardGradient(id: string): [string, string] {
+  const hash = id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return CARD_GRADIENTS[hash % CARD_GRADIENTS.length]!;
+}
+
+function TemplateGradientTile({ id }: { id: string }) {
+  const [from, to] = cardGradient(id);
   return (
-    <div className="w-full h-full overflow-hidden bg-white">
-      <iframe
-        srcDoc={html || '<p style="color:#ccc;text-align:center;padding:48px 16px;font-family:sans-serif;font-size:13px;">No content yet</p>'}
-        sandbox=""
-        title="email preview"
-        style={{
-          width: 600,
-          height: 800,
-          transform: "scale(0.46)",
-          transformOrigin: "top left",
-          border: "none",
-          pointerEvents: "none",
-          display: "block",
-        }}
-      />
+    <div
+      className="w-full h-full flex items-center justify-center"
+      style={{ background: `linear-gradient(135deg, ${from} 0%, ${to} 100%)` }}
+    >
+      <Mail className="w-7 h-7 text-white/60" />
     </div>
   );
 }
@@ -440,10 +449,8 @@ function TemplateCard({
       onClick={onEdit}
     >
       {/* Preview area */}
-      <div className="h-44 overflow-hidden relative shrink-0">
-        <EmailHtmlPreview html={template.body ?? ""} />
-        {/* Gradient fade bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-card to-transparent pointer-events-none" />
+      <div className="h-28 overflow-hidden relative shrink-0">
+        <TemplateGradientTile id={template.id} />
         {/* Status badges */}
         <div className="absolute top-2.5 left-2.5 flex gap-1.5">
           {template.is_default && (
@@ -762,7 +769,7 @@ export default function EmailTemplatesPage() {
                 <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Saved Templates</h2>
                 <span className="text-xs text-muted-foreground">({savedTemplates.length})</span>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                 {savedTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
@@ -789,7 +796,7 @@ export default function EmailTemplatesPage() {
                 <span className="text-xs text-muted-foreground">({draftTemplates.length})</span>
                 <span className="text-[10px] text-muted-foreground/50 ml-1">— auto-saved, not yet published</span>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                 {draftTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
