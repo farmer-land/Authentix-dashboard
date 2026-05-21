@@ -474,10 +474,23 @@ function CampaignWizard({
   };
 
   // ── Send ───────────────────────────────────────────────────────────────────
+  const EMAIL_RE = /^[^\s@"(),:;<>[\]\\]+@[^\s@"(),:;<>[\]\\]+\.[^\s@"(),:;<>[\]\\]{2,}$/;
+
   const handleSend = async () => {
     if (sending) return; // guard against double-click before re-render
     setSending(true);
     try {
+      // Warn (non-blocking) when effective recipients have invalid email addresses
+      if (w.recipient_mode !== "segment") {
+        const invalidCount = effectiveRecipients.filter(r => !r.email || !EMAIL_RE.test(r.email)).length;
+        if (invalidCount > 0) {
+          toast.warning(
+            `${invalidCount} recipient${invalidCount !== 1 ? "s" : ""} will be skipped`,
+            { description: "Invalid email addresses cannot receive this campaign." },
+          );
+        }
+      }
+
       const dto: CreateBroadcastDto = {
         name: w.name,
         subject: w.subject,
@@ -1303,6 +1316,42 @@ function CampaignWizard({
           )}
         </div>
       )}
+
+      {/* Variable mismatch summary — shown when template uses vars not available in recipient data */}
+      {(() => {
+        const missingVars = templateVarsFromHtml.filter(
+          v => !templateVars.some(t => t.toLowerCase() === v.toLowerCase()),
+        );
+        const hasRecipients = w.recipient_mode === "segment"
+          ? !!w.segment_id
+          : w.recipient_mode === "contacts"
+          ? contactTotal > 0
+          : recipientCount > 0;
+        if (missingVars.length === 0 || !hasRecipients) return null;
+        return (
+          <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-xs text-amber-800 dark:text-amber-200 ml-1">
+              <span className="font-medium">
+                {missingVars.length === 1
+                  ? "1 template variable"
+                  : `${missingVars.length} template variables`}{" "}
+                {missingVars.length === 1 ? "is" : "are"} not available from your recipient data:
+              </span>{" "}
+              {missingVars.map(v => (
+                <code key={v} className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded mx-0.5 font-mono">
+                  {`{{${v}}}`}
+                </code>
+              ))}
+              <span className="block mt-1 text-amber-700 dark:text-amber-300">
+                {w.recipient_mode === "segment"
+                  ? "Segment contacts may not have these properties — those placeholders will be blank."
+                  : "These placeholders will render as blank for all recipients."}
+              </span>
+            </AlertDescription>
+          </Alert>
+        );
+      })()}
     </div>
   );
 

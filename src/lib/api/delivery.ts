@@ -423,6 +423,14 @@ export const deliveryApi = {
     await apiRequest(`/delivery/contacts/${id}`, { method: "DELETE" });
   },
 
+  deleteContactsBySourceRef: async (source_ref: string): Promise<{ deleted: number }> => {
+    const response = await apiRequest<{ deleted: number }>(
+      `/delivery/contacts/batch?source_ref=${encodeURIComponent(source_ref)}`,
+      { method: "DELETE" },
+    );
+    return response.data!;
+  },
+
   updateContact: async (id: string, dto: { unsubscribed?: boolean; first_name?: string; last_name?: string }): Promise<EmailContact> => {
     const response = await apiRequest<{ contact: EmailContact }>(`/delivery/contacts/${id}`, {
       method: "PATCH",

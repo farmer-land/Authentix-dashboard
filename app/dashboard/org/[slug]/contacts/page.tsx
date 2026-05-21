@@ -39,9 +39,11 @@ interface ImportSession {
   imported: number;
   skipped: number;
   imported_at: string;
+  file_hash?: string; // lightweight fingerprint for duplicate detection
 }
 
 const importLogKey = (slug: string) => `contact_import_log:${slug}`;
+const mappingProfileKey = (slug: string) => `contact_mapping_profiles:${slug}`;
 
 function readImportLog(slug: string): ImportSession[] {
   try {
@@ -53,6 +55,43 @@ function readImportLog(slug: string): ImportSession[] {
 
 function writeImportLog(slug: string, sessions: ImportSession[]) {
   localStorage.setItem(importLogKey(slug), JSON.stringify(sessions.slice(0, 20)));
+}
+
+/** Lightweight fingerprint: sorted headers + first row values, no crypto needed. */
+function computeFileHash(headers: string[], rows: Record<string, string>[]): string {
+  const headerSig = [...headers].sort().join("|");
+  const rowSig = rows.slice(0, 3).map(r =>
+    headers.map(h => String(r[h] ?? "").slice(0, 30)).join(",")
+  ).join(";");
+  return `${headerSig}::${rowSig}`.slice(0, 300);
+}
+
+// ── Saved mapping profiles ─────────────────────────────────────────────────────
+
+interface MappingProfile {
+  headerSignature: string; // sorted headers joined — used as lookup key
+  mapping: Record<string, string>; // platformKey → csvHeader
+  savedAt: string;
+}
+
+function readMappingProfiles(slug: string): MappingProfile[] {
+  try {
+    return JSON.parse(localStorage.getItem(mappingProfileKey(slug)) ?? "[]") as MappingProfile[];
+  } catch {
+    return [];
+  }
+}
+
+function saveMappingProfile(slug: string, headers: string[], mapping: Record<string, string>) {
+  const sig = [...headers].sort().join("|");
+  const profiles = readMappingProfiles(slug).filter(p => p.headerSignature !== sig);
+  profiles.unshift({ headerSignature: sig, mapping, savedAt: new Date().toISOString() });
+  localStorage.setItem(mappingProfileKey(slug), JSON.stringify(profiles.slice(0, 10)));
+}
+
+function findMappingProfile(slug: string, headers: string[]): MappingProfile | null {
+  const sig = [...headers].sort().join("|");
+  return readMappingProfiles(slug).find(p => p.headerSignature === sig) ?? null;
 }
 
 function stripExtension(name: string): string {
@@ -393,7 +432,7 @@ function ImportAccordionRow({
           </p>
           {session.skipped > 0 && session.imported === 0 && (
             <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-              Rows skipped — check that each row has a valid email address (must contain @)
+              Rows skipped — check that each row has a valid email address
             </p>
           )}
         </div>
@@ -517,11 +556,13 @@ export default function ContactsPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const dragCounterRef = useRef(0);
 
-  // File parse → mapping pipeline (name step removed)
+  // File parse → mapping pipeline
   const [parsedFile, setParsedFile] = useState<{
     headers: string[];
     rows: Record<string, string>[];
     fileName: string;
+    fileHash: string;
+    savedMappingProfile?: MappingProfile | null;
   } | null>(null);
 
   // Import sessions (localStorage)
@@ -556,21 +597,41 @@ export default function ContactsPage() {
         toast.error("Could not detect any columns in this file");
         return;
       }
+
+      const fileHash = computeFileHash(parsed.headers, parsed.rows);
+
+      // Duplicate file detection — warn if this exact file was imported recently
+      const log = readImportLog(orgSlug);
+      const recentDuplicate = log.find(s => s.file_hash === fileHash && s.imported > 0);
+      if (recentDuplicate) {
+        const when = formatDistanceToNow(new Date(recentDuplicate.imported_at), { addSuffix: true });
+        toast.warning(`This file looks like it was already imported ${when}`, {
+          description: "You can still continue — duplicate emails will be merged, not doubled.",
+          duration: 6000,
+        });
+      }
+
+      const savedMappingProfile = findMappingProfile(orgSlug, parsed.headers);
+
       setParsedFile({
         headers: parsed.headers,
         rows: parsed.rows,
         fileName: stripExtension(parsed.fileName),
+        fileHash,
+        savedMappingProfile,
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to read file");
     }
-  }, []);
+  }, [orgSlug]);
 
   const handleMappingConfirm = useCallback(
     async (mapping: Record<string, string>) => {
       if (!parsedFile) return;
-      const { headers, rows, fileName } = parsedFile;
+      const { headers, rows, fileName, fileHash } = parsedFile;
       setParsedFile(null);
+      // Persist the column mapping so future imports with same headers auto-map
+      saveMappingProfile(orgSlug, headers, mapping);
 
       const source_ref = nanoid();
       const mappedCsvCols = new Set(Object.values(mapping));
@@ -644,6 +705,7 @@ export default function ContactsPage() {
           imported: totalImported,
           skipped: totalSkipped,
           imported_at: new Date().toISOString(),
+          file_hash: fileHash,
         };
         const updated = [session, ...readImportLog(orgSlug)];
         writeImportLog(orgSlug, updated);
@@ -656,7 +718,7 @@ export default function ContactsPage() {
         setIsImporting(false);
       }
     },
-    [parsedFile, queryClient, orgSlug]
+    [parsedFile, queryClient, orgSlug]  // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const removeFromLog = useCallback((source_ref: string) => {
@@ -892,6 +954,7 @@ export default function ContactsPage() {
         headers={parsedFile?.headers ?? []}
         sampleRows={parsedFile?.rows.slice(0, 3) ?? []}
         platformFields={CONTACT_PLATFORM_FIELDS}
+        savedMapping={parsedFile?.savedMappingProfile?.mapping ?? null}
         onConfirm={handleMappingConfirm}
         onCancel={() => setParsedFile(null)}
       />
@@ -911,30 +974,56 @@ export default function ContactsPage() {
         onScratch={handleBroadcastScratch}
       />
 
-      {/* Delete import confirmation */}
+      {/* Delete import confirmation — two modes: hide from list, or fully delete contacts */}
       <AlertDialog
         open={!!deleteImportTarget}
         onOpenChange={(open) => !open && setDeleteImportTarget(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove import?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{deleteImportTarget?.file_name}</strong> will be removed from your contacts list.
-              The contacts remain in the database and can still be used for broadcasts and certificates.
+            <AlertDialogTitle>Undo import?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                <strong>{deleteImportTarget?.imported.toLocaleString()}</strong> contact{deleteImportTarget?.imported !== 1 ? "s" : ""} from{" "}
+                <strong>{deleteImportTarget?.file_name}</strong> will be permanently deleted from the database.
+              </span>
+              <span className="block text-amber-600 dark:text-amber-400 text-xs">
+                This cannot be undone. Certificates and emails already sent are not affected.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
               onClick={() => {
                 if (!deleteImportTarget) return;
                 removeFromLog(deleteImportTarget.source_ref);
                 setDeleteImportTarget(null);
-                toast.success("Import removed");
+                toast.success("Removed from history (contacts kept)");
               }}
             >
-              Remove
+              Remove from history only
+            </Button>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-white"
+              onClick={async () => {
+                if (!deleteImportTarget) return;
+                const target = deleteImportTarget;
+                setDeleteImportTarget(null);
+                removeFromLog(target.source_ref);
+                queryClient.invalidateQueries({ queryKey: ["delivery"] });
+                try {
+                  const { deleted } = await api.delivery.deleteContactsBySourceRef(target.source_ref);
+                  toast.success(`${deleted.toLocaleString()} contact${deleted !== 1 ? "s" : ""} deleted`);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Failed to delete contacts");
+                }
+              }}
+            >
+              Delete contacts
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

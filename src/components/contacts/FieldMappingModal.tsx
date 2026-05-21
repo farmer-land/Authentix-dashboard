@@ -30,6 +30,8 @@ export interface FieldMappingModalProps {
   platformFields: PlatformField[];
   onConfirm: (mapping: Record<string, string>) => void;
   onCancel: () => void;
+  /** Pre-built mapping from a saved profile — overrides auto-detect when provided. */
+  savedMapping?: Record<string, string> | null;
 }
 
 export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
@@ -85,15 +87,33 @@ export function FieldMappingModal({
   platformFields,
   onConfirm,
   onCancel,
+  savedMapping,
 }: FieldMappingModalProps) {
   // Column-centric mapping: csvHeader → platformFieldKey | "__custom__"
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   // Track which CSV headers were auto-detected (not manually changed by the user)
   const [autoDetected, setAutoDetected] = useState<Set<string>>(new Set());
+  const [usedSavedProfile, setUsedSavedProfile] = useState(false);
 
-  // Auto-detect on open: invert autoMapHeaders result, unmatched → custom
+  // Auto-detect on open: prefer savedMapping > auto-detect, unmatched → custom
   useEffect(() => {
     if (!open || !headers.length) return;
+
+    if (savedMapping && Object.keys(savedMapping).length > 0) {
+      // Invert savedMapping: platformKey → csvHeader → csvHeader → platformKey
+      const restored: Record<string, string> = {};
+      for (const [pk, ch] of Object.entries(savedMapping)) {
+        if (headers.includes(ch)) restored[ch] = pk;
+      }
+      for (const h of headers) {
+        if (!restored[h]) restored[h] = CUSTOM;
+      }
+      setColumnMapping(restored);
+      setAutoDetected(new Set(Object.keys(restored).filter(h => restored[h] !== CUSTOM)));
+      setUsedSavedProfile(true);
+      return;
+    }
+
     const autoResult = autoMapHeaders(headers, platformFields); // {platformKey → csvHeader}
     const detected: Record<string, string> = {};
     const detectedHeaders = new Set<string>();
@@ -106,7 +126,8 @@ export function FieldMappingModal({
     }
     setColumnMapping(detected);
     setAutoDetected(detectedHeaders);
-  }, [open, headers, platformFields]);
+    setUsedSavedProfile(false);
+  }, [open, headers, platformFields, savedMapping]);
 
   // Preview: up to 3 sample values per column, excluding blanks
   const previewValues = useMemo(() => {
@@ -188,8 +209,16 @@ export function FieldMappingModal({
           <DialogTitle>Review columns from &ldquo;{fileName}&rdquo;</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
             {headers.length} column{headers.length !== 1 ? "s" : ""} detected.
-            We&apos;ve auto-matched where possible — adjust anything that looks wrong.
+            {usedSavedProfile
+              ? " Mapping restored from your last import with these columns."
+              : " We've auto-matched where possible — adjust anything that looks wrong."}
           </p>
+          {usedSavedProfile && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-primary font-medium">
+              <Sparkles className="h-3 w-3" />
+              Using saved mapping from a previous import
+            </div>
+          )}
         </DialogHeader>
 
         {/* Column header */}
