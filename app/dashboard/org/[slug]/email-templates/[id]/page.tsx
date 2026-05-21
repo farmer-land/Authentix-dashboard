@@ -97,6 +97,9 @@ export default function EmailTemplateEditorPage() {
   const { orgPath, slug: orgSlug } = useOrg();
   const templateId = params.id as string;
   const returnToSend = searchParams.get("returnToSend") === "1";
+  // hasBody=1 is appended when navigating from a predefined sample — suppresses the starter
+  // gallery on first render without waiting for the async template load.
+  const hasBodyParam = searchParams.get("hasBody") === "1";
 
   const {
     loading, saving, error,
@@ -133,9 +136,10 @@ export default function EmailTemplateEditorPage() {
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(288);
   const [rightPanelWidth, setRightPanelWidth] = useState(288);
-  // True once we know the template had a saved body — suppresses the starter gallery
-  // for templates that don't have embedded block JSON (e.g. created from predefined HTML)
-  const [templateHadBody, setTemplateHadBody] = useState(false);
+  // True when the template has a non-empty body — suppresses the starter gallery.
+  // Initialized from the ?hasBody=1 URL param so predefined-sample templates never flash
+  // the gallery on first render while the async template fetch is still in-flight.
+  const [templateHadBody, setTemplateHadBody] = useState(hasBodyParam);
   const isDraggingLeft = useRef(false);
   const isDraggingRight = useRef(false);
   const dragStartXLeft = useRef(0);

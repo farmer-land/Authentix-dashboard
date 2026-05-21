@@ -17,6 +17,12 @@ import {
   Copy, Sparkles, ChevronLeft, ChevronRight, Clock, CheckCircle2, PenLine, Megaphone,
   Award, CalendarDays, Users, Newspaper, FileText, MoreHorizontal, Send,
 } from "lucide-react";
+
+// ── Template purpose inference ─────────────────────────────────────────────────
+const CERT_PURPOSE_VARS = new Set(["certificate_number", "cert_number", "certificate_id", "certificate_image_url", "course_name", "issue_date", "expiry_date"]);
+function inferPurpose(variables: string[]): "certificate" | "broadcast" {
+  return variables.some(v => CERT_PURPOSE_VARS.has(v)) ? "certificate" : "broadcast";
+}
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -85,9 +91,11 @@ const BASE_MOCK: Record<string, string> = {
 
 function SampleChooser({
   templates,
+  purpose,
   onUse,
 }: {
   templates: PredefinedTemplate[];
+  purpose: "certificate" | "broadcast";
   onUse: (t: PredefinedTemplate) => void;
 }) {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
@@ -95,8 +103,9 @@ function SampleChooser({
   const [certImg, setCertImg] = useState(CERT_IMAGES[0]);
   const [iframeH, setIframeH] = useState(700);
 
+  const purposeFiltered = templates.filter(t => inferPurpose(t.variables) === purpose);
   const filteredTemplates =
-    categoryFilter === "All" ? templates : templates.filter(t => t.category === categoryFilter);
+    categoryFilter === "All" ? purposeFiltered : purposeFiltered.filter(t => t.category === categoryFilter);
 
   useEffect(() => { setActiveIdx(0); }, [categoryFilter]);
 
@@ -113,6 +122,30 @@ function SampleChooser({
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
   const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>*{box-sizing:border-box}body{margin:0;padding:0;background:#ffffff}</style></head><body>${renderedHtml}</body></html>`;
 
+  if (purposeFiltered.length === 0) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="px-6 pt-5 pb-4 border-b shrink-0">
+          <DialogTitle className="text-xl font-bold tracking-tight">Sample Email Templates</DialogTitle>
+          <p className="text-muted-foreground text-sm mt-1">
+            {purpose === "broadcast" ? "Broadcast & newsletter templates" : "Certificate delivery templates"}
+          </p>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
+          <div className="p-4 rounded-full bg-muted">
+            <Megaphone className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <p className="font-semibold">No {purpose} templates yet</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            {purpose === "broadcast"
+              ? `No predefined broadcast templates exist yet. Use "Design from Scratch" to create your broadcast email.`
+              : "No certificate templates found."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!activeTemplate) {
     return (
       <div className="flex items-center justify-center h-full py-20">
@@ -125,7 +158,9 @@ function SampleChooser({
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 pt-5 pb-4 border-b shrink-0">
-        <DialogTitle className="text-xl font-bold tracking-tight">Sample Email Templates</DialogTitle>
+        <DialogTitle className="text-xl font-bold tracking-tight">
+          {purpose === "broadcast" ? "Broadcast Templates" : "Certificate Delivery Templates"}
+        </DialogTitle>
         <p className="text-muted-foreground text-sm mt-1">Pick a design, customise it, then send.</p>
         <div className="flex flex-wrap gap-1.5 mt-4">
           {CATEGORY_FILTERS.map(cat => (
@@ -507,6 +542,9 @@ export default function EmailTemplatesPage() {
   const [showSamples, setShowSamples] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showPurposeDialog, setShowPurposeDialog] = useState(false);
+  // Purpose selection — shown before sample chooser opens
+  const [showSamplePurposeDialog, setShowSamplePurposeDialog] = useState(false);
+  const [samplePurpose, setSamplePurpose] = useState<"certificate" | "broadcast">("certificate");
 
   // Saved IDs from localStorage (scoped by org slug)
   const [savedIds, setSavedIds] = useState<Set<string>>(() => getSavedIds(slug));
@@ -543,6 +581,7 @@ export default function EmailTemplatesPage() {
       },
       {
         onSuccess: (created) => {
+          setCreating(false);
           router.push(orgPath(`/email-templates/${created.id}${returnToSend ? "?returnToSend=1" : ""}`));
         },
         onError: (err) => {
@@ -570,7 +609,11 @@ export default function EmailTemplatesPage() {
       {
         onSuccess: (created) => {
           toast.success(`"${sample.name}" created`);
-          router.push(orgPath(`/email-templates/${created.id}${returnToSend ? "?returnToSend=1" : ""}`));
+          setCreating(false);
+          // hasBody=1 tells the editor to suppress the starter gallery on first render
+          // (before the async template fetch returns) — prevents the gallery flash.
+          const qs = returnToSend ? "?hasBody=1&returnToSend=1" : "?hasBody=1";
+          router.push(orgPath(`/email-templates/${created.id}${qs}`));
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : "Failed to create template");
@@ -618,7 +661,7 @@ export default function EmailTemplatesPage() {
         </div>
         {activeTab === "templates" && (
           <div className="flex gap-2 shrink-0">
-            <Button variant="outline" onClick={() => setShowSamples(true)}>
+            <Button variant="outline" onClick={() => setShowSamplePurposeDialog(true)}>
               <Sparkles className="w-4 h-4 mr-2" />
               Sample Email Templates
             </Button>
@@ -693,7 +736,7 @@ export default function EmailTemplatesPage() {
             Choose a professionally designed sample or start from scratch.
           </p>
           <div className="flex gap-3">
-            <Button variant="outline" size="lg" onClick={() => setShowSamples(true)} className="gap-2">
+            <Button variant="outline" size="lg" onClick={() => setShowSamplePurposeDialog(true)} className="gap-2">
               <Sparkles className="w-4 h-4" />
               Browse Samples
             </Button>
@@ -767,6 +810,50 @@ export default function EmailTemplatesPage() {
         </div>
       ))}
 
+      {/* Sample purpose — asked before the sample chooser opens */}
+      <Dialog open={showSamplePurposeDialog} onOpenChange={setShowSamplePurposeDialog}>
+        <DialogContent className="max-w-md p-0 overflow-hidden">
+          <div className="px-6 pt-6 pb-2">
+            <DialogTitle className="text-lg font-bold">What is this email for?</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">We'll show you templates that match your goal.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 px-6 pb-6 pt-3">
+            <button
+              onClick={() => {
+                setSamplePurpose("certificate");
+                setShowSamplePurposeDialog(false);
+                setShowSamples(true);
+              }}
+              className="flex items-center gap-4 rounded-xl border border-border/60 px-5 py-4 text-left hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/5 transition-all group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:bg-[#3ECF8E]/10 transition-colors">
+                <Award className="w-5 h-5 text-muted-foreground group-hover:text-[#3ECF8E] transition-colors" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug">Certificate Delivery</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Send certificates, completions, or awards to recipients</p>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setSamplePurpose("broadcast");
+                setShowSamplePurposeDialog(false);
+                setShowSamples(true);
+              }}
+              className="flex items-center gap-4 rounded-xl border border-border/60 px-5 py-4 text-left hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/5 transition-all group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:bg-[#3ECF8E]/10 transition-colors">
+                <Megaphone className="w-5 h-5 text-muted-foreground group-hover:text-[#3ECF8E] transition-colors" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug">Broadcast / Newsletter</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Announce updates, promotions, or events to a group</p>
+              </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Purpose dialog — shown before creating a blank template */}
       <Dialog open={showPurposeDialog} onOpenChange={setShowPurposeDialog}>
         <DialogContent className="max-w-lg p-0 overflow-hidden">
@@ -808,6 +895,7 @@ export default function EmailTemplatesPage() {
         <DialogContent className="max-w-5xl h-[88vh] flex flex-col overflow-hidden p-0">
           <SampleChooser
             templates={PREDEFINED_TEMPLATES}
+            purpose={samplePurpose}
             onUse={handleSampleUse}
           />
         </DialogContent>
