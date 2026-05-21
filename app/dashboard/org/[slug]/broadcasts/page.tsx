@@ -364,9 +364,14 @@ function CampaignWizard({
   }, []);
 
   // ── Template variables used in the composed HTML ──────────────────────────
+  // These are auto-filled by the system and must not be shown as required recipient columns.
+  const SYSTEM_VARS = new Set([
+    "verification_url", "certificate_number", "certificate_id",
+    "certificate_image_url", "unsubscribe_url", "preview_url",
+  ]);
   const templateVarsFromHtml: string[] = w.html_body
     ? [...new Set([...w.html_body.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]!))]
-        .filter(v => v.toLowerCase() !== "email")
+        .filter(v => v.toLowerCase() !== "email" && !SYSTEM_VARS.has(v.toLowerCase()))
     : [];
 
   // Structured manual mode: when the email uses variables, show a table instead of a textarea
@@ -1763,7 +1768,7 @@ export function BroadcastsContent({
         </Card>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — only shown when wizard is closed */}
       {!loading && broadcasts.length === 0 && !showWizard && (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
@@ -1785,7 +1790,7 @@ export function BroadcastsContent({
         </div>
       )}
 
-      {drafts.length > 0 && (
+      {!showWizard && drafts.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Drafts</h2>
           {drafts.map(b => (
@@ -1794,7 +1799,7 @@ export function BroadcastsContent({
         </div>
       )}
 
-      {sent.length > 0 && (
+      {!showWizard && sent.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sent</h2>
           {sent.map(b => (
