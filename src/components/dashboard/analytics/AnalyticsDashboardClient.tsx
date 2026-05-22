@@ -19,12 +19,12 @@ import {
   Area,
   AreaChart,
   Bar,
-  BarChart,
+  ComposedChart,
+  Line,
+  Brush,
+  ReferenceLine,
   XAxis,
   YAxis,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts"
 import {
   Award,
@@ -490,61 +490,99 @@ function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]
   )
 }
 
-// ── Category donut ────────────────────────────────────────────────────────────
+// ── Category mix chart (area-style, screenshot-inspired) ─────────────────────
 
-const CAT_COLORS = ["#3ECF8E", "#60a5fa", "#f59e0b", "#f472b6", "#a78bfa", "#34d399"]
+const CAT_COLORS = ["#3ECF8E", "#60a5fa", "#f59e0b", "#f472b6", "#a78bfa", "#34d399", "#fb923c", "#38bdf8"]
 
-function DonutChart({ data, total, size }: { data: { name: string; value: number; color: string }[]; total: number; size: number }) {
-  const ir = size * 0.34
-  const or = size * 0.47
+function CategoryAreaViz({
+  data,
+  height = 88,
+  id = "main",
+}: {
+  data: { name: string; value: number; color: string }[]
+  height?: number
+  id?: string
+}) {
+  const sorted = React.useMemo(() => [...data].sort((a, b) => b.value - a.value), [data])
+  const maxVal = sorted[0]?.value ?? 1
+  const W = 300
+  const H = height
+  const n = sorted.length
+
   return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <PieChart width={size} height={size}>
-        <Pie
-          data={data}
-          cx="50%"
-          cy="50%"
-          innerRadius={ir}
-          outerRadius={or}
-          dataKey="value"
-          strokeWidth={2}
-          stroke="transparent"
-          paddingAngle={2}
-        >
-          {data.map((entry, i) => (
-            <Cell key={i} fill={entry.color} />
-          ))}
-        </Pie>
-      </PieChart>
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <p className="text-lg font-bold tabular-nums leading-none">{total.toLocaleString()}</p>
-        <p className="text-[10px] text-muted-foreground mt-0.5">total</p>
-      </div>
-    </div>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full"
+      style={{ height }}
+      preserveAspectRatio="none"
+    >
+      <defs>
+        {sorted.map((d, i) => {
+          const gradId = `cmg_${id}_${i}`
+          return (
+            <linearGradient key={gradId} id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={d.color} stopOpacity={0.7} />
+              <stop offset="100%" stopColor={d.color} stopOpacity={0.08} />
+            </linearGradient>
+          )
+        })}
+      </defs>
+      {sorted.map((d, i) => {
+        const gradId = `cmg_${id}_${i}`
+        const peakH = (d.value / maxVal) * (H - 8)
+        const peakY = H - 4 - peakH
+        // Spread peaks left→right so they don't all collapse at center
+        const peakX = n <= 1 ? W * 0.5 : W * (0.18 + (i / (n - 1)) * 0.64)
+        // Smooth cubic bezier mountain: start bottom-left → peak → bottom-right
+        const path = [
+          `M 0 ${H}`,
+          `C ${peakX * 0.5} ${H} ${peakX * 0.82} ${peakY} ${peakX} ${peakY}`,
+          `C ${peakX + (W - peakX) * 0.18} ${peakY} ${peakX + (W - peakX) * 0.5} ${H} ${W} ${H}`,
+          "Z",
+        ].join(" ")
+        return (
+          <path
+            key={d.name}
+            d={path}
+            fill={`url(#${gradId})`}
+            stroke={d.color}
+            strokeWidth={1.5}
+            strokeOpacity={0.75}
+          />
+        )
+      })}
+    </svg>
   )
 }
 
 function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
   const data = React.useMemo(
-    () => mix.slice(0, 6).map((r, i) => ({
-      name: r.categoryName !== "Uncategorised" ? r.categoryName : r.subcategoryName,
-      value: r.count,
-      color: CAT_COLORS[i % CAT_COLORS.length]!,
-    })),
+    () =>
+      mix.slice(0, 8).map((r, i) => ({
+        name: r.categoryName !== "Uncategorised" ? r.categoryName : (r.subcategoryName || "Other"),
+        value: r.count,
+        color: CAT_COLORS[i % CAT_COLORS.length]!,
+      })).sort((a, b) => b.value - a.value),
     [mix]
   )
   const total = data.reduce((a, r) => a + r.value, 0)
 
-  const Legend = () => (
-    <div className="w-full space-y-2">
+  const LegendList = ({ compact = true }: { compact?: boolean }) => (
+    <div className={compact ? "space-y-1.5" : "grid grid-cols-2 gap-x-8 gap-y-2"}>
       {data.map((d) => {
         const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
         return (
-          <div key={d.name} className="flex items-center gap-2 text-xs">
+          <div key={d.name} className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-            <span className="flex-1 truncate text-foreground/80">{d.name}</span>
-            <span className="tabular-nums text-muted-foreground w-7 text-right">{pct}%</span>
-            <span className="tabular-nums font-medium w-10 text-right">{d.value.toLocaleString()}</span>
+            <span className={cn("flex-1 truncate text-foreground/80", compact ? "text-[10px]" : "text-xs")}>
+              {d.name}
+            </span>
+            <span className={cn("tabular-nums text-muted-foreground", compact ? "text-[10px]" : "text-xs")}>
+              {pct}%
+            </span>
+            <span className={cn("tabular-nums font-medium text-right", compact ? "text-[10px] w-8" : "text-xs w-12")}>
+              {d.value.toLocaleString()}
+            </span>
           </div>
         )
       })}
@@ -555,7 +593,7 @@ function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
     return (
       <div className="rounded-2xl border border-border/50 bg-card p-6 flex flex-col h-full">
         <p className="text-sm font-semibold mb-1">Category mix</p>
-        <p className="text-xs text-muted-foreground mb-4">All-time by template category</p>
+        <p className="text-xs text-muted-foreground mb-4">All-time distribution</p>
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">No templates yet</div>
       </div>
     )
@@ -563,38 +601,41 @@ function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
 
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-6 flex flex-col h-full">
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-1">
         <div>
           <p className="text-sm font-semibold">Category mix</p>
           <p className="text-xs text-muted-foreground">All-time distribution</p>
         </div>
         <ChartExpandModal title="Category mix">
-          <div className="flex flex-col items-center gap-6 py-4">
-            <DonutChart data={data} total={total} size={220} />
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2.5 w-full max-w-md px-4">
-              {data.map((d) => {
-                const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
-                return (
-                  <div key={d.name} className="flex items-center gap-2 text-sm">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                    <span className="truncate text-foreground/80">{d.name}</span>
-                    <span className="ml-auto tabular-nums text-muted-foreground text-xs">{pct}%</span>
-                  </div>
-                )
-              })}
+          <div className="space-y-5 pt-2">
+            <div>
+              <p className="text-3xl font-bold tabular-nums">{total.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Total certificates</p>
             </div>
+            <CategoryAreaViz data={data} height={140} id="exp" />
+            <LegendList compact={false} />
           </div>
         </ChartExpandModal>
       </div>
-      <div className="flex flex-col items-center gap-4 flex-1">
-        <DonutChart data={data} total={total} size={150} />
-        <Legend />
+
+      {/* Prominent total — mirrors screenshot's "930" header */}
+      <div className="mb-3">
+        <p className="text-2xl font-bold tabular-nums leading-none">{total.toLocaleString()}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Total certificates</p>
+      </div>
+
+      {/* Overlapping mountain-range area visualization */}
+      <CategoryAreaViz data={data} height={88} id="mini" />
+
+      {/* Legend */}
+      <div className="mt-4 flex-1">
+        <LegendList compact />
       </div>
     </div>
   )
 }
 
-// ── Imports area chart ────────────────────────────────────────────────────────
+// ── Imports chart (redesigned) ───────────────────────────────────────────────
 
 function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
   const buckets = React.useMemo(() => {
@@ -612,35 +653,85 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
       .map(([date, v]) => ({
         date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         ...v,
+        total: v.completed + v.failed + v.processing,
       }))
   }, [imports])
 
   const total = imports.length
   const completed = imports.filter((i) => i.status === "completed").length
   const failed = imports.filter((i) => i.status === "failed").length
+  const processing = total - completed - failed
   const successRate = total > 0 ? Math.round((completed / total) * 100) : 0
   const successColor = successRate >= 90 ? "#3ECF8E" : successRate >= 70 ? "#f59e0b" : "#f87171"
+  const avgPerDay = buckets.length > 0 ? Math.round(total / buckets.length) : 0
 
   const chartConfig: ChartConfig = {
     completed: { label: "Completed", color: "#3ECF8E" },
     failed: { label: "Failed", color: "#f87171" },
     processing: { label: "Processing", color: "#60a5fa" },
+    total: { label: "Total", color: "rgba(156,163,175,0.6)" },
   }
 
-  const ChartBody = ({ height }: { height: string }) =>
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string }>; label?: string }) => {
+    if (!active || !payload?.length) return null
+    const dayTotal = payload.reduce((s, p) => s + (p.value ?? 0), 0)
+    return (
+      <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs">
+        <p className="font-semibold text-foreground mb-1.5">{label}</p>
+        {payload.map((p) => p.value > 0 && (
+          <div key={p.name} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-muted-foreground capitalize">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.fill }} />
+              {p.name}
+            </span>
+            <span className="font-bold tabular-nums text-foreground">{p.value}</span>
+          </div>
+        ))}
+        {dayTotal > 0 && (
+          <div className="flex items-center justify-between gap-4 border-t border-border/40 mt-1.5 pt-1.5">
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-bold tabular-nums text-foreground">{dayTotal}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const ChartBody = ({ height, withBrush }: { height: string; withBrush?: boolean }) =>
     buckets.length === 0 ? (
       <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No imports in this range</div>
     ) : (
       <ChartContainer config={chartConfig} className={`${height} w-full`}>
-        <BarChart data={buckets} barSize={14} margin={{ left: 0, right: 0, top: 4 }}>
+        <ComposedChart data={buckets} barSize={Math.max(8, Math.min(20, Math.floor(260 / (buckets.length || 1))))} margin={{ left: 0, right: 0, top: 4, bottom: withBrush ? 0 : 0 }}>
+          <defs>
+            <linearGradient id="igCompleted" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3ECF8E" stopOpacity={1} />
+              <stop offset="100%" stopColor="#3ECF8E" stopOpacity={0.8} />
+            </linearGradient>
+            <linearGradient id="igFailed" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
+              <stop offset="100%" stopColor="#f87171" stopOpacity={0.8} />
+            </linearGradient>
+            <linearGradient id="igProcessing" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#60a5fa" stopOpacity={1} />
+              <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.8} />
+            </linearGradient>
+          </defs>
           <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} interval="preserveStartEnd" />
           <YAxis hide allowDecimals={false} />
-          <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: "rgba(128,128,128,0.06)" }} />
-          <Bar dataKey="completed" stackId="a" fill="#3ECF8E" fillOpacity={0.9} radius={[0, 0, 0, 0]} />
-          <Bar dataKey="processing" stackId="a" fill="#60a5fa" fillOpacity={0.9} />
-          <Bar dataKey="failed" stackId="a" fill="#f87171" fillOpacity={0.9} radius={[3, 3, 0, 0]} />
-        </BarChart>
+          {avgPerDay > 0 && (
+            <ReferenceLine y={avgPerDay} stroke="rgba(156,163,175,0.35)" strokeDasharray="4 3" label={{ value: `avg ${avgPerDay}`, position: "insideTopRight", fontSize: 8, fill: "rgba(156,163,175,0.6)" }} />
+          )}
+          <ChartTooltip content={<CustomTooltip />} cursor={{ fill: "rgba(128,128,128,0.06)", radius: 4 }} />
+          <Bar dataKey="completed" stackId="a" fill="url(#igCompleted)" radius={[0, 0, 2, 2]} />
+          <Bar dataKey="processing" stackId="a" fill="url(#igProcessing)" />
+          <Bar dataKey="failed" stackId="a" fill="url(#igFailed)" radius={[3, 3, 0, 0]} />
+          <Line dataKey="total" type="monotone" stroke="rgba(156,163,175,0.5)" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+          {withBrush && buckets.length > 7 && (
+            <Brush dataKey="date" height={18} stroke={GRID_STROKE} fill="rgba(128,128,128,0.04)" travellerWidth={6} />
+          )}
+        </ComposedChart>
       </ChartContainer>
     )
 
@@ -648,8 +739,8 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
     <div className="flex items-center gap-4 flex-wrap">
       {[
         { label: "Completed", value: completed, color: "#3ECF8E" },
+        { label: "Processing", value: processing, color: "#60a5fa" },
         { label: "Failed", value: failed, color: "#f87171" },
-        { label: "Processing", value: total - completed - failed, color: "#60a5fa" },
       ].map((s) => (
         <div key={s.label} className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
@@ -664,7 +755,7 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm font-semibold">Import jobs</p>
-          <p className="text-xs text-muted-foreground">Completion status over period</p>
+          <p className="text-xs text-muted-foreground">Completed · Processing · Failed by day</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
@@ -673,7 +764,7 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
           </div>
           <ChartExpandModal title="Import jobs">
             <div className="space-y-4 pt-2">
-              <ChartBody height="h-64" />
+              <ChartBody height="h-72" withBrush />
               <LegendRow />
             </div>
           </ChartExpandModal>
@@ -685,7 +776,7 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
   )
 }
 
-// ── Verification trend chart ──────────────────────────────────────────────────
+// ── Verification trend chart (redesigned) ────────────────────────────────────
 
 function VerificationTrendChart({ verifications }: { verifications: RecentVerification[] }) {
   const data = React.useMemo(() => {
@@ -701,40 +792,76 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
       .map(([date, v]) => ({
         date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         ...v,
+        total: v.valid + v.invalid,
       }))
   }, [verifications])
 
   const total = verifications.length
   const valid = verifications.filter((v) => v.result === "valid").length
+  const invalid = total - valid
   const validPct = total > 0 ? Math.round((valid / total) * 100) : 0
+  const avgPerDay = data.length > 0 ? Math.round(total / data.length) : 0
 
   const chartConfig: ChartConfig = {
     valid: { label: "Valid", color: "#3ECF8E" },
     invalid: { label: "Invalid", color: "#f87171" },
   }
 
-  const ChartBody = ({ height }: { height: string }) =>
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+    if (!active || !payload?.length) return null
+    const dayTotal = payload.reduce((s, p) => s + (p.value ?? 0), 0)
+    const validEntry = payload.find((p) => p.name === "valid")
+    const dayPct = dayTotal > 0 && validEntry ? Math.round((validEntry.value / dayTotal) * 100) : 0
+    return (
+      <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs">
+        <p className="font-semibold text-foreground mb-1.5">{label}</p>
+        {payload.map((p) => (
+          <div key={p.name} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-muted-foreground capitalize">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
+              {p.name}
+            </span>
+            <span className="font-bold tabular-nums text-foreground">{p.value}</span>
+          </div>
+        ))}
+        {dayTotal > 0 && (
+          <div className="flex items-center justify-between gap-4 border-t border-border/40 mt-1.5 pt-1.5">
+            <span className="text-muted-foreground">Valid rate</span>
+            <span className="font-bold tabular-nums" style={{ color: dayPct >= 90 ? "#3ECF8E" : dayPct >= 70 ? "#f59e0b" : "#f87171" }}>{dayPct}%</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const ChartBody = ({ height, withBrush }: { height: string; withBrush?: boolean }) =>
     data.length === 0 ? (
       <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No verifications in this range</div>
     ) : (
       <ChartContainer config={chartConfig} className={`${height} w-full`}>
-        <AreaChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+        <AreaChart data={data} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
           <defs>
             <linearGradient id="vgValid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3ECF8E" stopOpacity={0.5} />
-              <stop offset="95%" stopColor="#3ECF8E" stopOpacity={0.05} />
+              <stop offset="0%" stopColor="#3ECF8E" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="#3ECF8E" stopOpacity={0.02} />
             </linearGradient>
             <linearGradient id="vgInvalid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f87171" stopOpacity={0.5} />
-              <stop offset="95%" stopColor="#f87171" stopOpacity={0.05} />
+              <stop offset="0%" stopColor="#f87171" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#f87171" stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} interval="preserveStartEnd" />
           <YAxis hide allowDecimals={false} />
-          <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: GRID_STROKE }} />
-          <Area dataKey="valid" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#vgValid)" dot={false} activeDot={{ r: 4, fill: "#3ECF8E", strokeWidth: 0 }} stackId="v" />
-          <Area dataKey="invalid" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#vgInvalid)" dot={false} activeDot={{ r: 4, fill: "#f87171", strokeWidth: 0 }} stackId="v" />
+          {avgPerDay > 0 && (
+            <ReferenceLine y={avgPerDay} stroke="rgba(156,163,175,0.3)" strokeDasharray="4 3" label={{ value: `avg ${avgPerDay}/day`, position: "insideTopRight", fontSize: 8, fill: "rgba(156,163,175,0.55)" }} />
+          )}
+          <ChartTooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(156,163,175,0.25)", strokeWidth: 1 }} />
+          <Area dataKey="valid" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#vgValid)" dot={false} activeDot={{ r: 4, fill: "#3ECF8E", strokeWidth: 0 }} />
+          <Area dataKey="invalid" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#vgInvalid)" dot={false} activeDot={{ r: 4, fill: "#f87171", strokeWidth: 0 }} />
+          {withBrush && data.length > 7 && (
+            <Brush dataKey="date" height={18} stroke={GRID_STROKE} fill="rgba(128,128,128,0.04)" travellerWidth={6} />
+          )}
         </AreaChart>
       </ChartContainer>
     )
@@ -744,7 +871,7 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm font-semibold">Verification results</p>
-          <p className="text-xs text-muted-foreground">Valid vs invalid scans</p>
+          <p className="text-xs text-muted-foreground">Valid vs invalid scans · drag in expanded view to zoom</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
@@ -753,7 +880,7 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
           </div>
           <ChartExpandModal title="Verification results">
             <div className="space-y-4 pt-2">
-              <ChartBody height="h-64" />
+              <ChartBody height="h-72" withBrush />
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-[#3ECF8E]" />
@@ -761,8 +888,14 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-[#f87171]" />
-                  <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{total - valid}</strong></span>
+                  <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{invalid}</strong></span>
                 </div>
+                {avgPerDay > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-sm border border-muted-foreground/40" style={{ borderStyle: "dashed" }} />
+                    <span className="text-[10px] text-muted-foreground">Avg: <strong className="text-foreground">{avgPerDay}/day</strong></span>
+                  </div>
+                )}
               </div>
             </div>
           </ChartExpandModal>
@@ -776,8 +909,13 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-[#f87171]" />
-          <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{total - valid}</strong></span>
+          <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{invalid}</strong></span>
         </div>
+        {avgPerDay > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground">Avg: <strong className="text-foreground">{avgPerDay}/day</strong></span>
+          </div>
+        )}
       </div>
     </div>
   )
