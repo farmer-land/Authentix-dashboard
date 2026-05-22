@@ -352,48 +352,61 @@ type KpiCardProps = {
   trendLabel?: string
 }
 
-function KpiCard({ label, value, sub, icon, accent = "#3ECF8E", trend, trendLabel }: KpiCardProps) {
+function KpiCard({ label, value, sub, icon, accent = NEON.green, trend, trendLabel }: KpiCardProps) {
   return (
-    <div className="rounded-2xl border border-border/50 bg-card p-5 flex flex-col gap-3 relative overflow-hidden">
-      <div
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
-        style={{ background: `radial-gradient(ellipse at top left, ${accent}, transparent 70%)` }}
-      />
+    <div className="rounded-2xl border border-slate-700/40 bg-card p-5 flex flex-col gap-3 relative overflow-hidden group">
+      {/* Ambient glow */}
+      <div className="absolute inset-0 opacity-[0.05] pointer-events-none transition-opacity group-hover:opacity-[0.09]"
+        style={{ background: `radial-gradient(ellipse at top left, ${accent}, transparent 65%)` }} />
+      {/* Corner accent */}
+      <div className="absolute top-0 left-0 w-5 h-5 border-l-2 border-t-2 rounded-tl-2xl pointer-events-none"
+        style={{ borderColor: `${accent}60` }} />
+
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${accent}18` }}>
+        <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">{label}</span>
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${accent}15`, boxShadow: `0 0 12px ${accent}20` }}>
           <div style={{ color: accent }}>{icon}</div>
         </div>
       </div>
       <div>
-        <p className="text-2xl font-bold tracking-tight tabular-nums">{typeof value === "number" ? value.toLocaleString() : value}</p>
+        <p className="text-2xl font-bold tracking-tight tabular-nums font-mono"
+          style={{ color: accent, textShadow: `0 0 20px ${accent}40` }}>
+          {typeof value === "number" ? value.toLocaleString() : value}
+        </p>
         {(trend || trendLabel) ? (
           <div className="flex items-center gap-1.5 mt-1">
-            {trend === "up" && <ArrowUpRight className="w-3 h-3 text-emerald-500" />}
-            {trend === "down" && <ArrowDownRight className="w-3 h-3 text-red-400" />}
-            {trendLabel && <span className={cn("text-xs", trend === "up" ? "text-emerald-500" : trend === "down" ? "text-red-400" : "text-muted-foreground")}>{trendLabel}</span>}
-            {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
+            {trend === "up" && <ArrowUpRight className="w-3 h-3" style={{ color: NEON.green }} />}
+            {trend === "down" && <ArrowDownRight className="w-3 h-3" style={{ color: NEON.rose }} />}
+            {trendLabel && <span className="text-[10px] font-mono" style={{ color: trend === "up" ? NEON.green : trend === "down" ? NEON.rose : undefined }}>{trendLabel}</span>}
+            {sub && <span className="text-[10px] font-mono text-muted-foreground">{sub}</span>}
           </div>
         ) : sub ? (
-          <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+          <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{sub}</p>
         ) : null}
       </div>
     </div>
   )
 }
 
-// ── Main area chart ───────────────────────────────────────────────────────────
+// ── Futuristic neon palette ───────────────────────────────────────────────────
 
-type CertLineMetric = "issued" | "verificationScans"
+const NEON = {
+  green:  "#00E5A0",
+  blue:   "#38BDF8",
+  amber:  "#FBBF24",
+  rose:   "#F43F5E",
+  purple: "#A78BFA",
+}
+const NEON_GRID = "rgba(148,163,184,0.07)"
 
 const CHART_COLORS = {
-  issued: "#3ECF8E",
-  verificationScans: "#60a5fa",
+  issued: NEON.green,
+  verificationScans: NEON.blue,
 }
 
-function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]; rangeLabel: string }) {
-  const [active, setActive] = React.useState<CertLineMetric>("issued")
+// ── Certificates & Verifications spline chart (stock-market style) ─────────────
 
+function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]; rangeLabel: string }) {
   const totals = React.useMemo(
     () => ({
       issued: series.reduce((a, r) => a + r.issued, 0),
@@ -403,88 +416,196 @@ function MainAreaChart({ series, rangeLabel }: { series: CertificateDailyPoint[]
   )
 
   const chartConfig: ChartConfig = {
-    issued: { label: "Certificates generated", color: CHART_COLORS.issued },
-    verificationScans: { label: "Verification scans", color: CHART_COLORS.verificationScans },
+    issued: { label: "Certificates", color: NEON.green },
+    verificationScans: { label: "Verifications", color: NEON.blue },
   }
 
-  const color = CHART_COLORS[active]
-
-  return (
-    <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
-      {/* Metric toggle tabs */}
-      <div className="flex border-b border-border/40">
-        <div className="flex-1 px-6 py-4">
-          <p className="text-xs text-muted-foreground mb-0.5">Trend over {rangeLabel}</p>
-          <p className="text-sm font-semibold">Certificates & Verifications</p>
-        </div>
-        {(["issued", "verificationScans"] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setActive(key)}
-            className={cn(
-              "px-6 py-4 border-l border-border/40 text-left transition-colors",
-              active === key ? "bg-muted/50" : "hover:bg-muted/20"
-            )}
-          >
-            <p className="text-xs text-muted-foreground mb-0.5">{chartConfig[key]?.label as string}</p>
-            <p className="text-xl font-bold tabular-nums" style={{ color: active === key ? color : undefined }}>
-              {totals[key].toLocaleString()}
-            </p>
-          </button>
+  const SplineTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+    if (!active || !payload?.length) return null
+    const date = label ? new Date(String(label)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : ""
+    return (
+      <div className="rounded-xl border border-white/10 bg-black/80 backdrop-blur-xl px-4 py-3 shadow-2xl text-xs font-mono min-w-[140px]">
+        <p className="text-slate-400 mb-2 text-[10px] tracking-widest uppercase">{date}</p>
+        {payload.map((p) => (
+          <div key={p.name} className="flex items-center justify-between gap-6 mb-1">
+            <span className="flex items-center gap-1.5" style={{ color: p.color }}>
+              <span className="w-1 h-3 rounded-full inline-block" style={{ background: p.color, boxShadow: `0 0 6px ${p.color}` }} />
+              {p.name === "issued" ? "GEN" : "VRF"}
+            </span>
+            <span className="font-bold text-white">{p.value.toLocaleString()}</span>
+          </div>
         ))}
       </div>
+    )
+  }
 
-      {/* Chart */}
-      <div className="p-6 pt-4">
+  return (
+    <div className="rounded-2xl border border-slate-700/40 bg-card overflow-hidden relative">
+      {/* Sci-fi corner accents */}
+      <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 rounded-tl-2xl pointer-events-none" style={{ borderColor: `${NEON.green}50` }} />
+      <div className="absolute top-0 right-0 w-8 h-8 border-r-2 border-t-2 rounded-tr-2xl pointer-events-none" style={{ borderColor: `${NEON.blue}50` }} />
+      <div className="absolute bottom-0 left-0 w-8 h-8 border-l-2 border-b-2 rounded-bl-2xl pointer-events-none" style={{ borderColor: `${NEON.green}30` }} />
+      <div className="absolute bottom-0 right-0 w-8 h-8 border-r-2 border-b-2 rounded-br-2xl pointer-events-none" style={{ borderColor: `${NEON.blue}30` }} />
+
+      {/* Header */}
+      <div className="grid grid-cols-3 border-b border-white/5">
+        <div className="px-6 py-4">
+          <p className="text-[9px] font-mono text-slate-500 uppercase tracking-[0.15em] mb-1">ANALYTICS · {rangeLabel.toUpperCase()}</p>
+          <p className="text-sm font-semibold tracking-tight">Certificates & Verifications</p>
+        </div>
+        <div className="px-6 py-4 border-l border-white/5">
+          <p className="text-[9px] font-mono uppercase tracking-[0.15em] mb-1" style={{ color: NEON.green }}>▲ GENERATED</p>
+          <p className="text-2xl font-bold tabular-nums font-mono" style={{ color: NEON.green, textShadow: `0 0 24px ${NEON.green}50` }}>
+            {totals.issued.toLocaleString()}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">certificates issued</p>
+        </div>
+        <div className="px-6 py-4 border-l border-white/5">
+          <p className="text-[9px] font-mono uppercase tracking-[0.15em] mb-1" style={{ color: NEON.blue }}>◆ VERIFIED</p>
+          <p className="text-2xl font-bold tabular-nums font-mono" style={{ color: NEON.blue, textShadow: `0 0 24px ${NEON.blue}50` }}>
+            {totals.verificationScans.toLocaleString()}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">public scans</p>
+        </div>
+      </div>
+
+      {/* Spline chart */}
+      <div className="px-4 pt-4 pb-2">
         {series.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
-            No data in this range
+          <div className="h-56 flex items-center justify-center text-sm text-muted-foreground font-mono text-xs tracking-widest">
+            NO DATA IN RANGE
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="h-64 w-full">
-            <AreaChart data={series} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
+          <ChartContainer config={chartConfig} className="h-56 w-full">
+            <ComposedChart data={series} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
               <defs>
-                <linearGradient id="areaGlow" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+                <linearGradient id="spIssued" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={NEON.green} stopOpacity={0.22} />
+                  <stop offset="80%" stopColor={NEON.green} stopOpacity={0.02} />
+                  <stop offset="100%" stopColor={NEON.green} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="spVerify" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={NEON.blue} stopOpacity={0.18} />
+                  <stop offset="80%" stopColor={NEON.blue} stopOpacity={0.02} />
+                  <stop offset="100%" stopColor={NEON.blue} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} stroke={GRID_STROKE} />
+              <CartesianGrid
+                strokeDasharray="1 8"
+                stroke={NEON_GRID}
+                vertical={false}
+              />
               <XAxis
                 dataKey="date"
                 tickLine={false}
                 axisLine={false}
-                tick={{ fontSize: 10, fill: "rgba(156,163,175,0.7)" }}
+                tick={{ fontSize: 9, fill: "rgba(148,163,184,0.5)", fontFamily: "monospace" }}
                 tickMargin={8}
-                minTickGap={28}
-                tickFormatter={(v) => {
-                  const d = new Date(String(v))
-                  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                }}
+                minTickGap={32}
+                tickFormatter={(v) => new Date(String(v)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
               />
-              <YAxis hide allowDecimals={false} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(v) =>
-                      new Date(String(v)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                    }
-                  />
-                }
+              <YAxis
+                orientation="right"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 9, fill: "rgba(148,163,184,0.4)", fontFamily: "monospace" }}
+                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                width={36}
+                allowDecimals={false}
+              />
+              <ChartTooltip content={<SplineTooltip />} cursor={{ stroke: "rgba(255,255,255,0.06)", strokeWidth: 1, strokeDasharray: "3 4" }} />
+              <Area
+                dataKey="issued"
+                type="natural"
+                stroke={NEON.green}
+                strokeWidth={2}
+                fill="url(#spIssued)"
+                dot={false}
+                activeDot={{ r: 5, fill: NEON.green, strokeWidth: 0, style: { filter: `drop-shadow(0 0 6px ${NEON.green})` } }}
+                style={{ filter: `drop-shadow(0 0 3px ${NEON.green}60)` }}
               />
               <Area
-                dataKey={active}
-                type="monotone"
-                stroke={color}
+                dataKey="verificationScans"
+                type="natural"
+                stroke={NEON.blue}
                 strokeWidth={2}
-                fill="url(#areaGlow)"
+                fill="url(#spVerify)"
                 dot={false}
-                activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: NEON.blue, strokeWidth: 0, style: { filter: `drop-shadow(0 0 6px ${NEON.blue})` } }}
+                style={{ filter: `drop-shadow(0 0 3px ${NEON.blue}60)` }}
               />
-            </AreaChart>
+            </ComposedChart>
           </ChartContainer>
         )}
+      </div>
+
+      {/* Bottom legend bar */}
+      <div className="flex items-center gap-6 px-6 py-3 border-t border-white/5">
+        {[{ color: NEON.green, label: "Certificates generated" }, { color: NEON.blue, label: "Verification scans" }].map((s) => (
+          <div key={s.label} className="flex items-center gap-2">
+            <div className="w-4 h-0.5 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
+            <span className="text-[10px] font-mono text-muted-foreground">{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Certificate Activity mini card (for right panel) ──────────────────────────
+
+function CertActivityMiniCard({ series }: { series: CertificateDailyPoint[] }) {
+  const last30 = series.slice(-30)
+  const maxVal = Math.max(...last30.map((d) => d.issued), 1)
+  const total = last30.reduce((s, d) => s + d.issued, 0)
+  const activeDays = last30.filter((d) => d.issued > 0).length
+  const avgPerDay = activeDays > 0 ? Math.round(total / activeDays) : 0
+  const peak = last30.reduce((best, d) => (d.issued > best.issued ? d : best), { issued: 0, date: "" })
+
+  return (
+    <div className="rounded-2xl border border-slate-700/40 bg-card p-5 flex flex-col h-full relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 rounded-tl-2xl pointer-events-none" style={{ borderColor: `${NEON.amber}60` }} />
+      <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 rounded-br-2xl pointer-events-none" style={{ borderColor: `${NEON.amber}30` }} />
+
+      <div className="mb-3">
+        <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500 mb-0.5">ACTIVITY · 30D</p>
+        <p className="text-sm font-semibold">Certificate Activity</p>
+      </div>
+
+      {/* Mini bar sparkline */}
+      <div className="flex items-end gap-[2px] h-14 mb-4 flex-1">
+        {last30.map((d, i) => {
+          const h = maxVal > 0 ? Math.max((d.issued / maxVal) * 100, d.issued > 0 ? 4 : 2) : 2
+          return (
+            <div
+              key={i}
+              className="flex-1 rounded-t-[2px] transition-all"
+              style={{
+                height: `${h}%`,
+                background: d.issued > 0
+                  ? `linear-gradient(180deg, ${NEON.amber} 0%, ${NEON.amber}60 100%)`
+                  : "rgba(148,163,184,0.08)",
+                boxShadow: d.issued > 0 ? `0 0 4px ${NEON.amber}50` : "none",
+              }}
+            />
+          )
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: "TOTAL", value: total.toLocaleString() },
+          { label: "ACTIVE DAYS", value: String(activeDays) },
+          { label: "AVG / DAY", value: String(avgPerDay) },
+          { label: "PEAK", value: peak.issued > 0 ? String(peak.issued) : "—" },
+        ].map((s) => (
+          <div key={s.label}>
+            <p className="text-[9px] font-mono uppercase tracking-widest text-slate-500">{s.label}</p>
+            <p className="text-base font-bold tabular-nums font-mono mt-0.5" style={{ color: NEON.amber, textShadow: `0 0 12px ${NEON.amber}40` }}>
+              {s.value}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -531,9 +652,7 @@ function CategoryAreaViz({
         const gradId = `cmg_${id}_${i}`
         const peakH = (d.value / maxVal) * (H - 8)
         const peakY = H - 4 - peakH
-        // Spread peaks left→right so they don't all collapse at center
         const peakX = n <= 1 ? W * 0.5 : W * (0.18 + (i / (n - 1)) * 0.64)
-        // Smooth cubic bezier mountain: start bottom-left → peak → bottom-right
         const path = [
           `M 0 ${H}`,
           `C ${peakX * 0.5} ${H} ${peakX * 0.82} ${peakY} ${peakX} ${peakY}`,
@@ -547,7 +666,8 @@ function CategoryAreaViz({
             fill={`url(#${gradId})`}
             stroke={d.color}
             strokeWidth={1.5}
-            strokeOpacity={0.75}
+            strokeOpacity={0.8}
+            style={{ filter: `drop-shadow(0 0 4px ${d.color}50)` }}
           />
         )
       })}
@@ -635,7 +755,7 @@ function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
   )
 }
 
-// ── Imports chart (redesigned) ───────────────────────────────────────────────
+// ── Import jobs chart (futuristic neon) ──────────────────────────────────────
 
 function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
   const buckets = React.useMemo(() => {
@@ -662,35 +782,35 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
   const failed = imports.filter((i) => i.status === "failed").length
   const processing = total - completed - failed
   const successRate = total > 0 ? Math.round((completed / total) * 100) : 0
-  const successColor = successRate >= 90 ? "#3ECF8E" : successRate >= 70 ? "#f59e0b" : "#f87171"
+  const successColor = successRate >= 90 ? NEON.green : successRate >= 70 ? NEON.amber : NEON.rose
   const avgPerDay = buckets.length > 0 ? Math.round(total / buckets.length) : 0
 
   const chartConfig: ChartConfig = {
-    completed: { label: "Completed", color: "#3ECF8E" },
-    failed: { label: "Failed", color: "#f87171" },
-    processing: { label: "Processing", color: "#60a5fa" },
-    total: { label: "Total", color: "rgba(156,163,175,0.6)" },
+    completed: { label: "Completed", color: NEON.green },
+    failed: { label: "Failed", color: NEON.rose },
+    processing: { label: "Processing", color: NEON.blue },
+    total: { label: "Total", color: "rgba(148,163,184,0.5)" },
   }
 
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string }>; label?: string }) => {
+  const NeonTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string }>; label?: string }) => {
     if (!active || !payload?.length) return null
     const dayTotal = payload.reduce((s, p) => s + (p.value ?? 0), 0)
     return (
-      <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs">
-        <p className="font-semibold text-foreground mb-1.5">{label}</p>
-        {payload.map((p) => p.value > 0 && (
-          <div key={p.name} className="flex items-center justify-between gap-4">
-            <span className="flex items-center gap-1.5 text-muted-foreground capitalize">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.fill }} />
-              {p.name}
+      <div className="rounded-xl border border-white/10 bg-black/85 backdrop-blur-xl px-3 py-2.5 shadow-2xl text-xs font-mono">
+        <p className="text-slate-400 mb-2 text-[10px] tracking-widest uppercase">{label}</p>
+        {payload.filter((p) => p.value > 0).map((p) => (
+          <div key={p.name} className="flex items-center justify-between gap-5 mb-0.5">
+            <span className="flex items-center gap-1.5" style={{ color: p.fill }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.fill, boxShadow: `0 0 4px ${p.fill}` }} />
+              {p.name.toUpperCase()}
             </span>
-            <span className="font-bold tabular-nums text-foreground">{p.value}</span>
+            <span className="font-bold text-white">{p.value}</span>
           </div>
         ))}
         {dayTotal > 0 && (
-          <div className="flex items-center justify-between gap-4 border-t border-border/40 mt-1.5 pt-1.5">
-            <span className="text-muted-foreground">Total</span>
-            <span className="font-bold tabular-nums text-foreground">{dayTotal}</span>
+          <div className="flex justify-between gap-5 border-t border-white/10 mt-1.5 pt-1.5 text-slate-400">
+            <span>TOTAL</span>
+            <span className="text-white font-bold">{dayTotal}</span>
           </div>
         )}
       </div>
@@ -699,84 +819,97 @@ function ImportsBarChart({ imports }: { imports: RecentImport[] }) {
 
   const ChartBody = ({ height, withBrush }: { height: string; withBrush?: boolean }) =>
     buckets.length === 0 ? (
-      <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No imports in this range</div>
+      <div className={`${height} flex items-center justify-center text-xs font-mono text-muted-foreground tracking-widest`}>NO DATA IN RANGE</div>
     ) : (
       <ChartContainer config={chartConfig} className={`${height} w-full`}>
-        <ComposedChart data={buckets} barSize={Math.max(8, Math.min(20, Math.floor(260 / (buckets.length || 1))))} margin={{ left: 0, right: 0, top: 4, bottom: withBrush ? 0 : 0 }}>
+        <ComposedChart data={buckets} barSize={Math.max(6, Math.min(18, Math.floor(240 / (buckets.length || 1))))} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
           <defs>
-            <linearGradient id="igCompleted" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3ECF8E" stopOpacity={1} />
-              <stop offset="100%" stopColor="#3ECF8E" stopOpacity={0.8} />
+            <linearGradient id="neonCompleted" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={NEON.green} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={NEON.green} stopOpacity={0.6} />
             </linearGradient>
-            <linearGradient id="igFailed" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
-              <stop offset="100%" stopColor="#f87171" stopOpacity={0.8} />
+            <linearGradient id="neonFailed" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={NEON.rose} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={NEON.rose} stopOpacity={0.6} />
             </linearGradient>
-            <linearGradient id="igProcessing" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#60a5fa" stopOpacity={1} />
-              <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.8} />
+            <linearGradient id="neonProcessing" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={NEON.blue} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={NEON.blue} stopOpacity={0.6} />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} interval="preserveStartEnd" />
+          <CartesianGrid vertical={false} stroke={NEON_GRID} strokeDasharray="1 6" />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(148,163,184,0.5)", fontFamily: "monospace" }} interval="preserveStartEnd" />
           <YAxis hide allowDecimals={false} />
           {avgPerDay > 0 && (
-            <ReferenceLine y={avgPerDay} stroke="rgba(156,163,175,0.35)" strokeDasharray="4 3" label={{ value: `avg ${avgPerDay}`, position: "insideTopRight", fontSize: 8, fill: "rgba(156,163,175,0.6)" }} />
+            <ReferenceLine
+              y={avgPerDay}
+              stroke={`${NEON.amber}50`}
+              strokeDasharray="4 4"
+              label={{ value: `AVG ${avgPerDay}`, position: "insideTopRight", fontSize: 8, fill: `${NEON.amber}80`, fontFamily: "monospace" }}
+            />
           )}
-          <ChartTooltip content={<CustomTooltip />} cursor={{ fill: "rgba(128,128,128,0.06)", radius: 4 }} />
-          <Bar dataKey="completed" stackId="a" fill="url(#igCompleted)" radius={[0, 0, 2, 2]} />
-          <Bar dataKey="processing" stackId="a" fill="url(#igProcessing)" />
-          <Bar dataKey="failed" stackId="a" fill="url(#igFailed)" radius={[3, 3, 0, 0]} />
-          <Line dataKey="total" type="monotone" stroke="rgba(156,163,175,0.5)" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+          <ChartTooltip content={<NeonTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+          <Bar dataKey="completed" stackId="a" fill="url(#neonCompleted)" radius={[0, 0, 2, 2]}
+            style={{ filter: `drop-shadow(0 0 3px ${NEON.green}60)` }} />
+          <Bar dataKey="processing" stackId="a" fill="url(#neonProcessing)"
+            style={{ filter: `drop-shadow(0 0 3px ${NEON.blue}50)` }} />
+          <Bar dataKey="failed" stackId="a" fill="url(#neonFailed)" radius={[3, 3, 0, 0]}
+            style={{ filter: `drop-shadow(0 0 3px ${NEON.rose}50)` }} />
+          <Line dataKey="total" type="monotone" stroke={`${NEON.amber}70`} strokeWidth={1.5} dot={false} strokeDasharray="3 4" />
           {withBrush && buckets.length > 7 && (
-            <Brush dataKey="date" height={18} stroke={GRID_STROKE} fill="rgba(128,128,128,0.04)" travellerWidth={6} />
+            <Brush dataKey="date" height={18} stroke={NEON_GRID} fill="rgba(0,0,0,0.2)" travellerWidth={6} />
           )}
         </ComposedChart>
       </ChartContainer>
     )
 
-  const LegendRow = () => (
-    <div className="flex items-center gap-4 flex-wrap">
-      {[
-        { label: "Completed", value: completed, color: "#3ECF8E" },
-        { label: "Processing", value: processing, color: "#60a5fa" },
-        { label: "Failed", value: failed, color: "#f87171" },
-      ].map((s) => (
-        <div key={s.label} className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-          <span className="text-[10px] text-muted-foreground">{s.label}: <strong className="text-foreground">{s.value}</strong></span>
-        </div>
-      ))}
-    </div>
-  )
-
   return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6">
+    <div className="rounded-2xl border border-slate-700/40 bg-card p-5 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 rounded-tl-2xl" style={{ borderColor: `${NEON.green}50` }} />
+      <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 rounded-br-2xl" style={{ borderColor: `${NEON.rose}30` }} />
+
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-sm font-semibold">Import jobs</p>
-          <p className="text-xs text-muted-foreground">Completed · Processing · Failed by day</p>
+          <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500 mb-0.5">IMPORT PIPELINE</p>
+          <p className="text-sm font-semibold">Import Jobs</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
-            <p className="text-xl font-bold tabular-nums" style={{ color: successColor }}>{successRate}%</p>
-            <p className="text-[10px] text-muted-foreground">success rate</p>
+            <p className="text-xl font-bold tabular-nums font-mono" style={{ color: successColor, textShadow: `0 0 16px ${successColor}50` }}>{successRate}%</p>
+            <p className="text-[9px] font-mono text-muted-foreground tracking-wider">SUCCESS</p>
           </div>
           <ChartExpandModal title="Import jobs">
             <div className="space-y-4 pt-2">
               <ChartBody height="h-72" withBrush />
-              <LegendRow />
+              <div className="flex gap-5 flex-wrap">
+                {[{ label: "Completed", value: completed, color: NEON.green }, { label: "Processing", value: processing, color: NEON.blue }, { label: "Failed", value: failed, color: NEON.rose }].map((s) => (
+                  <div key={s.label} className="flex items-center gap-1.5 text-xs font-mono">
+                    <div className="w-2 h-2 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
+                    <span className="text-muted-foreground">{s.label.toUpperCase()}</span>
+                    <strong className="text-foreground ml-1">{s.value}</strong>
+                  </div>
+                ))}
+              </div>
             </div>
           </ChartExpandModal>
         </div>
       </div>
+
       <ChartBody height="h-36" />
-      <div className="mt-3"><LegendRow /></div>
+
+      <div className="flex items-center gap-5 mt-3 flex-wrap">
+        {[{ label: "OK", value: completed, color: NEON.green }, { label: "RUN", value: processing, color: NEON.blue }, { label: "ERR", value: failed, color: NEON.rose }].map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
+            <span className="text-[10px] font-mono text-muted-foreground">{s.label} <strong className="text-foreground">{s.value}</strong></span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-// ── Verification trend chart (redesigned) ────────────────────────────────────
+// ── Verification results chart (neon spline) ─────────────────────────────────
 
 function VerificationTrendChart({ verifications }: { verifications: RecentVerification[] }) {
   const data = React.useMemo(() => {
@@ -789,45 +922,41 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
     }
     return Object.entries(byDay)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, v]) => ({
-        date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        ...v,
-        total: v.valid + v.invalid,
-      }))
+      .map(([date, v]) => ({ date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }), ...v }))
   }, [verifications])
 
   const total = verifications.length
   const valid = verifications.filter((v) => v.result === "valid").length
   const invalid = total - valid
   const validPct = total > 0 ? Math.round((valid / total) * 100) : 0
+  const validColor = validPct >= 90 ? NEON.green : validPct >= 70 ? NEON.amber : NEON.rose
   const avgPerDay = data.length > 0 ? Math.round(total / data.length) : 0
 
   const chartConfig: ChartConfig = {
-    valid: { label: "Valid", color: "#3ECF8E" },
-    invalid: { label: "Invalid", color: "#f87171" },
+    valid: { label: "Valid", color: NEON.green },
+    invalid: { label: "Invalid", color: NEON.rose },
   }
 
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+  const NeonTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
     if (!active || !payload?.length) return null
     const dayTotal = payload.reduce((s, p) => s + (p.value ?? 0), 0)
-    const validEntry = payload.find((p) => p.name === "valid")
-    const dayPct = dayTotal > 0 && validEntry ? Math.round((validEntry.value / dayTotal) * 100) : 0
+    const dayPct = dayTotal > 0 ? Math.round(((payload.find((p) => p.name === "valid")?.value ?? 0) / dayTotal) * 100) : 0
     return (
-      <div className="rounded-xl border border-border/60 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs">
-        <p className="font-semibold text-foreground mb-1.5">{label}</p>
+      <div className="rounded-xl border border-white/10 bg-black/85 backdrop-blur-xl px-3 py-2.5 shadow-2xl text-xs font-mono">
+        <p className="text-slate-400 mb-2 text-[10px] tracking-widest uppercase">{label}</p>
         {payload.map((p) => (
-          <div key={p.name} className="flex items-center justify-between gap-4">
-            <span className="flex items-center gap-1.5 text-muted-foreground capitalize">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
-              {p.name}
+          <div key={p.name} className="flex items-center justify-between gap-5 mb-0.5">
+            <span className="flex items-center gap-1.5" style={{ color: p.color }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color, boxShadow: `0 0 4px ${p.color}` }} />
+              {p.name.toUpperCase()}
             </span>
-            <span className="font-bold tabular-nums text-foreground">{p.value}</span>
+            <span className="font-bold text-white">{p.value}</span>
           </div>
         ))}
         {dayTotal > 0 && (
-          <div className="flex items-center justify-between gap-4 border-t border-border/40 mt-1.5 pt-1.5">
-            <span className="text-muted-foreground">Valid rate</span>
-            <span className="font-bold tabular-nums" style={{ color: dayPct >= 90 ? "#3ECF8E" : dayPct >= 70 ? "#f59e0b" : "#f87171" }}>{dayPct}%</span>
+          <div className="flex justify-between gap-5 border-t border-white/10 mt-1.5 pt-1.5">
+            <span className="text-slate-400">VALID RATE</span>
+            <span className="font-bold" style={{ color: dayPct >= 90 ? NEON.green : dayPct >= 70 ? NEON.amber : NEON.rose }}>{dayPct}%</span>
           </div>
         )}
       </div>
@@ -836,86 +965,89 @@ function VerificationTrendChart({ verifications }: { verifications: RecentVerifi
 
   const ChartBody = ({ height, withBrush }: { height: string; withBrush?: boolean }) =>
     data.length === 0 ? (
-      <div className={`${height} flex items-center justify-center text-sm text-muted-foreground`}>No verifications in this range</div>
+      <div className={`${height} flex items-center justify-center text-xs font-mono text-muted-foreground tracking-widest`}>NO DATA IN RANGE</div>
     ) : (
       <ChartContainer config={chartConfig} className={`${height} w-full`}>
         <AreaChart data={data} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
           <defs>
-            <linearGradient id="vgValid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3ECF8E" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#3ECF8E" stopOpacity={0.02} />
+            <linearGradient id="neonValid" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={NEON.green} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={NEON.green} stopOpacity={0.01} />
             </linearGradient>
-            <linearGradient id="vgInvalid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f87171" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#f87171" stopOpacity={0.02} />
+            <linearGradient id="neonInvalid" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={NEON.rose} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={NEON.rose} stopOpacity={0.01} />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(156,163,175,0.7)" }} interval="preserveStartEnd" />
+          <CartesianGrid vertical={false} stroke={NEON_GRID} strokeDasharray="1 6" />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(148,163,184,0.5)", fontFamily: "monospace" }} interval="preserveStartEnd" />
           <YAxis hide allowDecimals={false} />
           {avgPerDay > 0 && (
-            <ReferenceLine y={avgPerDay} stroke="rgba(156,163,175,0.3)" strokeDasharray="4 3" label={{ value: `avg ${avgPerDay}/day`, position: "insideTopRight", fontSize: 8, fill: "rgba(156,163,175,0.55)" }} />
+            <ReferenceLine
+              y={avgPerDay}
+              stroke={`${NEON.purple}50`}
+              strokeDasharray="4 4"
+              label={{ value: `AVG ${avgPerDay}`, position: "insideTopRight", fontSize: 8, fill: `${NEON.purple}80`, fontFamily: "monospace" }}
+            />
           )}
-          <ChartTooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(156,163,175,0.25)", strokeWidth: 1 }} />
-          <Area dataKey="valid" type="monotone" stroke="#3ECF8E" strokeWidth={2} fill="url(#vgValid)" dot={false} activeDot={{ r: 4, fill: "#3ECF8E", strokeWidth: 0 }} />
-          <Area dataKey="invalid" type="monotone" stroke="#f87171" strokeWidth={2} fill="url(#vgInvalid)" dot={false} activeDot={{ r: 4, fill: "#f87171", strokeWidth: 0 }} />
+          <ChartTooltip content={<NeonTooltip />} cursor={{ stroke: "rgba(255,255,255,0.06)", strokeWidth: 1, strokeDasharray: "3 4" }} />
+          <Area dataKey="valid" type="natural" stroke={NEON.green} strokeWidth={2} fill="url(#neonValid)" dot={false}
+            activeDot={{ r: 5, fill: NEON.green, strokeWidth: 0 }}
+            style={{ filter: `drop-shadow(0 0 4px ${NEON.green}60)` }}
+          />
+          <Area dataKey="invalid" type="natural" stroke={NEON.rose} strokeWidth={2} fill="url(#neonInvalid)" dot={false}
+            activeDot={{ r: 5, fill: NEON.rose, strokeWidth: 0 }}
+            style={{ filter: `drop-shadow(0 0 4px ${NEON.rose}60)` }}
+          />
           {withBrush && data.length > 7 && (
-            <Brush dataKey="date" height={18} stroke={GRID_STROKE} fill="rgba(128,128,128,0.04)" travellerWidth={6} />
+            <Brush dataKey="date" height={18} stroke={NEON_GRID} fill="rgba(0,0,0,0.2)" travellerWidth={6} />
           )}
         </AreaChart>
       </ChartContainer>
     )
 
   return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6">
+    <div className="rounded-2xl border border-slate-700/40 bg-card p-5 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 rounded-tl-2xl" style={{ borderColor: `${NEON.green}50` }} />
+      <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 rounded-br-2xl" style={{ borderColor: `${NEON.rose}30` }} />
+
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-sm font-semibold">Verification results</p>
-          <p className="text-xs text-muted-foreground">Valid vs invalid scans · drag in expanded view to zoom</p>
+          <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500 mb-0.5">VERIFICATION SCAN SIGNAL</p>
+          <p className="text-sm font-semibold">Verification Results</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
-            <p className="text-xl font-bold tabular-nums text-[#3ECF8E]">{validPct}%</p>
-            <p className="text-[10px] text-muted-foreground">valid rate</p>
+            <p className="text-xl font-bold tabular-nums font-mono" style={{ color: validColor, textShadow: `0 0 16px ${validColor}50` }}>{validPct}%</p>
+            <p className="text-[9px] font-mono text-muted-foreground tracking-wider">VALID</p>
           </div>
           <ChartExpandModal title="Verification results">
             <div className="space-y-4 pt-2">
               <ChartBody height="h-72" withBrush />
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-[#3ECF8E]" />
-                  <span className="text-[10px] text-muted-foreground">Valid: <strong className="text-foreground">{valid}</strong></span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-[#f87171]" />
-                  <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{invalid}</strong></span>
-                </div>
-                {avgPerDay > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-sm border border-muted-foreground/40" style={{ borderStyle: "dashed" }} />
-                    <span className="text-[10px] text-muted-foreground">Avg: <strong className="text-foreground">{avgPerDay}/day</strong></span>
+              <div className="flex items-center gap-5 font-mono text-xs">
+                {[{ label: "VALID", value: valid, color: NEON.green }, { label: "INVALID", value: invalid, color: NEON.rose }].map((s) => (
+                  <div key={s.label} className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
+                    <span className="text-muted-foreground">{s.label}</span>
+                    <strong className="text-foreground ml-1">{s.value}</strong>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           </ChartExpandModal>
         </div>
       </div>
+
       <ChartBody height="h-36" />
-      <div className="flex items-center gap-4 mt-3">
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#3ECF8E]" />
-          <span className="text-[10px] text-muted-foreground">Valid: <strong className="text-foreground">{valid}</strong></span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#f87171]" />
-          <span className="text-[10px] text-muted-foreground">Invalid: <strong className="text-foreground">{invalid}</strong></span>
-        </div>
-        {avgPerDay > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground">Avg: <strong className="text-foreground">{avgPerDay}/day</strong></span>
+
+      <div className="flex items-center gap-5 mt-3 flex-wrap">
+        {[{ label: "VLD", value: valid, color: NEON.green }, { label: "INV", value: invalid, color: NEON.rose }].map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
+            <span className="text-[10px] font-mono text-muted-foreground">{s.label} <strong className="text-foreground">{s.value}</strong></span>
           </div>
-        )}
+        ))}
+        {avgPerDay > 0 && <span className="text-[10px] font-mono text-muted-foreground">AVG <strong className="text-foreground">{avgPerDay}/day</strong></span>}
       </div>
     </div>
   )
@@ -1008,6 +1140,119 @@ function RecentVerificationsCard({ slug, verifications }: { slug: string; verifi
             </div>
           ))
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Email broadcasts chart (neon funnel bars) ─────────────────────────────────
+
+function EmailBroadcastChart() {
+  const [broadcasts, setBroadcasts] = React.useState<EmailBroadcast[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    api.delivery.listBroadcasts()
+      .then((r) => setBroadcasts(r.broadcasts.filter((b: EmailBroadcast) => b.status === "sent").slice(0, 8)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const chartData = broadcasts.map((b) => ({
+    name: b.name.length > 14 ? `${b.name.slice(0, 13)}…` : b.name,
+    recipients: b.total_recipients,
+    delivered: b.delivered_count,
+    failed: b.failed_count,
+    rate: b.total_recipients > 0 ? Math.round((b.delivered_count / b.total_recipients) * 100) : 0,
+  }))
+
+  const totalSent = broadcasts.reduce((s, b) => s + b.sent_count, 0)
+  const totalDelivered = broadcasts.reduce((s, b) => s + b.delivered_count, 0)
+  const totalFailed = broadcasts.reduce((s, b) => s + b.failed_count, 0)
+  const overallRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0
+  const rateColor = overallRate >= 90 ? NEON.green : overallRate >= 70 ? NEON.amber : NEON.rose
+
+  const chartConfig: ChartConfig = {
+    delivered: { label: "Delivered", color: NEON.green },
+    failed: { label: "Failed", color: NEON.rose },
+  }
+
+  const EmailTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="rounded-xl border border-white/10 bg-black/85 backdrop-blur-xl px-3 py-2.5 shadow-2xl text-xs font-mono max-w-[180px]">
+        <p className="text-slate-300 mb-2 text-[10px] leading-tight font-semibold">{label}</p>
+        {payload.map((p) => (
+          <div key={p.name} className="flex items-center justify-between gap-4 mb-0.5">
+            <span className="flex items-center gap-1.5" style={{ color: p.color }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color, boxShadow: `0 0 4px ${p.color}` }} />
+              {p.name.toUpperCase()}
+            </span>
+            <span className="font-bold text-white">{(p.value as number).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-700/40 bg-card p-5 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 rounded-tl-2xl" style={{ borderColor: `${NEON.purple}60` }} />
+      <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 rounded-br-2xl" style={{ borderColor: `${NEON.blue}30` }} />
+
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500 mb-0.5">EMAIL DELIVERY SIGNAL</p>
+          <p className="text-sm font-semibold">Broadcast Performance</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xl font-bold tabular-nums font-mono" style={{ color: rateColor, textShadow: `0 0 16px ${rateColor}50` }}>
+            {overallRate > 0 ? `${overallRate}%` : "—"}
+          </p>
+          <p className="text-[9px] font-mono text-muted-foreground tracking-wider">DELIVERY RATE</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="h-40 flex items-center justify-center">
+          <div className="w-5 h-5 rounded-full border-2 border-transparent animate-spin" style={{ borderTopColor: NEON.purple }} />
+        </div>
+      ) : chartData.length === 0 ? (
+        <div className="h-40 flex items-center justify-center text-xs font-mono text-muted-foreground tracking-widest">NO SENT BROADCASTS</div>
+      ) : (
+        <ChartContainer config={chartConfig} className="h-44 w-full">
+          <ComposedChart data={chartData} layout="vertical" margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="emailDelivered" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={NEON.green} stopOpacity={0.9} />
+                <stop offset="100%" stopColor={NEON.green} stopOpacity={0.6} />
+              </linearGradient>
+              <linearGradient id="emailFailed" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={NEON.rose} stopOpacity={0.9} />
+                <stop offset="100%" stopColor={NEON.rose} stopOpacity={0.6} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid horizontal={false} stroke={NEON_GRID} strokeDasharray="1 6" />
+            <XAxis type="number" hide allowDecimals={false} />
+            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "rgba(148,163,184,0.6)", fontFamily: "monospace" }} width={70} />
+            <ChartTooltip content={<EmailTooltip />} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
+            <Bar dataKey="delivered" stackId="e" fill="url(#emailDelivered)" radius={[0, 0, 0, 0]} style={{ filter: `drop-shadow(0 0 3px ${NEON.green}60)` }} />
+            <Bar dataKey="failed" stackId="e" fill="url(#emailFailed)" radius={[0, 3, 3, 0]} style={{ filter: `drop-shadow(0 0 3px ${NEON.rose}50)` }} />
+          </ComposedChart>
+        </ChartContainer>
+      )}
+
+      <div className="flex items-center gap-5 mt-3 flex-wrap border-t border-white/5 pt-3">
+        {[
+          { label: "SENT", value: totalSent, color: NEON.blue },
+          { label: "DELIVERED", value: totalDelivered, color: NEON.green },
+          { label: "FAILED", value: totalFailed, color: NEON.rose },
+        ].map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
+            <span className="text-[10px] font-mono text-muted-foreground">{s.label} <strong className="text-foreground">{s.value.toLocaleString()}</strong></span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -1300,13 +1545,14 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
+          <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-slate-500 mb-1">AUTHENTIX · MISSION CONTROL</p>
           <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Certificate operations, verifications, and delivery performance
+          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+            Real-time certificate intelligence & delivery telemetry
           </p>
         </div>
 
@@ -1391,26 +1637,32 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
         />
       </div>
 
-      {/* Main chart + Category mix */}
+      {/* Certificates & Verifications — full-width spline (stock market style) */}
+      <MainAreaChart series={filteredDaily} rangeLabel={rangeLabel} />
+
+      {/* Category Mix + Certificate Activity mini */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <MainAreaChart series={filteredDaily} rangeLabel={rangeLabel} />
+          <CategoryDonut mix={allCategoryMix} />
         </div>
-        <CategoryDonut mix={allCategoryMix} />
+        <CertActivityMiniCard series={allCertificatesDaily} />
       </div>
 
-      {/* Activity heatmap */}
-      <div className="rounded-2xl border border-border/50 bg-card p-6">
+      {/* Activity heatmap (full width) */}
+      <div className="rounded-2xl border border-slate-700/40 bg-card p-6">
         <ActivityHeatmap series={allCertificatesDaily} />
       </div>
 
-      {/* Imports + Verifications charts */}
+      {/* Import Jobs + Verification Results */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ImportsBarChart imports={filteredImports} />
         <VerificationTrendChart verifications={filteredVerifications} />
       </div>
 
-      {/* Broadcast delivery + Expiring certs */}
+      {/* Email — Broadcast Performance chart */}
+      <EmailBroadcastChart />
+
+      {/* Broadcast delivery list + Expiring certs */}
       <div className="grid gap-4 lg:grid-cols-2">
         <BroadcastAnalyticsCard slug={slug} />
         <ExpiringCertificatesCard slug={slug} />
