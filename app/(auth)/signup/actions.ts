@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { verifyTurnstile } from "@/lib/auth/turnstile";
 
 export interface SignupState {
   error: string | null;
@@ -53,11 +52,6 @@ export async function signupAction(
 
   if (Object.keys(fieldErrors).length > 0) {
     return { error: "Please fix the errors below", fieldErrors, success: false };
-  }
-
-  const human = await verifyTurnstile(formData);
-  if (!human) {
-    return { error: "Challenge failed — please try again.", fieldErrors: {}, success: false };
   }
 
   const supabase = await createSupabaseServerClient();

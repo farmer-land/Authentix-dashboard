@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { verifyTurnstile } from "@/lib/auth/turnstile";
 
 export interface LoginState {
   error: string | null;
@@ -47,11 +46,6 @@ export async function loginAction(
         step: "email",
         email,
       };
-    }
-
-    const human = await verifyTurnstile(formData);
-    if (!human) {
-      return { error: "Challenge failed — please try again.", success: false, step: "email", email };
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
