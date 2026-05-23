@@ -8,29 +8,6 @@
 import { apiRequest, authApiRequest } from "./core";
 
 export const authApi = {
-  login: async (email: string, password: string) => {
-    return authApiRequest<{
-      user: { id: string; email: string; full_name: string | null };
-    }>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-  },
-
-  signup: async (
-    email: string,
-    password: string,
-    full_name: string,
-    company_name: string,
-  ) => {
-    return authApiRequest<{
-      user: { id: string; email: string; full_name: string | null };
-    }>("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify({ email, password, full_name, company_name }),
-    });
-  },
-
   logout: async () => {
     return authApiRequest<void>("/auth/logout", { method: "POST" });
   },
@@ -101,6 +78,21 @@ export const authApi = {
       organization: { id: string; name: string; slug: string } | null;
       membership: { id: string; organization_id: string; role_id: string } | null;
     }>("/auth/resolve-dashboard", { method: "POST" });
+    return response.data!;
+  },
+
+  inviteMember: async (email: string, role_key: "admin" | "member") => {
+    const response = await apiRequest<{ message: string }>("/auth/invite", {
+      method: "POST",
+      body: JSON.stringify({ email, role_key }),
+    });
+    return response.data!;
+  },
+
+  acceptInvite: async () => {
+    const response = await apiRequest<{ redirect_to: string }>("/auth/accept-invite", {
+      method: "POST",
+    });
     return response.data!;
   },
 };

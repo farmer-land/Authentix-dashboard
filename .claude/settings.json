@@ -48,7 +48,15 @@
       "Bash(git show *)",
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
-      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-dashboard status)"
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-dashboard status)",
+      "Bash(curl -s https://api.digicertificates.in/api/v1/internal/queue-status -H \"x-internal-secret: feb491d5a3db980bf36f4bd5bcf0f4d3e507244d3c500aee5a2ea008f0639cb9\")",
+      "Bash(npx supabase *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-backend add supabase/migrations/20260524120000_p4_30_storage_rls_idempotency_cron.sql)",
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-backend commit -m ' *)",
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-backend add src/lib/auth/jwt-verifier.ts src/lib/config/env.ts src/lib/security/cors-policy.ts src/lib/startup/schema-check.ts src/lib/supabase/client.ts)",
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-dashboard add src/lib/notifications/job-notifications.tsx)",
+      "Bash(git -C /Users/tempuser/Documents/GitHub/Authentix-dashboard commit -m ' *)"
     ],
     "additionalDirectories": [
       "/Users/tempuser/Documents/GitHub/Authentix-dashboard/app/dashboard/org/[slug]/generate-certificate/components",

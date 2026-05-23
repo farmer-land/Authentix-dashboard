@@ -3,45 +3,44 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-/**
- * Login form state type
- */
 export interface LoginState {
   error: string | null;
   success: boolean;
+  step: "email" | "otp";
+  email: string;
 }
 
-/**
- * Server Action for user login
- * Uses Supabase auth — session is managed via @supabase/ssr cookies
- */
 export async function loginAction(
   _prevState: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const email = formData.get("email");
-  const password = formData.get("password");
+  const step = (formData.get("step") as string) || "email";
+  const email = ((formData.get("email") as string) || "").trim().toLowerCase();
 
-  // Validate input
-  if (!email || !password) {
-    return {
-      error: "Email and password are required",
-      success: false,
-    };
-  }
-
-  if (typeof email !== "string" || typeof password !== "string") {
-    return {
-      error: "Invalid input",
-      success: false,
-    };
+  if (!email) {
+    return { error: "Email is required", success: false, step: "email", email: "" };
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
 
+  if (step === "email") {
+    // Send OTP — always return success to prevent email enumeration
+    await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    return { error: null, success: true, step: "otp", email };
+  }
+
+  // OTP verification step
+  const token = ((formData.get("token") as string) || "").trim();
+  if (!token || token.length < 6) {
+    return { error: "Please enter the 6-digit code from your email", success: false, step: "otp", email };
+  }
+
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
   if (error) {
-    return { error: error.message, success: false };
+    return { error: "Invalid or expired code — check your email or request a new one", success: false, step: "otp", email };
   }
 
   redirect("/dashboard");
