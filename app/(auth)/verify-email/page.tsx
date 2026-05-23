@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Mail, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { api } from "@/lib/api/client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function VerifyEmailPage() {
@@ -20,10 +20,19 @@ export default function VerifyEmailPage() {
     setResendError("");
 
     try {
-      await api.auth.resendVerification();
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const email = user?.email;
+      if (!email) {
+        setResendError("Could not determine your email address. Please sign in again.");
+        return;
+      }
+      const { error } = await supabase.auth.resend({ type: "signup", email });
+      if (error) throw error;
       setResendSuccess(true);
-    } catch (err: any) {
-      setResendError(err.message || "Failed to resend verification email");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to resend verification email";
+      setResendError(message);
     } finally {
       setResending(false);
     }

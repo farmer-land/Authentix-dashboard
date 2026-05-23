@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, Suspense } from "react";
+import { useActionState, Suspense, useState, useCallback } from "react";
 import { useFormStatus } from "react-dom";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,11 +10,9 @@ import { Card } from "@/components/ui/card";
 import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
-import { resetPasswordAction, type ResetPasswordState } from "./actions";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+function SubmitButton({ pending }: { pending: boolean }) {
   return (
     <Button type="submit" className="w-full h-10 bg-primary hover:bg-primary/90" disabled={pending}>
       {pending ? (
@@ -29,14 +27,60 @@ function SubmitButton() {
   );
 }
 
-const initialState: ResetPasswordState = { error: null, success: false };
-
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const code = searchParams.get("code") ?? "";
-  const [state, formAction] = useActionState(resetPasswordAction, initialState);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setError(null);
+
+      const formData = new FormData(e.currentTarget);
+      const password = formData.get("password");
+      const confirm = formData.get("confirm");
+
+      if (!password || typeof password !== "string" || password.length < 8) {
+        setError("Password must be at least 8 characters");
+        return;
+      }
+      if (password !== confirm) {
+        setError("Passwords do not match");
+        return;
+      }
+
+      setPending(true);
+      try {
+        const supabase = createSupabaseBrowserClient();
+
+        // Exchange PKCE code for session first
+        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
+        if (sessionError) {
+          setError(sessionError.message || "Invalid reset link. Please request a new one.");
+          return;
+        }
+
+        // Update password
+        const { error: updateError } = await supabase.auth.updateUser({ password });
+        if (updateError) {
+          setError(updateError.message || "Failed to update password. Please try again.");
+          return;
+        }
+
+        router.push("/login?reset=1");
+      } catch {
+        setError("An unexpected error occurred. Please try again.");
+      } finally {
+        setPending(false);
+      }
+    },
+    [code, router]
+  );
 
   if (!code) {
     return (
@@ -58,9 +102,7 @@ function ResetPasswordContent() {
   }
 
   return (
-    <form action={formAction} className="space-y-5">
-      <input type="hidden" name="code" value={code} />
-
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="password" className="text-sm font-medium">New password</Label>
         <div className="relative">
@@ -106,16 +148,16 @@ function ResetPasswordContent() {
         </div>
       </div>
 
-      {state.error && (
+      {error && (
         <div
           className="bg-destructive/10 border border-destructive/50 text-destructive px-4 py-3 rounded-lg text-sm"
           role="alert"
         >
-          {state.error}
+          {error}
         </div>
       )}
 
-      <SubmitButton />
+      <SubmitButton pending={pending} />
     </form>
   );
 }

@@ -66,6 +66,7 @@ import { cn } from "@/lib/utils"
 import { api } from "@/lib/api/client"
 import type { EmailBroadcast } from "@/lib/api/client"
 import type { Certificate } from "@/lib/api/client"
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1448,6 +1449,22 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
   const [customRange, setCustomRange] = React.useState<DateRange | undefined>(undefined)
   const [liveStats, setLiveStats] = React.useState(initialData?.stats ?? null)
   const [refreshing, setRefreshing] = React.useState(false)
+  const [orgId, setOrgId] = React.useState<string | null>(null)
+
+  // Resolve the org UUID from slug once on mount
+  React.useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("organizations")
+          .select("id")
+          .eq("slug", slug)
+          .single()
+        if (data?.id) setOrgId(data.id)
+      } catch { /* silent */ }
+    })()
+  }, [slug])
 
   const stats = liveStats ?? {
     totalCertificates: 0,
@@ -1470,21 +1487,22 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
 
   // Refresh stats on mount to pick up any changes since server rendered the page
   React.useEffect(() => {
+    if (!orgId) return
     let cancelled = false
-    api.dashboard.getStats().then((data) => {
+    api.dashboard.getStats(orgId).then((data) => {
       if (!cancelled) applyStats(data.stats)
     }).catch(() => { /* silent */ })
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [orgId])
 
   // Auto-refresh stats every 30s while pending jobs are processing
   React.useEffect(() => {
-    if (!initialData) return
+    if (!initialData || !orgId) return
     let cancelled = false
     const refresh = async () => {
       try {
-        const data = await api.dashboard.getStats()
+        const data = await api.dashboard.getStats(orgId)
         if (!cancelled) applyStats(data.stats)
       } catch { /* silent */ }
     }
@@ -1492,12 +1510,13 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
       if (stats.pendingJobs > 0) refresh()
     }, 30_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [initialData, stats.pendingJobs, applyStats])
+  }, [initialData, orgId, stats.pendingJobs, applyStats])
 
   const handleManualRefresh = async () => {
+    if (!orgId) return
     setRefreshing(true)
     try {
-      const data = await api.dashboard.getStats()
+      const data = await api.dashboard.getStats(orgId)
       applyStats(data.stats)
     } catch { /* silent */ }
     finally { setRefreshing(false) }

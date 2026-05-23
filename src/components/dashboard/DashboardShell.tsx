@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { api } from "@/lib/api/client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -364,16 +365,33 @@ export function DashboardShell({
   // Fetch pending jobs count for sidebar badge — poll every 30s while any are running
   useEffect(() => {
     let cancelled = false;
-    const fetch = async () => {
+    let orgId: string | null = null;
+
+    const resolveOrgId = async (): Promise<string | null> => {
+      if (orgId) return orgId;
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("slug", slug)
+        .single();
+      orgId = data?.id ?? null;
+      return orgId;
+    };
+
+    const fetchPendingJobs = async () => {
       try {
-        const data = await api.dashboard.getStats();
+        const id = await resolveOrgId();
+        if (!id) return;
+        const data = await api.dashboard.getStats(id);
         if (!cancelled) setPendingJobsCount(data.stats.pendingJobs ?? 0);
       } catch { /* silent */ }
     };
-    fetch();
-    const id = setInterval(fetch, 30_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
+
+    fetchPendingJobs();
+    const intervalId = setInterval(fetchPendingJobs, 30_000);
+    return () => { cancelled = true; clearInterval(intervalId); };
+  }, [slug]);
 
   // Theme initialization (client-only)
   useEffect(() => {

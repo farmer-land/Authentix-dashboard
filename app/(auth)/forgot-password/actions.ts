@@ -1,6 +1,6 @@
 "use server";
 
-import { backendAuthRequest } from "@/lib/api/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export interface ForgotPasswordState {
   error: string | null;
@@ -18,10 +18,11 @@ export async function forgotPasswordAction(
   }
 
   try {
-    await backendAuthRequest("/auth/forgot-password", {
-      method: "POST",
-      body: JSON.stringify({ email }),
+    const supabase = await createSupabaseServerClient();
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/reset-password`,
     });
+    // Always succeed to prevent email enumeration
     return { error: null, success: true };
   } catch {
     // Always succeed to prevent email enumeration

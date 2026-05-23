@@ -9,14 +9,15 @@ import { api } from '@/lib/api/client';
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  stats: () => [...dashboardKeys.all, 'stats'] as const,
+  stats: (orgId: string) => [...dashboardKeys.all, 'stats', orgId] as const,
 };
 
-export function useDashboardStats() {
+export function useDashboardStats(orgId: string) {
   const query = useQuery({
-    queryKey: dashboardKeys.stats(),
-    queryFn: () => api.dashboard.getStats(),
+    queryKey: dashboardKeys.stats(orgId),
+    queryFn: () => api.dashboard.getStats(orgId),
     staleTime: 60 * 1000,
+    enabled: !!orgId,
   });
   return {
     stats: query.data?.stats ?? null,
