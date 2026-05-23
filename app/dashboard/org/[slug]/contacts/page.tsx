@@ -711,7 +711,7 @@ export default function ContactsPage() {
         writeImportLog(orgSlug, updated);
         setImportLog(updated);
         setRecentCard(session);
-        queryClient.invalidateQueries({ queryKey: ["delivery"] });
+        queryClient.invalidateQueries({ queryKey: ["org", orgSlug, "delivery"] });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Import failed", { id: toastId });
       } finally {
@@ -1014,7 +1014,7 @@ export default function ContactsPage() {
                 const target = deleteImportTarget;
                 setDeleteImportTarget(null);
                 removeFromLog(target.source_ref);
-                queryClient.invalidateQueries({ queryKey: ["delivery"] });
+                queryClient.invalidateQueries({ queryKey: ["org", orgSlug, "delivery"] });
                 try {
                   const { deleted } = await api.delivery.deleteContactsBySourceRef(target.source_ref);
                   toast.success(`${deleted.toLocaleString()} contact${deleted !== 1 ? "s" : ""} deleted`);

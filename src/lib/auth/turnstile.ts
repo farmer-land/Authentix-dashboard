@@ -12,7 +12,11 @@
  */
 export async function verifyTurnstile(formData: FormData): Promise<boolean> {
   const secretKey = process.env.TURNSTILE_SECRET_KEY;
-  if (!secretKey) return true;
+  // NEXT_PUBLIC_ vars are available server-side in Next.js server actions.
+  // If the site key isn't configured the widget never renders, so we can't
+  // enforce the token — skip verification entirely.
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  if (!secretKey || !siteKey) return true;
 
   const token = formData.get("cf-turnstile-response") as string | null;
   if (!token) return false;
