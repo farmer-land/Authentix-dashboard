@@ -25,7 +25,11 @@ export async function loginAction(
   _prevState: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const step = (formData.get("step") as string) || "email";
+  // Use the last "step" value — a submit button's value comes after hidden fields
+  // in form data order, so the "send a new code" button (value="email") wins over
+  // the hidden <input name="step" value="otp">.
+  const stepValues = formData.getAll("step") as string[];
+  const step = stepValues.at(-1) || "email";
   const email = ((formData.get("email") as string) || "").trim().toLowerCase();
 
   if (!email) {
