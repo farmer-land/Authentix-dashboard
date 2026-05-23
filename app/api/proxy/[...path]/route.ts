@@ -97,12 +97,14 @@ async function proxyRequest(
   const backendUrl = `${BACKEND_API_URL}${pathSegments}${url.search}`;
   const fallbackUrl = BACKEND_FALLBACK_URL ? `${BACKEND_FALLBACK_URL}${pathSegments}${url.search}` : "";
 
-  // Get Supabase access token — this is the JWT the backend validates via JWKS.
-  // getSession() reads from cookies without a network call; the JWT signature is
-  // verified by the backend on every request.
-  const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  const accessToken = session?.access_token ?? null;
+  // Prefer token forwarded by the browser client (X-Supabase-Token header).
+  // Fall back to server-side cookie session for SSR / non-browser callers.
+  let accessToken: string | null = request.headers.get("X-Supabase-Token");
+  if (!accessToken) {
+    const supabase = await createSupabaseServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    accessToken = session?.access_token ?? null;
+  }
 
   // Check if this is a multipart/form-data request (file upload)
   const contentType = request.headers.get("content-type") || "";

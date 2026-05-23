@@ -125,7 +125,9 @@ export async function authApiRequest<T>(
 
 /**
  * Make authenticated API request to backend.
- * Cookies are automatically included via credentials: 'include'.
+ * Attaches the Supabase access token as Authorization: Bearer so the proxy
+ * route can forward it to the backend without relying on server-side cookie
+ * parsing (which is unreliable in Route Handler context).
  * @param _retry internal flag — true when this is a post-refresh retry (prevents loops)
  */
 export async function apiRequest<T>(
@@ -133,8 +135,20 @@ export async function apiRequest<T>(
   options: RequestInit = {},
   _retry = false,
 ): Promise<ApiResponse<T>> {
+  // Get access token from the browser Supabase client (handles refresh automatically)
+  let accessToken: string | null = null;
+  try {
+    const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+    const supabase = createSupabaseBrowserClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    accessToken = session?.access_token ?? null;
+  } catch {
+    // Non-browser context or Supabase unavailable — proxy falls back to cookie
+  }
+
   const headers: HeadersInit = {
     ...(options.body && { "Content-Type": "application/json" }),
+    ...(accessToken && { "X-Supabase-Token": accessToken }),
     ...options.headers,
   };
 
