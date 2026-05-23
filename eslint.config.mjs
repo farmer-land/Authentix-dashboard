@@ -82,6 +82,7 @@ export default [
       "public/**",
       "e2e/**",
       "coverage/**",
+      ".claude/**",
       "*.config.*",
       "*.config.mjs",
       "**/*.d.ts",
