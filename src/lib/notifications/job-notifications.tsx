@@ -215,6 +215,8 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!slug) return;
     const supabase = createSupabaseBrowserClient();
+    let bgChannel: ReturnType<typeof supabase.channel> | null = null;
+    let certChannel: ReturnType<typeof supabase.channel> | null = null;
 
     const triggerPoll = () => {
       const pending = jobsRef.current.filter(
@@ -223,22 +225,34 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
       void Promise.allSettled(pending.map(pollJob));
     };
 
-    // background_jobs — top-level job record (org_slug column available)
-    const bgChannel = supabase
-      .channel(`bg-jobs-${slug}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `org_slug=eq.${slug}` }, triggerPoll)
-      .subscribe();
+    // Resolve org_id from slug so we can add an explicit server-side filter
+    // on certificate_generation_jobs (which has organization_id but no org_slug).
+    // This reduces Supabase Realtime server fanout — instead of evaluating RLS
+    // for every org's cert-gen rows, the filter prunes upstream before delivery.
+    void (async () => {
+      // background_jobs — org_slug column available, filter directly
+      bgChannel = supabase
+        .channel(`bg-jobs-${slug}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `org_slug=eq.${slug}` }, triggerPoll)
+        .subscribe();
 
-    // certificate_generation_jobs — granular progress updates (no org_slug col;
-    // any change triggers a re-poll — RLS ensures we only receive our org's rows)
-    const certChannel = supabase
-      .channel(`cert-gen-jobs-${slug}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'certificate_generation_jobs' }, triggerPoll)
-      .subscribe();
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle();
+
+      if (!org?.id) return;
+
+      certChannel = supabase
+        .channel(`cert-gen-jobs-${org.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'certificate_generation_jobs', filter: `organization_id=eq.${org.id}` }, triggerPoll)
+        .subscribe();
+    })();
 
     return () => {
-      void supabase.removeChannel(bgChannel);
-      void supabase.removeChannel(certChannel);
+      if (bgChannel) void supabase.removeChannel(bgChannel);
+      if (certChannel) void supabase.removeChannel(certChannel);
     };
   }, [slug, pollJob]);
 
