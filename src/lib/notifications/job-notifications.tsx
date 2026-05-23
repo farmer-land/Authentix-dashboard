@@ -25,6 +25,7 @@ import {
 } from 'react';
 import { api, ApiError } from '@/lib/api/client';
 import { useOrgSlug } from '@/lib/org';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,6 @@ interface JobNotificationContextValue {
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const STUCK_JOB_MS = 2 * 60 * 60 * 1000; // 2 hours — auto-expire queued jobs that never started
-const POLL_INTERVAL_MS = 5000;
 
 function storageKey(slug: string) {
   return `authentix_bg_jobs:${slug}`;
@@ -128,102 +128,119 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
     saveJobs(slug, jobs);
   }, [slug, jobs]);
 
-  // ── Polling loop — runs once, reads jobsRef each tick ───────────────────────
+  // ── Helper — poll a single pending job and update state ─────────────────────
+  const pollJob = useCallback(async (job: BackgroundJob) => {
+    try {
+      const status = await api.certificates.pollJobStatus(job.id);
+
+      // Always extract partial progress even while still running
+      const rawResult = status.result as Record<string, unknown> | undefined;
+      const partialProcessed = rawResult?.processed_so_far as number | undefined;
+      const partialTotal = rawResult?.total as number | undefined;
+      if (
+        (status.status === 'queued' || status.status === 'running') &&
+        partialProcessed !== undefined &&
+        partialTotal !== undefined
+      ) {
+        setJobs(prev =>
+          prev.map(j =>
+            j.id === job.id
+              ? { ...j, progress: { processed: partialProcessed, total: partialTotal } }
+              : j,
+          ),
+        );
+        return;
+      }
+
+      if (status.status !== 'completed' && status.status !== 'failed') return;
+
+      const totalCerts =
+        status.result?.total_certificates ??
+        status.result?.results?.reduce((s: number, r: Record<string, unknown>) => s + ((r.count as number) ?? 0), 0);
+      const downloadUrl =
+        status.result?.last_download_url ??
+        status.result?.results?.[0]?.download_url ??
+        undefined;
+
+      setJobs(prev =>
+        prev.map(j => {
+          if (j.id !== job.id) return j;
+          return {
+            ...j,
+            status: status.status as JobStatus,
+            totalCertificates: typeof totalCerts === 'number' ? totalCerts : undefined,
+            downloadUrl: downloadUrl ?? undefined,
+            error: status.error ?? undefined,
+            progress: undefined,
+            seen: false,
+          };
+        }),
+      );
+
+      // Fire browser notification
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        if (status.status === 'completed') {
+          const count = typeof totalCerts === 'number' ? totalCerts : null;
+          new Notification('Certificates Ready!', {
+            body: count
+              ? `${count} certificate${count !== 1 ? 's are' : ' is'} ready to download.`
+              : 'Your certificates are ready to download.',
+            icon: '/favicon.ico',
+            tag: `job-${job.id}`,
+          });
+        } else {
+          new Notification('Generation Failed', {
+            body: status.error ?? 'Certificate generation failed. Please try again.',
+            icon: '/favicon.ico',
+            tag: `job-${job.id}`,
+          });
+        }
+      }
+    } catch (err) {
+      // On session expiry, mark the job failed so we stop retrying with 401s
+      if (err instanceof ApiError && err.code === 'UNAUTHORIZED') {
+        setJobs(prev =>
+          prev.map(j =>
+            j.id === job.id
+              ? { ...j, status: 'failed' as JobStatus, error: 'Session expired — please refresh and sign in again.' }
+              : j,
+          ),
+        );
+      }
+      // All other errors are silently ignored — Realtime will trigger another attempt
+    }
+  }, []);
+
+  // ── Realtime subscriptions — background_jobs + certificate_generation_jobs ───
   useEffect(() => {
-    const interval = setInterval(async () => {
+    if (!slug) return;
+    const supabase = createSupabaseBrowserClient();
+
+    const triggerPoll = () => {
       const pending = jobsRef.current.filter(
         j => j.status === 'queued' || j.status === 'running',
       );
-      if (pending.length === 0) return;
+      void Promise.allSettled(pending.map(pollJob));
+    };
 
-      await Promise.allSettled(
-        pending.map(async job => {
-          try {
-            const status = await api.certificates.pollJobStatus(job.id);
+    // background_jobs — top-level job record (org_slug column available)
+    const bgChannel = supabase
+      .channel(`bg-jobs-${slug}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `org_slug=eq.${slug}` }, triggerPoll)
+      .subscribe();
 
-            // Always extract partial progress even while still running
-            const rawResult = status.result as Record<string, unknown> | undefined;
-            const partialProcessed = rawResult?.processed_so_far as number | undefined;
-            const partialTotal = rawResult?.total as number | undefined;
-            if (
-              (status.status === 'queued' || status.status === 'running') &&
-              partialProcessed !== undefined &&
-              partialTotal !== undefined
-            ) {
-              setJobs(prev =>
-                prev.map(j =>
-                  j.id === job.id
-                    ? { ...j, progress: { processed: partialProcessed, total: partialTotal } }
-                    : j,
-                ),
-              );
-              return;
-            }
+    // certificate_generation_jobs — granular progress updates (no org_slug col;
+    // any change triggers a re-poll — RLS ensures we only receive our org's rows)
+    const certChannel = supabase
+      .channel(`cert-gen-jobs-${slug}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'certificate_generation_jobs' }, triggerPoll)
+      .subscribe();
 
-            if (status.status !== 'completed' && status.status !== 'failed') return;
-
-            const totalCerts =
-              status.result?.total_certificates ??
-              status.result?.results?.reduce((s: number, r: Record<string, unknown>) => s + ((r.count as number) ?? 0), 0);
-            const downloadUrl =
-              status.result?.last_download_url ??
-              status.result?.results?.[0]?.download_url ??
-              undefined;
-
-            setJobs(prev =>
-              prev.map(j => {
-                if (j.id !== job.id) return j;
-                return {
-                  ...j,
-                  status: status.status as JobStatus,
-                  totalCertificates: typeof totalCerts === 'number' ? totalCerts : undefined,
-                  downloadUrl: downloadUrl ?? undefined,
-                  error: status.error ?? undefined,
-                  progress: undefined,
-                  seen: false,
-                };
-              }),
-            );
-
-            // Fire browser notification
-            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-              if (status.status === 'completed') {
-                const count = typeof totalCerts === 'number' ? totalCerts : null;
-                new Notification('Certificates Ready!', {
-                  body: count
-                    ? `${count} certificate${count !== 1 ? 's are' : ' is'} ready to download.`
-                    : 'Your certificates are ready to download.',
-                  icon: '/favicon.ico',
-                  tag: `job-${job.id}`,
-                });
-              } else {
-                new Notification('Generation Failed', {
-                  body: status.error ?? 'Certificate generation failed. Please try again.',
-                  icon: '/favicon.ico',
-                  tag: `job-${job.id}`,
-                });
-              }
-            }
-          } catch (err) {
-            // On session expiry, mark the job failed so polling stops instead of
-            // hammering the backend with 401s every 5 seconds indefinitely.
-            if (err instanceof ApiError && err.code === 'UNAUTHORIZED') {
-              setJobs(prev =>
-                prev.map(j =>
-                  j.id === job.id
-                    ? { ...j, status: 'failed' as JobStatus, error: 'Session expired — please refresh and sign in again.' }
-                    : j,
-                ),
-              );
-            }
-            // All other errors are silently ignored — job will be retried next tick
-          }
-        }),
-      );
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, []); // intentionally empty — reads jobsRef, not jobs
+    return () => {
+      void supabase.removeChannel(bgChannel);
+      void supabase.removeChannel(certChannel);
+    };
+  }, [slug, pollJob]);
 
   // ── SSE connections — real-time updates (polling above is the fallback) ───────
   useEffect(() => {

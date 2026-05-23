@@ -1,11 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import {
-  backendAuthRequest,
-  setServerAuthCookies,
-  sanitizeErrorMessage,
-} from "@/lib/api/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * Signup form state type
@@ -19,24 +15,6 @@ export interface SignupState {
     company_name?: string;
   };
   success: boolean;
-}
-
-/**
- * Signup response from backend
- * In Step-1 auth flow, signup may not return a session if email verification is required
- */
-interface SignupResponse {
-  user: {
-    id: string;
-    email: string;
-    full_name: string | null;
-  };
-  session?: {
-    access_token: string;
-    refresh_token: string;
-    expires_at: number;
-  };
-  message?: string;
 }
 
 /**
@@ -67,7 +45,7 @@ function validatePassword(password: string): string | null {
 
 /**
  * Server Action for user signup
- * Uses React 19 Server Actions pattern with validation
+ * Uses Supabase auth — passes metadata so the backend trigger can set up the org
  */
 export async function signupAction(
   _prevState: SignupState,
@@ -116,67 +94,27 @@ export async function signupAction(
     };
   }
 
-  try {
-    // Call backend auth endpoint
-    const result = await backendAuthRequest<SignupResponse>("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify({
-        email: (email as string).trim(),
-        password: password as string,
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signUp({
+    email: (email as string).trim(),
+    password: password as string,
+    options: {
+      data: {
         full_name: (fullName as string).trim(),
         company_name: (companyName as string).trim(),
-      }),
-    });
+      },
+    },
+  });
 
-    // In Step-1 auth flow, signup may not return a session if email verification is required
-    // Only set cookies if session is provided
-    if (result?.session) {
-      try {
-        await setServerAuthCookies(result.session);
-      } catch (cookieError) {
-        // Log but don't fail - user was created successfully
-        console.warn("[Signup] Failed to set cookies (non-fatal):", cookieError);
-      }
-    }
-    // If no session, user needs to verify email first (this is expected behavior)
-    
-    // Success - redirect to success page with email parameter for polling
-    // Note: redirect() throws a NEXT_REDIRECT error which is expected behavior
-    const emailParam = encodeURIComponent((email as string).trim());
-    redirect(`/signup/success?email=${emailParam}`);
-  } catch (error) {
-    // Check if this is a Next.js redirect (which is actually success)
-    if (error && typeof error === "object" && "digest" in error) {
-      const nextError = error as { digest?: string };
-      if (nextError.digest?.startsWith("NEXT_REDIRECT")) {
-        // This is a redirect, re-throw it
-        throw error;
-      }
-    }
-    
-    console.error("[Signup] Error:", error);
-    // Log the actual error for debugging
-    if (error instanceof Error) {
-      console.error("[Signup] Error details:", error.message);
-      if ("stack" in error) {
-        console.error("[Signup] Stack:", error.stack);
-      }
-    }
-    
-    // Check if this is a ServerApiError to get more details
-    if (error && typeof error === "object" && "code" in error) {
-      const apiError = error as { code?: string; message?: string; status?: number };
-      console.error("[Signup] API Error:", {
-        code: apiError.code,
-        message: apiError.message,
-        status: apiError.status,
-      });
-    }
-    
+  if (error) {
     return {
-      error: sanitizeErrorMessage(error),
+      error: error.message,
       fieldErrors: {},
       success: false,
     };
   }
+
+  // Redirect to verify-email page — Supabase sends the confirmation email
+  const emailParam = encodeURIComponent((email as string).trim());
+  redirect(`/signup/success?email=${emailParam}`);
 }

@@ -14,8 +14,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { AUTH_COOKIES } from "@/lib/api/server";
 import { logger } from "@/lib/logger";
 import { ALLOWED_METHODS, isPathSafe, isPathAllowed, createSafeHeaders } from "@/lib/api/proxy-validators";
 
@@ -98,39 +96,21 @@ async function proxyRequest(
   const backendUrl = `${BACKEND_API_URL}${pathSegments}${url.search}`;
   const fallbackUrl = BACKEND_FALLBACK_URL ? `${BACKEND_FALLBACK_URL}${pathSegments}${url.search}` : "";
 
-  // Get auth cookies to forward to backend
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get(AUTH_COOKIES.ACCESS_TOKEN)?.value ?? null;
-  const refreshToken = cookieStore.get(AUTH_COOKIES.REFRESH_TOKEN)?.value ?? null;
-  const expiresAt = cookieStore.get(AUTH_COOKIES.EXPIRES_AT)?.value ?? null;
+  // Get access token from Supabase session (managed by @supabase/ssr)
+  const { createSupabaseServerClient } = await import('@/lib/supabase/server');
+  const supabase = await createSupabaseServerClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token ?? null;
 
   // Check if this is a multipart/form-data request (file upload)
   const contentType = request.headers.get("content-type") || "";
   const isMultipart = contentType.includes("multipart/form-data");
 
-  // Create safe headers
+  // Create safe headers — passes accessToken as Authorization: Bearer <token>
   const safeHeaders = createSafeHeaders(request.headers, accessToken);
 
   // Forward request ID to backend for end-to-end tracing
   safeHeaders.set("X-Request-ID", requestId);
-
-  // Forward auth cookies to backend (Step-1 auth uses cookies, not just Bearer tokens)
-  // Build cookie string for backend
-  const backendCookies: string[] = [];
-  if (accessToken) {
-    backendCookies.push(`${AUTH_COOKIES.ACCESS_TOKEN}=${accessToken}`);
-  }
-  if (refreshToken) {
-    backendCookies.push(`${AUTH_COOKIES.REFRESH_TOKEN}=${refreshToken}`);
-  }
-  if (expiresAt) {
-    backendCookies.push(`${AUTH_COOKIES.EXPIRES_AT}=${expiresAt}`);
-  }
-  
-  // Add cookies to headers if any exist
-  if (backendCookies.length > 0) {
-    safeHeaders.set("Cookie", backendCookies.join("; "));
-  }
 
   // Get request body for non-GET requests
   // For multipart/form-data, we need to preserve the boundary and stream the body
