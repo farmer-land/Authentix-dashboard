@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { ALLOWED_METHODS, isPathSafe, isPathAllowed, createSafeHeaders } from "@/lib/api/proxy-validators";
+import { getServerAccessToken } from "@/lib/api/server";
 
 // ============================================================================
 // Configuration (Server-only)
@@ -96,11 +97,7 @@ async function proxyRequest(
   const backendUrl = `${BACKEND_API_URL}${pathSegments}${url.search}`;
   const fallbackUrl = BACKEND_FALLBACK_URL ? `${BACKEND_FALLBACK_URL}${pathSegments}${url.search}` : "";
 
-  // Get access token from Supabase session (managed by @supabase/ssr)
-  const { createSupabaseServerClient } = await import('@/lib/supabase/server');
-  const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  const accessToken = session?.access_token ?? null;
+  const accessToken = await getServerAccessToken();
 
   // Check if this is a multipart/form-data request (file upload)
   const contentType = request.headers.get("content-type") || "";
