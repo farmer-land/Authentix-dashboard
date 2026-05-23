@@ -1,33 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
-const AUTH_COOKIE = "auth_access_token";
-
-// Redirect /verify/* and /c/* on the dashboard subdomain to the public domain
-// so recipients see digicertificates.in/verify/TOKEN, not dashboard.digicertificates.in/verify/TOKEN.
 const DASHBOARD_HOST = "dashboard.digicertificates.in";
 const PUBLIC_HOST = "digicertificates.in";
+const VERIFY_HOSTNAME = "verify.digicertificates.in";
 
 const PUBLIC_ROUTES = ["/", "/login", "/signup", "/signup/success", "/forgot-password", "/reset-password", "/verify"];
 const API_ROUTES = ["/api/"];
 const STATIC_ROUTES = ["/_next/", "/favicon.ico", "/images/", "/fonts/"];
 
-/**
- * CSP NONCE
- *
- * Generates a per-request nonce and injects it into the Content-Security-Policy
- * response header. The nonce is also forwarded as `x-nonce` on the request so
- * that server components can attach it to inline <script> tags.
- *
- * Security notes:
- * - `unsafe-eval` is intentionally absent — Next.js production builds do not need it.
- * - `unsafe-inline` is retained as a legacy fallback only. Per CSP Level 3, browsers
- *   that honour nonces will ignore `unsafe-inline` when a valid nonce is present.
- *   Remove `unsafe-inline` once all inline scripts carry the nonce.
- * - style-src keeps `unsafe-inline` — Tailwind/shadcn styles are currently inline.
- */
 function buildCSP(nonce: string): string {
-  // React dev mode uses eval() for stack trace reconstruction — safe to allow in dev only.
   const evalDirective = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
   return [
     "default-src 'self'",
@@ -43,7 +26,7 @@ function buildCSP(nonce: string): string {
   ].join("; ");
 }
 
-function nextWithNonce(request: NextRequest, nonce: string): NextResponse {
+function makeNonceResponse(request: NextRequest, nonce: string): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
@@ -51,37 +34,26 @@ function nextWithNonce(request: NextRequest, nonce: string): NextResponse {
   return response;
 }
 
-const VERIFY_HOSTNAME = "verify.digicertificates.in";
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") ?? request.nextUrl.host;
   const isVerifyDomain = host === VERIFY_HOSTNAME || host.startsWith(`${VERIFY_HOSTNAME}:`);
 
-  // Generate nonce once up-front — used by nextWithNonce throughout this handler.
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
   const nonce = btoa(String.fromCharCode(...array));
 
-  // ── verify.digicertificates.in domain routing ────────────────────────────
-  // All traffic on the verify subdomain is public — no auth checks needed.
+  // ── verify subdomain: all public, no auth ────────────────────────────────
   if (isVerifyDomain) {
-    // Let Next.js internal routes (_next, API, static assets) pass through untouched.
-    if (
-      STATIC_ROUTES.some((r) => pathname.startsWith(r)) ||
-      API_ROUTES.some((r) => pathname.startsWith(r))
-    ) {
-      return nextWithNonce(request, nonce);
+    if (STATIC_ROUTES.some((r) => pathname.startsWith(r)) || API_ROUTES.some((r) => pathname.startsWith(r))) {
+      return makeNonceResponse(request, nonce);
     }
-
     const url = request.nextUrl.clone();
     if (pathname === "/") {
       url.pathname = "/verify";
       return NextResponse.rewrite(url);
     }
-    // Already under /verify/... — serve normally (backward compat with old QR codes)
     if (pathname.startsWith("/verify")) return NextResponse.next();
-    // New format: /{orgSlug}/{token} → rewrite to /verify/{token}
     const parts = pathname.split("/").filter(Boolean);
     if (parts.length === 2) {
       url.pathname = `/verify/${parts[1]}`;
@@ -91,45 +63,76 @@ export async function proxy(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // Redirect verify/short-link paths on the dashboard subdomain to the clean public domain
+  // Redirect verify/short-link paths on dashboard subdomain to public domain
   if (host === DASHBOARD_HOST && (pathname.startsWith("/verify/") || pathname.startsWith("/c/"))) {
     const search = request.nextUrl.search;
     return NextResponse.redirect(`https://${PUBLIC_HOST}${pathname}${search}`, { status: 301 });
   }
 
-  // Skip auth checks for static/API routes but still apply CSP
+  // Static and API routes: apply CSP but skip auth check
   if (STATIC_ROUTES.some((r) => pathname.startsWith(r)) || API_ROUTES.some((r) => pathname.startsWith(r))) {
-    return nextWithNonce(request, nonce);
+    return makeNonceResponse(request, nonce);
   }
 
-  const hasAuthCookie = request.cookies.has(AUTH_COOKIE);
+  // ── Supabase session check (also refreshes expired tokens) ───────────────
+  // Must happen before any auth-dependent routing decision.
+  let supabaseResponse = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll(); },
+        setAll(cookiesToSet) {
+          // Mutate request cookies so Server Components see the refreshed token
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // getUser() validates the JWT with Supabase; also triggers token refresh if needed.
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAuthenticated = !!user;
+
+  // Helper: build a nonce response that carries any refreshed Supabase cookies
+  function nonceResponse(): NextResponse {
+    const res = makeNonceResponse(request, nonce);
+    supabaseResponse.cookies.getAll().forEach((cookie) => res.cookies.set(cookie));
+    return res;
+  }
+
+  // /verify/* is always public (old QR codes point here)
+  if (pathname.startsWith("/verify/")) {
+    return nonceResponse();
+  }
 
   // Public routes
   if (PUBLIC_ROUTES.includes(pathname)) {
-    if (hasAuthCookie && (pathname === "/login" || pathname === "/signup")) {
+    if (isAuthenticated && (pathname === "/login" || pathname === "/signup")) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
-    return nextWithNonce(request, nonce);
+    return nonceResponse();
   }
 
-  // /verify/* is always public — old QR codes point to digicertificates.in/verify/TOKEN
-  if (pathname.startsWith('/verify/')) {
-    return nextWithNonce(request, nonce);
-  }
-
-  // Protected routes need auth
-  if (!hasAuthCookie) {
+  // Protected routes
+  if (!isAuthenticated) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // /dashboard exact - let page handle org resolution
+  // /dashboard exact — let page handle org resolution
   if (pathname === "/dashboard") {
-    return nextWithNonce(request, nonce);
+    return nonceResponse();
   }
 
-  // Legacy /dashboard/* routes without org - redirect to resolver
+  // Legacy /dashboard/* without org slug — redirect to resolver
   if (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/org/")) {
     const response = NextResponse.redirect(new URL("/dashboard", request.url));
     response.cookies.set("redirect_path", pathname, {
@@ -141,7 +144,7 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  return nextWithNonce(request, nonce);
+  return nonceResponse();
 }
 
 export const config = {

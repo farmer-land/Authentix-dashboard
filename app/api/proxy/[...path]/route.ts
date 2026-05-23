@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { ALLOWED_METHODS, isPathSafe, isPathAllowed, createSafeHeaders } from "@/lib/api/proxy-validators";
-import { getServerAccessToken } from "@/lib/api/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // Configuration (Server-only)
@@ -97,7 +97,12 @@ async function proxyRequest(
   const backendUrl = `${BACKEND_API_URL}${pathSegments}${url.search}`;
   const fallbackUrl = BACKEND_FALLBACK_URL ? `${BACKEND_FALLBACK_URL}${pathSegments}${url.search}` : "";
 
-  const accessToken = await getServerAccessToken();
+  // Get Supabase access token — this is the JWT the backend validates via JWKS.
+  // getSession() reads from cookies without a network call; the JWT signature is
+  // verified by the backend on every request.
+  const supabase = await createSupabaseServerClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token ?? null;
 
   // Check if this is a multipart/form-data request (file upload)
   const contentType = request.headers.get("content-type") || "";
