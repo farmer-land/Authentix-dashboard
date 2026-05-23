@@ -12,6 +12,7 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { loginAction, type LoginState } from "./actions";
 import Image from "next/image";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 
 function SubmitButton({ step }: { step: "email" | "otp" }) {
   const { pending } = useFormStatus();
@@ -130,6 +131,8 @@ function LoginPageContent() {
                 </p>
               </div>
             )}
+
+            {step === "email" && <TurnstileWidget />}
 
             {state.error && (
               <div

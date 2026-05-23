@@ -12,6 +12,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { signupAction, type SignupState } from "./actions";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -140,6 +141,8 @@ function SignupPageContent() {
               error={state.fieldErrors.email}
               hint="Personal email domains (gmail, yahoo, etc.) are not allowed"
             />
+
+            <TurnstileWidget />
 
             {state.error && (
               <div
