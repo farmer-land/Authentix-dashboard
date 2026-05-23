@@ -1485,39 +1485,69 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
     })
   }, [])
 
-  // Refresh stats on mount to pick up any changes since server rendered the page
+  // Stats — driven by Realtime on organization_stats, no polling
   React.useEffect(() => {
     if (!orgId) return
-    let cancelled = false
-    api.dashboard.getStats(orgId).then((data) => {
-      if (!cancelled) applyStats(data.stats)
-    }).catch(() => { /* silent */ })
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId])
+    const supabase = createSupabaseBrowserClient()
 
-  // Auto-refresh stats every 30s while pending jobs are processing
-  React.useEffect(() => {
-    if (!initialData || !orgId) return
-    let cancelled = false
-    const refresh = async () => {
-      try {
-        const data = await api.dashboard.getStats(orgId)
-        if (!cancelled) applyStats(data.stats)
-      } catch { /* silent */ }
-    }
-    const id = setInterval(() => {
-      if (stats.pendingJobs > 0) refresh()
-    }, 30_000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [initialData, orgId, stats.pendingJobs, applyStats])
+    // Initial read: single pre-computed row, always <5ms
+    supabase
+      .from("organization_stats")
+      .select("total_certificates,revoked_certificates,verifications_today,verifications_total,pending_jobs")
+      .eq("organization_id", orgId)
+      .single()
+      .then(({ data }) => {
+        if (data) applyStats({
+          totalCertificates:       data.total_certificates,
+          revokedCertificates:     data.revoked_certificates,
+          verificationsToday:      data.verifications_today,
+          verificationEventsTotal: data.verifications_total,
+          pendingJobs:             data.pending_jobs,
+        })
+      })
+
+    // Live updates — triggers fire on cert insert/revoke and verification insert
+    const channel = supabase
+      .channel(`org-stats:${orgId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "organization_stats", filter: `organization_id=eq.${orgId}` },
+        (payload) => {
+          const r = payload.new as {
+            total_certificates: number; revoked_certificates: number
+            verifications_today: number; verifications_total: number; pending_jobs: number
+          }
+          applyStats({
+            totalCertificates:       r.total_certificates,
+            revokedCertificates:     r.revoked_certificates,
+            verificationsToday:      r.verifications_today,
+            verificationEventsTotal: r.verifications_total,
+            pendingJobs:             r.pending_jobs,
+          })
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [orgId, applyStats])
 
   const handleManualRefresh = async () => {
     if (!orgId) return
     setRefreshing(true)
     try {
-      const data = await api.dashboard.getStats(orgId)
-      applyStats(data.stats)
+      const supabase = createSupabaseBrowserClient()
+      const { data } = await supabase
+        .from("organization_stats")
+        .select("total_certificates,revoked_certificates,verifications_today,verifications_total,pending_jobs")
+        .eq("organization_id", orgId)
+        .single()
+      if (data) applyStats({
+        totalCertificates:       data.total_certificates,
+        revokedCertificates:     data.revoked_certificates,
+        verificationsToday:      data.verifications_today,
+        verificationEventsTotal: data.verifications_total,
+        pendingJobs:             data.pending_jobs,
+      })
     } catch { /* silent */ }
     finally { setRefreshing(false) }
   }
@@ -1616,7 +1646,7 @@ export function AnalyticsDashboardClient({ slug, initialData }: AnalyticsDashboa
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
           <Loader2 className="w-4 h-4 animate-spin text-amber-500 shrink-0" />
           <p className="text-sm text-amber-600 dark:text-amber-400">
-            <strong>{stats.pendingJobs}</strong> import job{stats.pendingJobs === 1 ? "" : "s"} {stats.pendingJobs === 1 ? "is" : "are"} currently processing — stats auto-refresh every 30s.
+            <strong>{stats.pendingJobs}</strong> import job{stats.pendingJobs === 1 ? "" : "s"} {stats.pendingJobs === 1 ? "is" : "are"} currently processing — stats update live.
           </p>
         </div>
       )}

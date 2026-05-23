@@ -39,7 +39,7 @@ export type Database = {
   }
   public: {
     Tables: {
-      app_audit_logs: {
+      audit_events: {
         Row: {
           action: string
           actor_ip_hash: string | null
@@ -888,6 +888,231 @@ export type Database = {
           },
         ]
       }
+      campaign_logs: {
+        Row: {
+          broadcast_id: string
+          contact_id: string | null
+          delivered_at: string | null
+          error: string | null
+          failed_at: string | null
+          id: string
+          provider: string
+          provider_msg_id: string | null
+          queued_at: string
+          sent_at: string | null
+          status: string
+          to_email: string
+        }
+        Insert: {
+          broadcast_id: string
+          contact_id?: string | null
+          delivered_at?: string | null
+          error?: string | null
+          failed_at?: string | null
+          id?: string
+          provider: string
+          provider_msg_id?: string | null
+          queued_at?: string
+          sent_at?: string | null
+          status?: string
+          to_email: string
+        }
+        Update: {
+          broadcast_id?: string
+          contact_id?: string | null
+          delivered_at?: string | null
+          error?: string | null
+          failed_at?: string | null
+          id?: string
+          provider?: string
+          provider_msg_id?: string | null
+          queued_at?: string
+          sent_at?: string | null
+          status?: string
+          to_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_broadcast_logs_broadcast_id_fkey"
+            columns: ["broadcast_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcast_logs_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          bounced_count: number
+          clicked_count: number
+          complained_count: number
+          created_at: string
+          created_by: string | null
+          delivered_count: number
+          email_type: Database["public"]["Enums"]["email_purpose_type"]
+          failed_count: number
+          from_email: string
+          from_name: string | null
+          html: string | null
+          id: string
+          inline_recipients: Json
+          integration_id: string | null
+          name: string
+          opened_count: number
+          organization_id: string
+          reply_to: string | null
+          resend_broadcast_id: string | null
+          resend_segment_id: string | null
+          resend_topic_id: string | null
+          scheduled_at: string | null
+          segment_id: string | null
+          sent_at: string | null
+          sent_count: number
+          status: Database["public"]["Enums"]["broadcast_status"]
+          subject: string
+          template_id: string | null
+          text: string | null
+          topic_id: string | null
+          total_recipients: number
+          unsubscribed_count: number
+          updated_at: string
+        }
+        Insert: {
+          bounced_count?: number
+          clicked_count?: number
+          complained_count?: number
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number
+          email_type?: Database["public"]["Enums"]["email_purpose_type"]
+          failed_count?: number
+          from_email: string
+          from_name?: string | null
+          html?: string | null
+          id?: string
+          inline_recipients?: Json
+          integration_id?: string | null
+          name: string
+          opened_count?: number
+          organization_id: string
+          reply_to?: string | null
+          resend_broadcast_id?: string | null
+          resend_segment_id?: string | null
+          resend_topic_id?: string | null
+          scheduled_at?: string | null
+          segment_id?: string | null
+          sent_at?: string | null
+          sent_count?: number
+          status?: Database["public"]["Enums"]["broadcast_status"]
+          subject: string
+          template_id?: string | null
+          text?: string | null
+          topic_id?: string | null
+          total_recipients?: number
+          unsubscribed_count?: number
+          updated_at?: string
+        }
+        Update: {
+          bounced_count?: number
+          clicked_count?: number
+          complained_count?: number
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number
+          email_type?: Database["public"]["Enums"]["email_purpose_type"]
+          failed_count?: number
+          from_email?: string
+          from_name?: string | null
+          html?: string | null
+          id?: string
+          inline_recipients?: Json
+          integration_id?: string | null
+          name?: string
+          opened_count?: number
+          organization_id?: string
+          reply_to?: string | null
+          resend_broadcast_id?: string | null
+          resend_segment_id?: string | null
+          resend_topic_id?: string | null
+          scheduled_at?: string | null
+          segment_id?: string | null
+          sent_at?: string | null
+          sent_count?: number
+          status?: Database["public"]["Enums"]["broadcast_status"]
+          subject?: string
+          template_id?: string | null
+          text?: string | null
+          topic_id?: string | null
+          total_recipients?: number
+          unsubscribed_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_broadcasts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "email_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "email_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       certificate_categories: {
         Row: {
           color: string | null
@@ -958,6 +1183,7 @@ export type Database = {
       }
       certificate_generation_jobs: {
         Row: {
+          background_job_id: string | null
           completed_at: string | null
           created_at: string
           error: Json | null
@@ -969,6 +1195,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          background_job_id?: string | null
           completed_at?: string | null
           created_at?: string
           error?: Json | null
@@ -980,6 +1207,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          background_job_id?: string | null
           completed_at?: string | null
           created_at?: string
           error?: Json | null
@@ -991,6 +1219,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "certificate_generation_jobs_background_job_id_fkey"
+            columns: ["background_job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "certificate_generation_jobs_organization_id_fkey"
             columns: ["organization_id"]
@@ -1220,6 +1455,7 @@ export type Database = {
           created_at: string
           created_by_user_id: string | null
           deleted_at: string | null
+          embedding: string | null
           id: string
           latest_version_id: string | null
           organization_id: string
@@ -1232,6 +1468,7 @@ export type Database = {
           created_at?: string
           created_by_user_id?: string | null
           deleted_at?: string | null
+          embedding?: string | null
           id?: string
           latest_version_id?: string | null
           organization_id: string
@@ -1244,6 +1481,7 @@ export type Database = {
           created_at?: string
           created_by_user_id?: string | null
           deleted_at?: string | null
+          embedding?: string | null
           id?: string
           latest_version_id?: string | null
           organization_id?: string
@@ -1403,10 +1641,13 @@ export type Database = {
       }
       certificates: {
         Row: {
+          archive_path: string | null
+          archived_at: string | null
           category_id: string
           certificate_file_id: string | null
           certificate_number: string
           certificate_preview_file_id: string | null
+          contact_id: string | null
           created_at: string
           expires_at: string | null
           generation_job_id: string
@@ -1431,10 +1672,13 @@ export type Database = {
           verification_token_hash: string
         }
         Insert: {
+          archive_path?: string | null
+          archived_at?: string | null
           category_id: string
           certificate_file_id?: string | null
           certificate_number: string
           certificate_preview_file_id?: string | null
+          contact_id?: string | null
           created_at?: string
           expires_at?: string | null
           generation_job_id: string
@@ -1459,10 +1703,13 @@ export type Database = {
           verification_token_hash: string
         }
         Update: {
+          archive_path?: string | null
+          archived_at?: string | null
           category_id?: string
           certificate_file_id?: string | null
           certificate_number?: string
           certificate_preview_file_id?: string | null
+          contact_id?: string | null
           created_at?: string
           expires_at?: string | null
           generation_job_id?: string
@@ -1513,6 +1760,13 @@ export type Database = {
             columns: ["certificate_preview_file_id"]
             isOneToOne: false
             referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
           {
@@ -1594,6 +1848,162 @@ export type Database = {
           },
         ]
       }
+      contact_segments: {
+        Row: {
+          contact_id: string
+          segment_id: string
+        }
+        Insert: {
+          contact_id: string
+          segment_id: string
+        }
+        Update: {
+          contact_id?: string
+          segment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_segment_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_segment_contacts_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "email_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_tags: {
+        Row: {
+          contact_id: string
+          created_at: string
+          tag: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          tag: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          tag?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_contact_tags_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          certificates_issued: number
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          email_type_prefs: Json
+          embedding: string | null
+          first_name: string | null
+          id: string
+          last_cert_category: string | null
+          last_cert_issued_at: string | null
+          last_email_clicked_at: string | null
+          last_email_opened_at: string | null
+          last_name: string | null
+          organization_id: string
+          properties: Json
+          resend_audience_id: string | null
+          resend_contact_id: string | null
+          source: string | null
+          source_ref: string | null
+          total_emails_opened: number
+          total_emails_received: number
+          unsubscribed: boolean
+          updated_at: string
+        }
+        Insert: {
+          certificates_issued?: number
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          email_type_prefs?: Json
+          embedding?: string | null
+          first_name?: string | null
+          id?: string
+          last_cert_category?: string | null
+          last_cert_issued_at?: string | null
+          last_email_clicked_at?: string | null
+          last_email_opened_at?: string | null
+          last_name?: string | null
+          organization_id: string
+          properties?: Json
+          resend_audience_id?: string | null
+          resend_contact_id?: string | null
+          source?: string | null
+          source_ref?: string | null
+          total_emails_opened?: number
+          total_emails_received?: number
+          unsubscribed?: boolean
+          updated_at?: string
+        }
+        Update: {
+          certificates_issued?: number
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          email_type_prefs?: Json
+          embedding?: string | null
+          first_name?: string | null
+          id?: string
+          last_cert_category?: string | null
+          last_cert_issued_at?: string | null
+          last_email_clicked_at?: string | null
+          last_email_opened_at?: string | null
+          last_name?: string | null
+          organization_id?: string
+          properties?: Json
+          resend_audience_id?: string | null
+          resend_contact_id?: string | null
+          source?: string | null
+          source_ref?: string | null
+          total_emails_opened?: number
+          total_emails_received?: number
+          unsubscribed?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "email_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+        ]
+      }
       delivery_email_events: {
         Row: {
           bounce_type: string | null
@@ -1645,7 +2055,7 @@ export type Database = {
             foreignKeyName: "delivery_email_events_broadcast_id_fkey"
             columns: ["broadcast_id"]
             isOneToOne: false
-            referencedRelation: "email_broadcasts"
+            referencedRelation: "campaigns"
             referencedColumns: ["id"]
           },
           {
@@ -2094,384 +2504,6 @@ export type Database = {
           },
         ]
       }
-      email_broadcast_logs: {
-        Row: {
-          broadcast_id: string
-          contact_id: string | null
-          delivered_at: string | null
-          error: string | null
-          failed_at: string | null
-          id: string
-          provider: string
-          provider_msg_id: string | null
-          queued_at: string
-          sent_at: string | null
-          status: string
-          to_email: string
-        }
-        Insert: {
-          broadcast_id: string
-          contact_id?: string | null
-          delivered_at?: string | null
-          error?: string | null
-          failed_at?: string | null
-          id?: string
-          provider: string
-          provider_msg_id?: string | null
-          queued_at?: string
-          sent_at?: string | null
-          status?: string
-          to_email: string
-        }
-        Update: {
-          broadcast_id?: string
-          contact_id?: string | null
-          delivered_at?: string | null
-          error?: string | null
-          failed_at?: string | null
-          id?: string
-          provider?: string
-          provider_msg_id?: string | null
-          queued_at?: string
-          sent_at?: string | null
-          status?: string
-          to_email?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_broadcast_logs_broadcast_id_fkey"
-            columns: ["broadcast_id"]
-            isOneToOne: false
-            referencedRelation: "email_broadcasts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_broadcast_logs_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      email_broadcasts: {
-        Row: {
-          bounced_count: number
-          clicked_count: number
-          complained_count: number
-          created_at: string
-          created_by: string | null
-          delivered_count: number
-          email_type: Database["public"]["Enums"]["email_purpose_type"]
-          failed_count: number
-          from_email: string
-          from_name: string | null
-          html: string | null
-          id: string
-          inline_recipients: Json
-          integration_id: string | null
-          name: string
-          opened_count: number
-          organization_id: string
-          reply_to: string | null
-          resend_broadcast_id: string | null
-          resend_segment_id: string | null
-          resend_topic_id: string | null
-          scheduled_at: string | null
-          segment_id: string | null
-          sent_at: string | null
-          sent_count: number
-          status: Database["public"]["Enums"]["broadcast_status"]
-          subject: string
-          template_id: string | null
-          text: string | null
-          topic_id: string | null
-          total_recipients: number
-          unsubscribed_count: number
-          updated_at: string
-        }
-        Insert: {
-          bounced_count?: number
-          clicked_count?: number
-          complained_count?: number
-          created_at?: string
-          created_by?: string | null
-          delivered_count?: number
-          email_type?: Database["public"]["Enums"]["email_purpose_type"]
-          failed_count?: number
-          from_email: string
-          from_name?: string | null
-          html?: string | null
-          id?: string
-          inline_recipients?: Json
-          integration_id?: string | null
-          name: string
-          opened_count?: number
-          organization_id: string
-          reply_to?: string | null
-          resend_broadcast_id?: string | null
-          resend_segment_id?: string | null
-          resend_topic_id?: string | null
-          scheduled_at?: string | null
-          segment_id?: string | null
-          sent_at?: string | null
-          sent_count?: number
-          status?: Database["public"]["Enums"]["broadcast_status"]
-          subject: string
-          template_id?: string | null
-          text?: string | null
-          topic_id?: string | null
-          total_recipients?: number
-          unsubscribed_count?: number
-          updated_at?: string
-        }
-        Update: {
-          bounced_count?: number
-          clicked_count?: number
-          complained_count?: number
-          created_at?: string
-          created_by?: string | null
-          delivered_count?: number
-          email_type?: Database["public"]["Enums"]["email_purpose_type"]
-          failed_count?: number
-          from_email?: string
-          from_name?: string | null
-          html?: string | null
-          id?: string
-          inline_recipients?: Json
-          integration_id?: string | null
-          name?: string
-          opened_count?: number
-          organization_id?: string
-          reply_to?: string | null
-          resend_broadcast_id?: string | null
-          resend_segment_id?: string | null
-          resend_topic_id?: string | null
-          scheduled_at?: string | null
-          segment_id?: string | null
-          sent_at?: string | null
-          sent_count?: number
-          status?: Database["public"]["Enums"]["broadcast_status"]
-          subject?: string
-          template_id?: string | null
-          text?: string | null
-          topic_id?: string | null
-          total_recipients?: number
-          unsubscribed_count?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_broadcasts_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_integration_id_fkey"
-            columns: ["integration_id"]
-            isOneToOne: false
-            referencedRelation: "delivery_integrations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "v_effective_categories"
-            referencedColumns: ["organization_id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "v_effective_subcategories"
-            referencedColumns: ["organization_id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_segment_id_fkey"
-            columns: ["segment_id"]
-            isOneToOne: false
-            referencedRelation: "email_segments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "delivery_templates"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_broadcasts_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "email_topics"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      contact_tags: {
-        Row: {
-          contact_id: string
-          created_at: string
-          tag: string
-        }
-        Insert: {
-          contact_id: string
-          created_at?: string
-          tag: string
-        }
-        Update: {
-          contact_id?: string
-          created_at?: string
-          tag?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_contact_tags_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      contacts: {
-        Row: {
-          certificates_issued: number
-          created_at: string
-          deleted_at: string | null
-          email: string | null
-          email_type_prefs: Json
-          first_name: string | null
-          id: string
-          last_cert_category: string | null
-          last_cert_issued_at: string | null
-          last_email_clicked_at: string | null
-          last_email_opened_at: string | null
-          last_name: string | null
-          organization_id: string
-          properties: Json
-          resend_audience_id: string | null
-          resend_contact_id: string | null
-          source: string | null
-          source_ref: string | null
-          total_emails_opened: number
-          total_emails_received: number
-          unsubscribed: boolean
-          updated_at: string
-        }
-        Insert: {
-          certificates_issued?: number
-          created_at?: string
-          deleted_at?: string | null
-          email?: string | null
-          email_type_prefs?: Json
-          first_name?: string | null
-          id?: string
-          last_cert_category?: string | null
-          last_cert_issued_at?: string | null
-          last_email_clicked_at?: string | null
-          last_email_opened_at?: string | null
-          last_name?: string | null
-          organization_id: string
-          properties?: Json
-          resend_audience_id?: string | null
-          resend_contact_id?: string | null
-          source?: string | null
-          source_ref?: string | null
-          total_emails_opened?: number
-          total_emails_received?: number
-          unsubscribed?: boolean
-          updated_at?: string
-        }
-        Update: {
-          certificates_issued?: number
-          created_at?: string
-          deleted_at?: string | null
-          email?: string | null
-          email_type_prefs?: Json
-          first_name?: string | null
-          id?: string
-          last_cert_category?: string | null
-          last_cert_issued_at?: string | null
-          last_email_clicked_at?: string | null
-          last_email_opened_at?: string | null
-          last_name?: string | null
-          organization_id?: string
-          properties?: Json
-          resend_audience_id?: string | null
-          resend_contact_id?: string | null
-          source?: string | null
-          source_ref?: string | null
-          total_emails_opened?: number
-          total_emails_received?: number
-          unsubscribed?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_contacts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_contacts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "v_effective_categories"
-            referencedColumns: ["organization_id"]
-          },
-          {
-            foreignKeyName: "email_contacts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "v_effective_subcategories"
-            referencedColumns: ["organization_id"]
-          },
-        ]
-      }
-      contact_segments: {
-        Row: {
-          contact_id: string
-          segment_id: string
-        }
-        Insert: {
-          contact_id: string
-          segment_id: string
-        }
-        Update: {
-          contact_id?: string
-          segment_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_segment_contacts_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_segment_contacts_segment_id_fkey"
-            columns: ["segment_id"]
-            isOneToOne: false
-            referencedRelation: "email_segments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       email_segments: {
         Row: {
           contact_count: number
@@ -2772,45 +2804,57 @@ export type Database = {
       }
       files: {
         Row: {
+          archive_path: string | null
+          archived_at: string | null
           bucket: string
           checksum_sha256: string | null
           created_at: string
           created_by_user_id: string | null
           deleted_at: string | null
+          exported_at: string | null
           id: string
           kind: Database["public"]["Enums"]["file_kind"]
           mime_type: string | null
           organization_id: string
           original_name: string | null
           path: string
+          retention_days: number | null
           size_bytes: number | null
         }
         Insert: {
+          archive_path?: string | null
+          archived_at?: string | null
           bucket?: string
           checksum_sha256?: string | null
           created_at?: string
           created_by_user_id?: string | null
           deleted_at?: string | null
+          exported_at?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["file_kind"]
           mime_type?: string | null
           organization_id: string
           original_name?: string | null
           path: string
+          retention_days?: number | null
           size_bytes?: number | null
         }
         Update: {
+          archive_path?: string | null
+          archived_at?: string | null
           bucket?: string
           checksum_sha256?: string | null
           created_at?: string
           created_by_user_id?: string | null
           deleted_at?: string | null
+          exported_at?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["file_kind"]
           mime_type?: string | null
           organization_id?: string
           original_name?: string | null
           path?: string
+          retention_days?: number | null
           size_bytes?: number | null
         }
         Relationships: [
@@ -3012,6 +3056,157 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      integration_mappings: {
+        Row: {
+          created_at: string
+          default_value: string | null
+          id: string
+          integration_id: string
+          is_required: boolean
+          organization_id: string
+          source_field: string
+          target_entity: Database["public"]["Enums"]["mapping_target_entity"]
+          target_field: string
+          transform_fn: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_value?: string | null
+          id?: string
+          integration_id: string
+          is_required?: boolean
+          organization_id: string
+          source_field: string
+          target_entity: Database["public"]["Enums"]["mapping_target_entity"]
+          target_field: string
+          transform_fn?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_value?: string | null
+          id?: string
+          integration_id?: string
+          is_required?: boolean
+          organization_id?: string
+          source_field?: string
+          target_entity?: Database["public"]["Enums"]["mapping_target_entity"]
+          target_field?: string
+          transform_fn?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_mappings_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_mappings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_mappings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "integration_mappings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+        ]
+      }
+      integration_syncs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          cursor_value: string | null
+          error_message: string | null
+          id: string
+          integration_id: string
+          metadata: Json
+          organization_id: string
+          records_failed: number | null
+          records_processed: number | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["sync_status"]
+          sync_type: Database["public"]["Enums"]["sync_type"]
+          triggered_by_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          cursor_value?: string | null
+          error_message?: string | null
+          id?: string
+          integration_id: string
+          metadata?: Json
+          organization_id: string
+          records_failed?: number | null
+          records_processed?: number | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_status"]
+          sync_type?: Database["public"]["Enums"]["sync_type"]
+          triggered_by_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          cursor_value?: string | null
+          error_message?: string | null
+          id?: string
+          integration_id?: string
+          metadata?: Json
+          organization_id?: string
+          records_failed?: number | null
+          records_processed?: number | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_status"]
+          sync_type?: Database["public"]["Enums"]["sync_type"]
+          triggered_by_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_syncs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_syncs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_syncs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "integration_syncs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+        ]
       }
       organization_category_overrides: {
         Row: {
@@ -3339,6 +3534,58 @@ export type Database = {
           },
         ]
       }
+      organization_stats: {
+        Row: {
+          organization_id: string
+          pending_jobs: number
+          revoked_certificates: number
+          total_certificates: number
+          updated_at: string
+          verifications_today: number
+          verifications_total: number
+        }
+        Insert: {
+          organization_id: string
+          pending_jobs?: number
+          revoked_certificates?: number
+          total_certificates?: number
+          updated_at?: string
+          verifications_today?: number
+          verifications_total?: number
+        }
+        Update: {
+          organization_id?: string
+          pending_jobs?: number
+          revoked_certificates?: number
+          total_certificates?: number
+          updated_at?: string
+          verifications_today?: number
+          verifications_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_stats_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_stats_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "organization_stats_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+        ]
+      }
       organization_subcategory_overrides: {
         Row: {
           base_subcategory_id: string
@@ -3578,35 +3825,72 @@ export type Database = {
           },
         ]
       }
-      users: {
+      platform_events: {
         Row: {
-          created_at: string
-          deleted_at: string | null
-          email: string | null
-          first_name: string | null
+          actor_id: string | null
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string
+          event_version: number
+          exported_at: string | null
           id: string
-          last_name: string | null
-          updated_at: string
+          occurred_at: string
+          organization_id: string
+          payload: Json
+          request_id: string | null
+          trace_id: string | null
         }
         Insert: {
-          created_at?: string
-          deleted_at?: string | null
-          email?: string | null
-          first_name?: string | null
-          id: string
-          last_name?: string | null
-          updated_at?: string
+          actor_id?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type: string
+          event_version?: number
+          exported_at?: string | null
+          id?: string
+          occurred_at?: string
+          organization_id: string
+          payload?: Json
+          request_id?: string | null
+          trace_id?: string | null
         }
         Update: {
-          created_at?: string
-          deleted_at?: string | null
-          email?: string | null
-          first_name?: string | null
+          actor_id?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string
+          event_version?: number
+          exported_at?: string | null
           id?: string
-          last_name?: string | null
-          updated_at?: string
+          occurred_at?: string
+          organization_id?: string
+          payload?: Json
+          request_id?: string | null
+          trace_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "platform_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "platform_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+        ]
       }
       razorpay_customers: {
         Row: {
@@ -3726,6 +4010,55 @@ export type Database = {
           },
           {
             foreignKeyName: "razorpay_payment_methods_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_subcategories"
+            referencedColumns: ["organization_id"]
+          },
+        ]
+      }
+      retention_policies: {
+        Row: {
+          created_at: string
+          entity_type: string
+          id: string
+          organization_id: string
+          retention_days: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entity_type: string
+          id?: string
+          organization_id: string
+          retention_days: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          id?: string
+          organization_id?: string
+          retention_days?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retention_policies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retention_policies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "v_effective_categories"
+            referencedColumns: ["organization_id"]
+          },
+          {
+            foreignKeyName: "retention_policies_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "v_effective_subcategories"
@@ -3853,6 +4186,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      users: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -4172,7 +4535,9 @@ export type Database = {
         Args: { p_org_id: string; p_period_start: string }
         Returns: string
       }
+      current_org_id: { Args: never; Returns: string }
       current_user_id: { Args: never; Returns: string }
+      custom_access_token: { Args: { event: Json }; Returns: Json }
       ensure_billing_period: {
         Args: { p_org_id: string; p_period_start: string }
         Returns: string
@@ -4181,7 +4546,15 @@ export type Database = {
         Args: { p_period_start: string }
         Returns: number
       }
-      generate_api_key: { Args: { company_uuid: string }; Returns: string }
+      ensure_org_stats: { Args: { p_org_id: string }; Returns: undefined }
+      find_similar_templates: {
+        Args: { p_embedding: string; p_limit?: number; p_org_id: string }
+        Returns: {
+          similarity: number
+          template_id: string
+          template_title: string
+        }[]
+      }
       get_category_mix: {
         Args: { p_org_id: string }
         Returns: {
@@ -4238,6 +4611,21 @@ export type Database = {
         }[]
       }
       is_member_of_org: { Args: { org_id: string }; Returns: boolean }
+      list_industries: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          key: string
+          name: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "industries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       mark_expired_certificates: { Args: never; Returns: number }
       next_certificate_number: {
         Args: { p_organization_id: string }
@@ -4246,6 +4634,25 @@ export type Database = {
       next_invoice_number:
         | { Args: { p_org_id: string }; Returns: string }
         | { Args: { p_year: number }; Returns: string }
+      pgmq_archive: {
+        Args: { p_msg_id: number; p_queue: string }
+        Returns: boolean
+      }
+      pgmq_delete: {
+        Args: { p_msg_id: number; p_queue: string }
+        Returns: boolean
+      }
+      pgmq_read: {
+        Args: { p_qty?: number; p_queue: string; p_vt: number }
+        Returns: {
+          enqueued_at: string
+          message: Json
+          msg_id: number
+          read_ct: number
+          vt: string
+        }[]
+      }
+      pgmq_send: { Args: { p_message: Json; p_queue: string }; Returns: number }
       recompute_invoice_totals: {
         Args: { p_invoice_id: string }
         Returns: undefined
@@ -4405,6 +4812,12 @@ export type Database = {
         | "certificate_generation"
         | "delivery_send"
         | "batch_certificate_generation"
+      mapping_target_entity:
+        | "contact"
+        | "certificate"
+        | "template"
+        | "campaign"
+        | "import"
       member_status: "invited" | "active" | "suspended"
       organization_billing_status:
         | "trialing"
@@ -4418,6 +4831,8 @@ export type Database = {
         | "ignored"
         | "failed"
       segment_filter_match: "all" | "any"
+      sync_status: "pending" | "running" | "completed" | "failed" | "cancelled"
+      sync_type: "full" | "incremental" | "on_demand"
       template_field_type: "text" | "date" | "qrcode" | "custom" | "image"
       template_status: "draft" | "active" | "archived"
       template_usage_type: "generated" | "in_progress"
@@ -4662,6 +5077,13 @@ export const Constants = {
         "delivery_send",
         "batch_certificate_generation",
       ],
+      mapping_target_entity: [
+        "contact",
+        "certificate",
+        "template",
+        "campaign",
+        "import",
+      ],
       member_status: ["invited", "active", "suspended"],
       organization_billing_status: [
         "trialing",
@@ -4677,6 +5099,8 @@ export const Constants = {
         "failed",
       ],
       segment_filter_match: ["all", "any"],
+      sync_status: ["pending", "running", "completed", "failed", "cancelled"],
+      sync_type: ["full", "incremental", "on_demand"],
       template_field_type: ["text", "date", "qrcode", "custom", "image"],
       template_status: ["draft", "active", "archived"],
       template_usage_type: ["generated", "in_progress"],

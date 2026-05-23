@@ -362,35 +362,42 @@ export function DashboardShell({
     setMounted(true);
   }, []);
 
-  // Fetch pending jobs count for sidebar badge — poll every 30s while any are running
+  // Pending jobs badge — driven by Realtime, no polling
   useEffect(() => {
-    let cancelled = false;
-    let orgId: string | null = null;
+    const supabase = createSupabaseBrowserClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    const resolveOrgId = async (): Promise<string | null> => {
-      if (orgId) return orgId;
-      const supabase = createSupabaseBrowserClient();
-      const { data } = await supabase
+    (async () => {
+      const { data: org } = await supabase
         .from("organizations")
         .select("id")
         .eq("slug", slug)
         .single();
-      orgId = data?.id ?? null;
-      return orgId;
-    };
+      if (!org?.id) return;
 
-    const fetchPendingJobs = async () => {
-      try {
-        const id = await resolveOrgId();
-        if (!id) return;
-        const data = await api.dashboard.getStats(id);
-        if (!cancelled) setPendingJobsCount(data.stats.pendingJobs ?? 0);
-      } catch { /* silent */ }
-    };
+      // Initial value from the pre-computed stats row
+      const { data: stats } = await supabase
+        .from("organization_stats")
+        .select("pending_jobs")
+        .eq("organization_id", org.id)
+        .single();
+      if (stats) setPendingJobsCount(stats.pending_jobs ?? 0);
 
-    fetchPendingJobs();
-    const intervalId = setInterval(fetchPendingJobs, 30_000);
-    return () => { cancelled = true; clearInterval(intervalId); };
+      // Live updates — fires whenever a job is enqueued or finishes
+      channel = supabase
+        .channel(`pending-jobs:${org.id}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "organization_stats", filter: `organization_id=eq.${org.id}` },
+          (payload) => {
+            const row = payload.new as { pending_jobs: number };
+            setPendingJobsCount(row.pending_jobs ?? 0);
+          }
+        )
+        .subscribe();
+    })();
+
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [slug]);
 
   // Theme initialization (client-only)
