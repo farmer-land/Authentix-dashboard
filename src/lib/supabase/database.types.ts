@@ -81,7 +81,7 @@ export type Database = {
             foreignKeyName: "app_audit_logs_actor_user_id_fkey"
             columns: ["actor_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -1016,7 +1016,7 @@ export type Database = {
             foreignKeyName: "certificate_generation_jobs_requested_by_user_id_fkey"
             columns: ["requested_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1188,7 +1188,7 @@ export type Database = {
             foreignKeyName: "certificate_template_versions_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -1270,7 +1270,7 @@ export type Database = {
             foreignKeyName: "certificate_templates_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -1561,7 +1561,7 @@ export type Database = {
             foreignKeyName: "certificates_revoked_by_user_id_fkey"
             columns: ["revoked_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -1652,7 +1652,7 @@ export type Database = {
             foreignKeyName: "delivery_email_events_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
-            referencedRelation: "email_contacts"
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
           {
@@ -2149,7 +2149,7 @@ export type Database = {
             foreignKeyName: "email_broadcast_logs_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
-            referencedRelation: "email_contacts"
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -2265,7 +2265,7 @@ export type Database = {
             foreignKeyName: "email_broadcasts_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -2319,7 +2319,7 @@ export type Database = {
           },
         ]
       }
-      email_contact_tags: {
+      contact_tags: {
         Row: {
           contact_id: string
           created_at: string
@@ -2340,12 +2340,12 @@ export type Database = {
             foreignKeyName: "email_contact_tags_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
-            referencedRelation: "email_contacts"
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
       }
-      email_contacts: {
+      contacts: {
         Row: {
           certificates_issued: number
           created_at: string
@@ -2442,7 +2442,7 @@ export type Database = {
           },
         ]
       }
-      email_segment_contacts: {
+      contact_segments: {
         Row: {
           contact_id: string
           segment_id: string
@@ -2460,7 +2460,7 @@ export type Database = {
             foreignKeyName: "email_segment_contacts_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
-            referencedRelation: "email_contacts"
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
           {
@@ -2665,7 +2665,7 @@ export type Database = {
             foreignKeyName: "file_import_jobs_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -2818,7 +2818,7 @@ export type Database = {
             foreignKeyName: "files_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -3127,7 +3127,7 @@ export type Database = {
             foreignKeyName: "organization_invitations_invited_by_user_id_fkey"
             columns: ["invited_by_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -3227,7 +3227,7 @@ export type Database = {
             foreignKeyName: "organization_members_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -3578,7 +3578,7 @@ export type Database = {
           },
         ]
       }
-      profiles: {
+      users: {
         Row: {
           created_at: string
           deleted_at: string | null
@@ -3849,7 +3849,7 @@ export type Database = {
             foreignKeyName: "template_usage_history_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -4139,7 +4139,7 @@ export type Database = {
             foreignKeyName: "template_usage_history_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
