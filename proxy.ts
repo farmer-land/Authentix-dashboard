@@ -26,13 +26,6 @@ function buildCSP(nonce: string): string {
   ].join("; ");
 }
 
-function makeNonceResponse(request: NextRequest, nonce: string): NextResponse {
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", buildCSP(nonce));
-  return response;
-}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -46,7 +39,7 @@ export async function proxy(request: NextRequest) {
   // ── verify subdomain: all public, no auth ────────────────────────────────
   if (isVerifyDomain) {
     if (STATIC_ROUTES.some((r) => pathname.startsWith(r)) || API_ROUTES.some((r) => pathname.startsWith(r))) {
-      return makeNonceResponse(request, nonce);
+      return NextResponse.next();
     }
     const url = request.nextUrl.clone();
     if (pathname === "/") {
@@ -69,13 +62,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(`https://${PUBLIC_HOST}${pathname}${search}`, { status: 301 });
   }
 
-  // Static and API routes: apply CSP but skip auth check
-  if (STATIC_ROUTES.some((r) => pathname.startsWith(r)) || API_ROUTES.some((r) => pathname.startsWith(r))) {
-    return makeNonceResponse(request, nonce);
+  // Static assets: no auth needed, no nonce overhead
+  if (STATIC_ROUTES.some((r) => pathname.startsWith(r))) {
+    return NextResponse.next();
   }
 
-  // ── Supabase session check (also refreshes expired tokens) ───────────────
-  // Must happen before any auth-dependent routing decision.
+  // ── Supabase session check (runs for ALL routes including /api/*) ─────────
+  // getUser() validates the JWT and refreshes if expired.
+  // The access token is then forwarded as x-supabase-access-token so that
+  // Route Handlers (which can't reliably call getSession() on their own) can
+  // read it directly from request headers via headers() from next/headers.
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -85,7 +81,6 @@ export async function proxy(request: NextRequest) {
       cookies: {
         getAll() { return request.cookies.getAll(); },
         setAll(cookiesToSet) {
-          // Mutate request cookies so Server Components see the refreshed token
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
@@ -96,15 +91,28 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // getUser() validates the JWT with Supabase; also triggers token refresh if needed.
   const { data: { user } } = await supabase.auth.getUser();
   const isAuthenticated = !!user;
 
-  // Helper: build a nonce response that carries any refreshed Supabase cookies
+  // Read the session to get the raw access token for forwarding.
+  // getSession() works reliably in proxy/edge context (request.cookies based).
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token ?? null;
+
+  // Helper: build a nonce+token response, copying any refreshed Supabase cookies
   function nonceResponse(): NextResponse {
-    const res = makeNonceResponse(request, nonce);
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    if (accessToken) requestHeaders.set("x-supabase-access-token", accessToken);
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    res.headers.set("Content-Security-Policy", buildCSP(nonce));
     supabaseResponse.cookies.getAll().forEach((cookie) => res.cookies.set(cookie));
     return res;
+  }
+
+  // API routes: apply nonce + token header but skip auth redirect
+  if (API_ROUTES.some((r) => pathname.startsWith(r))) {
+    return nonceResponse();
   }
 
   // /verify/* is always public (old QR codes point here)

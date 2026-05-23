@@ -5,7 +5,7 @@
  * and Route Handlers using HttpOnly cookies.
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 /**
  * Backend API URL - Server-only, never exposed to client
@@ -71,15 +71,24 @@ export class ServerApiError extends Error {
 }
 
 /**
- * Get access token from HttpOnly cookie (server-side)
+ * Get access token — reads from the x-supabase-access-token header that
+ * proxy.ts injects on every request after validating the Supabase session.
+ * Falls back to the legacy auth_access_token cookie for backward compat.
  */
 export async function getServerAccessToken(): Promise<string | null> {
+  try {
+    const headerStore = await headers();
+    const fromHeader = headerStore.get("x-supabase-access-token");
+    if (fromHeader) return fromHeader;
+  } catch {
+    // headers() unavailable outside request context
+  }
   const cookieStore = await cookies();
   return cookieStore.get(AUTH_COOKIES.ACCESS_TOKEN)?.value ?? null;
 }
 
 /**
- * Get refresh token from HttpOnly cookie (server-side)
+ * Get refresh token — only used by the legacy refresh route.
  */
 export async function getServerRefreshToken(): Promise<string | null> {
   const cookieStore = await cookies();
@@ -87,21 +96,13 @@ export async function getServerRefreshToken(): Promise<string | null> {
 }
 
 /**
- * Check if the current session is valid (server-side)
+ * Check if the current request is authenticated.
+ * A non-null access token (from header or cookie) is sufficient —
+ * the backend validates the JWT signature on every call.
  */
 export async function isServerAuthenticated(): Promise<boolean> {
   const token = await getServerAccessToken();
-  if (!token) return false;
-
-  const cookieStore = await cookies();
-  const expiresAt = cookieStore.get(AUTH_COOKIES.EXPIRES_AT)?.value;
-  if (!expiresAt) return false;
-
-  const expiryTime = parseInt(expiresAt, 10);
-  const now = Math.floor(Date.now() / 1000);
-
-  // Consider expired if less than 5 minutes remaining
-  return expiryTime - now > 300;
+  return !!token;
 }
 
 /**

@@ -97,9 +97,12 @@ async function proxyRequest(
   const backendUrl = `${BACKEND_API_URL}${pathSegments}${url.search}`;
   const fallbackUrl = BACKEND_FALLBACK_URL ? `${BACKEND_FALLBACK_URL}${pathSegments}${url.search}` : "";
 
-  // Prefer token forwarded by the browser client (X-Supabase-Token header).
-  // Fall back to server-side cookie session for SSR / non-browser callers.
-  let accessToken: string | null = request.headers.get("X-Supabase-Token");
+  // Token is injected by proxy.ts as x-supabase-access-token on every request.
+  // Fall back to the browser-forwarded X-Supabase-Token header (client-side calls),
+  // then to server-side cookie session as a last resort.
+  let accessToken: string | null =
+    request.headers.get("x-supabase-access-token") ??
+    request.headers.get("X-Supabase-Token");
   if (!accessToken) {
     const supabase = await createSupabaseServerClient();
     const { data: { session } } = await supabase.auth.getSession();
