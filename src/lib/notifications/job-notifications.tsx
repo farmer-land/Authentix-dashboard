@@ -211,31 +211,35 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
     }
   }, []);
 
-  // ── Realtime subscription — replaces the 5-second polling interval ───────────
+  // ── Realtime subscriptions — background_jobs + certificate_generation_jobs ───
   useEffect(() => {
     if (!slug) return;
     const supabase = createSupabaseBrowserClient();
-    const channel = supabase
+
+    const triggerPoll = () => {
+      const pending = jobsRef.current.filter(
+        j => j.status === 'queued' || j.status === 'running',
+      );
+      void Promise.allSettled(pending.map(pollJob));
+    };
+
+    // background_jobs — top-level job record (org_slug column available)
+    const bgChannel = supabase
       .channel(`bg-jobs-${slug}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'background_jobs',
-          filter: `org_slug=eq.${slug}`,
-        },
-        () => {
-          // Re-fetch status for every pending job on any DB change
-          const pending = jobsRef.current.filter(
-            j => j.status === 'queued' || j.status === 'running',
-          );
-          void Promise.allSettled(pending.map(pollJob));
-        },
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `org_slug=eq.${slug}` }, triggerPoll)
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
+    // certificate_generation_jobs — granular progress updates (no org_slug col;
+    // any change triggers a re-poll — RLS ensures we only receive our org's rows)
+    const certChannel = supabase
+      .channel(`cert-gen-jobs-${slug}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'certificate_generation_jobs' }, triggerPoll)
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(bgChannel);
+      void supabase.removeChannel(certChannel);
+    };
   }, [slug, pollJob]);
 
   // ── SSE connections — real-time updates (polling above is the fallback) ───────

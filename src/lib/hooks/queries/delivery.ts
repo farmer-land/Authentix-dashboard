@@ -7,9 +7,11 @@
  * Mutations invalidate relevant query keys automatically.
  */
 
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useOrgSlug } from '@/lib/org';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import type { CreateDeliveryTemplateDto, CreateIntegrationDto, SendEmailDto, TestSendDto, UpdatePlatformDefaultSettingsDto, CreateSegmentDto, CreateBroadcastDto } from '@/lib/api/client';
 
 export const deliveryKeys = {
@@ -339,4 +341,35 @@ export function useEmailEvents(params?: { limit?: number; offset?: number; event
     queryFn: () => api.delivery.listEmailEvents(params),
     staleTime: 10 * 1000,
   });
+}
+
+// ── Realtime — delivery_messages ──────────────────────────────────────────────
+
+/**
+ * Subscribe to delivery_messages Realtime changes and invalidate the relevant
+ * query cache so messages/broadcasts pages update live as emails are sent.
+ * Mount this once in any layout that renders delivery data.
+ */
+export function useDeliveryRealtime() {
+  const slug = useOrgSlug();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!slug) return;
+    const supabase = createSupabaseBrowserClient();
+
+    const channel = supabase
+      .channel(`delivery-messages-${slug}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'delivery_messages' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: deliveryKeys.messages(slug) });
+          void queryClient.invalidateQueries({ queryKey: deliveryKeys.emailEvents(slug) });
+        },
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [slug, queryClient]);
 }
