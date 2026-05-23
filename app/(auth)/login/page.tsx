@@ -78,7 +78,7 @@ function LoginPageContent() {
             <>
               <h1 className="text-2xl font-bold">Check your email</h1>
               <p className="text-sm text-muted-foreground mt-2">
-                We sent a 6-digit code to{" "}
+                We sent an 8-digit code to{" "}
                 <span className="font-medium text-foreground">{activeEmail}</span>
               </p>
             </>
@@ -112,22 +112,22 @@ function LoginPageContent() {
               </div>
             ) : (
               <div className="space-y-2">
-                <Label htmlFor="token" className="text-sm font-medium">
-                  6-digit code
-                </Label>
                 <Input
                   id="token"
                   name="token"
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={6}
-                  placeholder="000000"
+                  maxLength={8}
+                  placeholder="00000000"
                   required
                   autoComplete="one-time-code"
                   autoFocus
                   className="h-10 text-center tracking-[0.4em] text-lg font-mono"
                 />
+                <p className="text-xs text-muted-foreground text-center">
+                  Enter the 8-digit code from your email
+                </p>
               </div>
             )}
 

@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { signupAction, type SignupState } from "./actions";
 
 function SubmitButton() {
@@ -36,6 +38,7 @@ function FormField({
   label,
   type = "text",
   placeholder,
+  defaultValue,
   error,
   required = false,
   hint,
@@ -44,6 +47,7 @@ function FormField({
   label: string;
   type?: string;
   placeholder?: string;
+  defaultValue?: string;
   error?: string;
   required?: boolean;
   hint?: string;
@@ -58,6 +62,7 @@ function FormField({
         name={id}
         type={type}
         placeholder={placeholder}
+        defaultValue={defaultValue}
         required={required}
         className={`h-10 ${error ? "border-destructive" : ""}`}
         aria-invalid={error ? "true" : undefined}
@@ -81,8 +86,10 @@ const initialState: SignupState = {
   success: false,
 };
 
-export default function SignupPage() {
+function SignupPageContent() {
   const [state, formAction] = useActionState(signupAction, initialState);
+  const searchParams = useSearchParams();
+  const prefillEmail = searchParams.get("email") ?? "";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -99,7 +106,9 @@ export default function SignupPage() {
           </div>
           <h1 className="text-2xl font-bold">Create your account</h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Get started with certificate management
+            {prefillEmail
+              ? "No account found — sign up to get started"
+              : "Get started with certificate management"}
           </p>
         </div>
 
@@ -126,6 +135,7 @@ export default function SignupPage() {
               label="Work email"
               type="email"
               placeholder="name@company.com"
+              defaultValue={prefillEmail}
               required
               error={state.fieldErrors.email}
               hint="Personal email domains (gmail, yahoo, etc.) are not allowed"
@@ -166,5 +176,13 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupPageContent />
+    </Suspense>
   );
 }
