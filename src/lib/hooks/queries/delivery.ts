@@ -338,6 +338,5 @@ export function useEmailEvents(params?: { limit?: number; offset?: number; event
     queryKey: deliveryKeys.emailEvents(slug, params as Record<string, unknown>),
     queryFn: () => api.delivery.listEmailEvents(params),
     staleTime: 10 * 1000,
-    refetchInterval: 15 * 1000,
   });
 }
