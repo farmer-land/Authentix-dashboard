@@ -55,11 +55,13 @@ export async function signupAction(
   }
 
   const supabase = await createSupabaseServerClient();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       shouldCreateUser: true,
       data: { full_name: fullName, company_name: companyName },
+      emailRedirectTo: `${appUrl}/auth/callback`,
     },
   });
 
