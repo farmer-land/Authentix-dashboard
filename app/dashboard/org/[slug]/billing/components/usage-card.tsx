@@ -60,9 +60,15 @@ export function UsageCard({ usage, billingProfile, isTrialing, orgBilling }: Usa
         {billingProfile.platform_fee_amount > 0 && (
           <Line
             label="Platform fee"
-            value={isTrialing ? '₹0' : formatINR(usage.platform_fee)}
-            sub={isTrialing ? `Waived during trial (${formatINR(billingProfile.platform_fee_amount)}/mo)` : `1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}`}
-            muted={isTrialing}
+            value={isTrialing ? '₹0' : usage.certificate_count === 0 ? '₹0' : formatINR(usage.platform_fee)}
+            sub={
+              isTrialing
+                ? `Waived during trial (${formatINR(billingProfile.platform_fee_amount)}/mo)`
+                : usage.certificate_count === 0
+                  ? `${formatINR(billingProfile.platform_fee_amount)}/month — charged on first certificate`
+                  : `1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}`
+            }
+            muted={isTrialing || usage.certificate_count === 0}
           />
         )}
         <Line

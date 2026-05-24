@@ -331,13 +331,21 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
       )}
 
       <div className="px-5 py-4 space-y-0 divide-y divide-border/40">
-        {/* Platform fee — only when non-zero and active (non-trial) */}
-        {!isTrialing && usage.platform_fee > 0 && (
+        {/* Platform fee — show whenever the plan has one so users can see the rate.
+            When no certs issued yet this month the charge is ₹0 (applied on first cert). */}
+        {billingProfile.platform_fee_amount > 0 && (
           <BillingLine
             label="Platform fee"
-            value={formatINR(usage.platform_fee)}
-            sub={`1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}${gstInclusive ? ' (incl. GST)' : ''}`}
-            tooltip="Fixed monthly fee charged when at least one certificate is issued. Waived during trial."
+            value={isTrialing ? '₹0' : usage.certificate_count === 0 ? `₹0` : formatINR(usage.platform_fee)}
+            sub={
+              isTrialing
+                ? `Waived during trial (${formatINR(billingProfile.platform_fee_amount)}/month)`
+                : usage.certificate_count === 0
+                  ? `${formatINR(billingProfile.platform_fee_amount)}/month — applied when first certificate is issued`
+                  : `1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}${gstInclusive ? ' (incl. GST)' : ''}`
+            }
+            muted={isTrialing || usage.certificate_count === 0}
+            tooltip="Fixed monthly fee charged when at least one certificate is issued this month. Waived during trial."
           />
         )}
 

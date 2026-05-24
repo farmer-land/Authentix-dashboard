@@ -96,8 +96,12 @@ export function BillingOverview({ organizationId }: BillingOverviewProps) {
             <span className="text-gray-600">
               Platform fee — 1 × {formatCurrency(billingProfile.platform_fee_amount, currency)}
             </span>
-            <span className="font-medium text-gray-900">
-              = {formatCurrency(usage.platform_fee, currency)}
+            <span className={`font-medium ${usage.platform_fee > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+              {usage.platform_fee > 0
+                ? `= ${formatCurrency(usage.platform_fee, currency)}`
+                : usage.certificate_count === 0
+                  ? '= ₹0 (no certs yet)'
+                  : '= ₹0'}
             </span>
           </div>
         )}
