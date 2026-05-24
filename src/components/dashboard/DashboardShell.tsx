@@ -383,9 +383,10 @@ export function DashboardShell({
         .single();
       if (stats) setPendingJobsCount(stats.pending_jobs ?? 0);
 
-      // Live updates — fires whenever a job is enqueued or finishes
+      // Live updates — uses same channel name as AnalyticsDashboardClient so the
+      // Supabase client deduplicates to a single server-side Realtime subscription.
       channel = supabase
-        .channel(`pending-jobs:${org.id}`)
+        .channel(`org-stats:${org.id}`)
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "organization_stats", filter: `organization_id=eq.${org.id}` },
