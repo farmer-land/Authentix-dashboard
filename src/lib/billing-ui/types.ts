@@ -48,11 +48,13 @@ export interface InvoiceLineItem {
 }
 
 export interface BillingProfile {
+  plan_name: string;                    // e.g. "Flex"
   platform_fee_amount: number;          // rupees/month
-  certificate_unit_price: number;       // rupees per cert
-  authentix_email_unit_price: number;   // rupees per email (Authentix sends)
-  own_email_unit_price: number;         // rupees per email (org's own integration)
+  certificate_unit_price: number;       // rupees per cert (inclusive of GST when gst_inclusive=true)
+  broadcast_email_unit_price: number;   // rupees per campaign email via Authentix Resend
+  broadcast_email_quota: number;        // free campaign emails/month included in platform fee
   gst_rate: number;                     // percent, e.g. 18
+  gst_inclusive: boolean;               // when true, all prices already include GST
   currency: string;
 }
 
@@ -60,10 +62,8 @@ export interface CurrentUsage {
   certificate_count: number;
   platform_fee: number;
   usage_cost: number;
-  email_count: number;             // emails sent via Authentix Resend
-  email_cost: number;
-  broadcast_own_smtp_count: number; // emails sent via org's own integration
-  broadcast_own_smtp_cost: number;
+  broadcast_email_count: number;        // billable campaign emails (above free quota)
+  broadcast_email_cost: number;
   subtotal: number;
   gst_amount: number;
   estimated_total: number;

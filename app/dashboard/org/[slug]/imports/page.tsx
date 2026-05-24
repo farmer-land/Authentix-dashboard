@@ -526,8 +526,13 @@ export default function ImportsPage() {
 
   const handleDownload = async (importId: string) => {
     try {
-      const downloadUrl = await api.imports.getDownloadUrl(importId);
-      window.open(downloadUrl, "_blank");
+      const blob = await api.imports.exportCsv(importId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `import-${importId}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       alert("Failed to download file");
     }

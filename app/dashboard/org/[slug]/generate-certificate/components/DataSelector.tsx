@@ -119,7 +119,8 @@ export function DataSelector({
         setProcessingStatus(`Uploading${label}…`);
 
         try {
-          let importJob = await api.imports.create(file, { file_name: file.name });
+          const importJobs = await api.imports.create(file, { file_name: file.name });
+          let importJob = importJobs[0]!;
 
           if (importJob.status !== 'completed' && importJob.status !== 'failed') {
             setProcessingStatus(`Processing${label}…`);

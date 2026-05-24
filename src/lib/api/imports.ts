@@ -60,7 +60,7 @@ export const importsApi = {
       certificate_template_id?: string;
       reusable?: boolean;
     },
-  ): Promise<ImportJob> => {
+  ): Promise<ImportJob[]> => {
     const formData = new FormData();
     // metadata MUST come before file: @fastify/multipart only captures non-file
     // fields that appear before the first file part in the stream.
@@ -73,13 +73,21 @@ export const importsApi = {
       credentials: "include",
     });
 
-    const data = (await response.json()) as ApiResponse<ImportJob>;
+    const data = (await response.json()) as ApiResponse<{ jobs: ImportJob[] }>;
     if (!response.ok || !data.success) {
       const { code, message: errorMsg } = extractApiError(data.error, "Failed to create import job");
       throw new ApiError(code, errorMsg);
     }
 
-    return data.data!;
+    return data.data!.jobs;
+  },
+
+  exportCsv: async (id: string): Promise<Blob> => {
+    const response = await fetch(`${API_BASE_URL}/import-jobs/${id}/export-csv`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new ApiError("INTERNAL_ERROR", "Failed to export CSV");
+    return response.blob();
   },
 
   getData: async (id: string, params?: { page?: number; limit?: number }) => {

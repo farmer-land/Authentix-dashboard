@@ -78,30 +78,23 @@ export function UsageCard({ usage, billingProfile, isTrialing, orgBilling }: Usa
           muted={isTrialing && certsAboveTrial === 0}
         />
 
-        {usage.email_count > 0 && (
+        {(usage.broadcast_email_count ?? 0) > 0 && (
           <Line
-            label="Emails sent"
-            value={formatINR(usage.email_cost)}
-            sub={`${usage.email_count} emails`}
-          />
-        )}
-        {usage.broadcast_own_smtp_count > 0 && (
-          <Line
-            label="Broadcasts (own SMTP)"
-            value={formatINR(usage.broadcast_own_smtp_cost)}
-            sub={`${usage.broadcast_own_smtp_count} sent`}
+            label="Campaign emails"
+            value={formatINR(usage.broadcast_email_cost)}
+            sub={`${usage.broadcast_email_count} billable emails`}
           />
         )}
 
         <div className="pt-1">
           <Line
-            label="Subtotal"
+            label={billingProfile.gst_inclusive ? 'Base amount (excl. GST)' : 'Subtotal'}
             value={isTrialing && usage.certificate_count <= orgBilling.trial_free_certificates_limit
               ? '₹0'
               : formatINR(usage.subtotal)}
           />
           <Line
-            label={`GST (${usage.gst_rate}%)`}
+            label={billingProfile.gst_inclusive ? `GST (${usage.gst_rate}% — included)` : `GST (${usage.gst_rate}%)`}
             value={isTrialing && usage.certificate_count <= orgBilling.trial_free_certificates_limit
               ? '₹0'
               : formatINR(usage.gst_amount)}

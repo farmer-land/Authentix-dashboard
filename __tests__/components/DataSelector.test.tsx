@@ -139,7 +139,7 @@ describe('DataSelector — upload flow', () => {
   });
 
   it('calls api.imports.create with the dropped file', async () => {
-    vi.mocked(api.imports.create).mockResolvedValue(makeImportJob({ status: 'completed' }));
+    vi.mocked(api.imports.create).mockResolvedValue([makeImportJob({ status: 'completed' })]);
     vi.mocked(api.imports.getData).mockResolvedValue(makePreviewResult());
 
     render(<DataSelector {...defaultProps()} />);
@@ -154,7 +154,7 @@ describe('DataSelector — upload flow', () => {
     const onDataImport = vi.fn();
     const rows = [{ Name: 'Alice' }, { Name: 'Bob' }];
 
-    vi.mocked(api.imports.create).mockResolvedValue(makeImportJob({ status: 'completed', total_rows: 2 }));
+    vi.mocked(api.imports.create).mockResolvedValue([makeImportJob({ status: 'completed', total_rows: 2 })]);
     vi.mocked(api.imports.getData).mockResolvedValue(makePreviewResult(rows));
 
     render(<DataSelector {...defaultProps({ onDataImport })} />);
@@ -173,7 +173,7 @@ describe('DataSelector — upload flow', () => {
   it('polls api.imports.get until status is completed', async () => {
     const onDataImport = vi.fn();
 
-    vi.mocked(api.imports.create).mockResolvedValue(makeImportJob({ status: 'queued' }));
+    vi.mocked(api.imports.create).mockResolvedValue([makeImportJob({ status: 'queued' })]);
     vi.mocked(api.imports.get)
       .mockResolvedValueOnce(makeImportJob({ status: 'processing' }))
       .mockResolvedValueOnce(makeImportJob({ status: 'completed' }));
@@ -196,7 +196,7 @@ describe('DataSelector — upload flow', () => {
     const onDataImport = vi.fn();
 
     vi.mocked(api.imports.create).mockResolvedValue(
-      makeImportJob({ status: 'completed', id: 'import-xyz', total_rows: 1 }),
+      [makeImportJob({ status: 'completed', id: 'import-xyz', total_rows: 1 })],
     );
     vi.mocked(api.imports.getData).mockResolvedValue(makePreviewResult([{ Name: 'Test' }]));
 
@@ -251,7 +251,7 @@ describe('DataSelector — error handling', () => {
 
   it('shows job error message when import job status is failed', async () => {
     vi.mocked(api.imports.create).mockResolvedValue(
-      makeImportJob({ status: 'failed', error_message: 'Unsupported file format' }),
+      [makeImportJob({ status: 'failed', error_message: 'Unsupported file format' })],
     );
 
     render(<DataSelector {...defaultProps()} />);
@@ -261,7 +261,7 @@ describe('DataSelector — error handling', () => {
   });
 
   it('shows timeout error when import job never reaches completed within 120 s', async () => {
-    vi.mocked(api.imports.create).mockResolvedValue(makeImportJob({ status: 'queued' }));
+    vi.mocked(api.imports.create).mockResolvedValue([makeImportJob({ status: 'queued' })]);
     vi.mocked(api.imports.get).mockResolvedValue(makeImportJob({ status: 'processing' }));
 
     render(<DataSelector {...defaultProps()} />);
@@ -276,7 +276,7 @@ describe('DataSelector — error handling', () => {
   });
 
   it('shows "empty file" error when the import returns no data rows', async () => {
-    vi.mocked(api.imports.create).mockResolvedValue(makeImportJob({ status: 'completed', total_rows: 0 }));
+    vi.mocked(api.imports.create).mockResolvedValue([makeImportJob({ status: 'completed', total_rows: 0 })]);
     vi.mocked(api.imports.getData).mockResolvedValue(makePreviewResult([]));
 
     render(<DataSelector {...defaultProps()} />);
