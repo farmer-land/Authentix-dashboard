@@ -215,90 +215,13 @@ export default function TemplatesPage() {
 
   const loadTemplates = async () => {
     try {
-      // Use BFF route to fetch templates with previews in single request
-      // This eliminates N+1 pattern by fetching everything server-side
-      const response = await fetch(
-        "/api/templates/with-previews?sort_by=created_at&sort_order=desc",
-        { credentials: "include" }
-      );
-
-      if (!response.ok) {
-        // Try to get error details from response
-        let errorMessage = `Failed to fetch templates (${response.status} ${response.statusText})`;
-        let errorDetails: any = null;
-        
-        try {
-          // Try to read response as text first to see what we got
-          const responseText = await response.text();
-          console.error('[TemplatesPage] Response text:', responseText.substring(0, 500));
-          
-          // Try to parse as JSON
-          try {
-            const errorData = JSON.parse(responseText);
-            errorDetails = errorData;
-            
-            if (errorData.error) {
-              errorMessage = typeof errorData.error === 'string' 
-                ? errorData.error 
-                : errorData.error.message || errorMessage;
-            } else if (errorData.message) {
-              errorMessage = errorData.message;
-            }
-          } catch (parseError) {
-            // Not JSON, use the text as error message
-            errorMessage = responseText || errorMessage;
-          }
-        } catch (readError) {
-          // Can't read response body, use status
-          errorMessage = `${response.status} ${response.statusText}`;
-        }
-        
-        console.error('[TemplatesPage] Fetch error:', {
-          status: response.status,
-          statusText: response.statusText,
-          statusCode: response.status,
-          errorMessage,
-          errorDetails,
-          url: response.url,
-        });
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      
-      // Check if response indicates an error
-      if (!result.success && result.error) {
-        const errorMessage = typeof result.error === 'string' 
-          ? result.error 
-          : result.error.message || 'Failed to fetch templates';
-        console.error('[TemplatesPage] API error:', result.error);
-        throw new Error(errorMessage);
-      }
-      
-      const data = result.data?.items || [];
-      
-      // Debug: Log first template to see what we're getting
-      if (data.length > 0) {
-        console.log('[TemplatesPage] First template received:', {
-          id: data[0].id,
-          title: data[0].title,
-          name: data[0].name,
-          category_name: data[0].category_name,
-          subcategory_name: data[0].subcategory_name,
-          category_id: data[0].category_id,
-          subcategory_id: data[0].subcategory_id,
-        });
-      }
-      
+      const response = await api.templates.list({ sort_by: 'created_at', sort_order: 'desc' });
+      const data = (response as any).items || [];
       setTemplates(data);
-
-      // Load preview URLs in background (non-blocking)
       loadAllPreviews(data);
     } catch (error: unknown) {
       console.error("Error loading templates:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to load templates";
       setTemplates([]);
-      // You might want to show an error toast/alert here
     } finally {
       setLoading(false);
     }
