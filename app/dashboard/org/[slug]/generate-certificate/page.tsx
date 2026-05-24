@@ -332,6 +332,11 @@ export default function GenerateCertificatePage() {
     const isInitialMount = !(window as any).__gencertInitialLoadDone;
     (window as any).__gencertInitialLoadDone = true;
     loadSavedData(isInitialMount);
+
+    // Refetch template list when tab regains focus — catches templates added/deleted in another tab
+    const onVisible = () => { if (document.visibilityState === "visible") loadSavedData(false); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   const loadSavedData = async (isInitialMount = false) => {

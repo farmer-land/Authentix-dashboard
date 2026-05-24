@@ -11,8 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { serverApiRequest, ServerApiError, AUTH_COOKIES } from "@/lib/api/server";
-import { cookies } from "next/headers";
+import { serverApiRequest, ServerApiError, getServerAccessToken } from "@/lib/api/server";
 
 // ============================================================================
 // Types
@@ -112,9 +111,8 @@ function setCache(key: string, data: TemplateListResponse): void {
 // ============================================================================
 
 export async function GET(request: NextRequest) {
-  // Check authentication
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get(AUTH_COOKIES.ACCESS_TOKEN)?.value;
+  // Check authentication — uses Supabase session (handles token refresh) then cookie fallback
+  const accessToken = await getServerAccessToken();
 
   if (!accessToken) {
     return NextResponse.json(
@@ -131,15 +129,16 @@ export async function GET(request: NextRequest) {
     const page = searchParams.get("page") || "1";
     const limit = searchParams.get("limit") || "50";
 
-    // Build cache key (we'd need organization ID for proper cache isolation)
-    // For now, we'll use token hash as isolation
+    // _bust=1 skips the cache — sent by the templates page after upload/delete
+    const bust = searchParams.get("_bust");
+
     const cacheKey = getCacheKey(
       accessToken.slice(-16), // Use last 16 chars as pseudo-organization ID
       `${sortBy}:${sortOrder}:${page}:${limit}`
     );
 
-    // Check cache
-    const cached = getFromCache(cacheKey);
+    // Check cache (skip when client requests a fresh fetch after mutation)
+    const cached = bust ? null : getFromCache(cacheKey);
     if (cached) {
       return NextResponse.json({
         success: true,

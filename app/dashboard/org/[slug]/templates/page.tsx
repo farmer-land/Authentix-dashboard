@@ -73,7 +73,12 @@ export default function TemplatesPage() {
   useEffect(() => {
     loadTemplates();
 
+    // Refetch when the tab becomes visible again — catches changes made in other tabs
+    const onVisible = () => { if (document.visibilityState === "visible") loadTemplates(true); };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       if (droppedFilePreview) URL.revokeObjectURL(droppedFilePreview.url);
     };
@@ -97,17 +102,10 @@ export default function TemplatesPage() {
     noClick: true,
   });
 
-  // Refresh templates after upload (with delay)
+  // Refresh templates after upload (with delay + cache bust)
   const handleUploadSuccess = useCallback(() => {
-    // Clear any existing timeout
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-    }
-
-    // Refresh after a short delay
-    refreshTimeoutRef.current = setTimeout(() => {
-      loadTemplates();
-    }, 1000);
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    refreshTimeoutRef.current = setTimeout(() => loadTemplates(true), 1000);
   }, []);
 
   // Load preview URL for a template (with caching)
@@ -213,10 +211,22 @@ export default function TemplatesPage() {
     setPreviewStates((prev) => ({ ...prev, ...newPreviewStates }));
   }, [loadPreviewUrl]);
 
-  const loadTemplates = async () => {
+  const loadTemplates = async (bust = false) => {
     try {
-      const response = await api.templates.list({ sort_by: 'created_at', sort_order: 'desc' });
-      const data = (response as any).items || [];
+      const url = `/api/templates/with-previews?sort_by=created_at&sort_order=desc${bust ? "&_bust=1" : ""}`;
+      const response = await fetch(url, { credentials: "include" });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`Failed to fetch templates (${response.status}): ${body.slice(0, 200)}`);
+      }
+
+      const result = await response.json();
+      if (!result.success && result.error) {
+        throw new Error(result.error.message || "Failed to fetch templates");
+      }
+
+      const data = result.data?.items || [];
       setTemplates(data);
       loadAllPreviews(data);
     } catch (error: unknown) {
@@ -337,6 +347,9 @@ export default function TemplatesPage() {
       setDeleteDialogOpen(false);
       setTemplateToDelete(null);
       toast.success('Template deleted');
+
+      // Bust BFF cache so next load returns fresh data
+      loadTemplates(true);
     } catch (error: any) {
       console.error('[Templates] Error deleting template:', error);
       toast.error(error.message || 'Failed to delete template');

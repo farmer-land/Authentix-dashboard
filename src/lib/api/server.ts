@@ -71,18 +71,38 @@ export class ServerApiError extends Error {
 }
 
 /**
- * Get access token — reads from the x-supabase-access-token header that
- * proxy.ts injects on every request after validating the Supabase session.
- * Falls back to the legacy auth_access_token cookie for backward compat.
+ * Get access token for server-side use.
+ *
+ * Priority:
+ *   1. x-supabase-access-token request header (injected by the edge proxy for every
+ *      proxied request — always fresh, no refresh needed)
+ *   2. Supabase server client getSession() — handles token refresh automatically
+ *      via the HttpOnly refresh-token cookie (same logic the proxy uses)
+ *   3. Raw auth_access_token cookie — legacy fallback, may be stale
  */
 export async function getServerAccessToken(): Promise<string | null> {
+  // 1. Header injected by the proxy / client
   try {
     const headerStore = await headers();
-    const fromHeader = headerStore.get("x-supabase-access-token");
+    const fromHeader =
+      headerStore.get("x-supabase-access-token") ??
+      headerStore.get("x-supabase-token");
     if (fromHeader) return fromHeader;
   } catch {
     // headers() unavailable outside request context
   }
+
+  // 2. Supabase server client — refreshes expired tokens automatically
+  try {
+    const { createSupabaseServerClient } = await import("@/lib/supabase/server");
+    const supabase = await createSupabaseServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) return session.access_token;
+  } catch {
+    // Supabase server client unavailable
+  }
+
+  // 3. Raw cookie fallback (may be stale but better than nothing)
   const cookieStore = await cookies();
   return cookieStore.get(AUTH_COOKIES.ACCESS_TOKEN)?.value ?? null;
 }
