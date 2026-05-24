@@ -7,10 +7,12 @@ import { useOrg } from "@/lib/org";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Save, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Loader2, AlertCircle, Undo2, Redo2, Users } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { getCachedPreviewUrl, cachePreviewUrl, getPreviewCacheKey } from "@/lib/utils/preview-url-cache";
+import { ComponentLibraryPanel } from "@/components/templates/ComponentLibraryPanel";
+import type { TemplateComponent, ActiveSession } from "@/lib/api/templates";
 
 interface TemplateField {
   id?: string; // Only present after save
@@ -79,9 +81,78 @@ export default function TemplateEditorPage() {
   // Track used field keys for uniqueness
   const usedFieldKeysRef = useRef<Set<string>>(new Set());
   const customFieldCounterRef = useRef(1);
-  
+
   // Debounce timer for field updates
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ── Undo / redo history ────────────────────────────────────────────────────
+  const historyRef = useRef<TemplateField[][]>([]);
+  const historyIndexRef = useRef(-1);
+
+  const pushHistory = useCallback((snapshot: TemplateField[]) => {
+    // Discard any redo future
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push(snapshot.map((f) => ({ ...f })));
+    historyIndexRef.current = historyRef.current.length - 1;
+    // Cap at 50 entries
+    if (historyRef.current.length > 50) {
+      historyRef.current.shift();
+      historyIndexRef.current = historyRef.current.length - 1;
+    }
+  }, []);
+
+  const canUndo = historyIndexRef.current > 0;
+  const canRedo = historyIndexRef.current < historyRef.current.length - 1;
+
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    const snapshot = historyRef.current[historyIndexRef.current];
+    if (snapshot) setFields(snapshot.map((f) => ({ ...f })));
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    const snapshot = historyRef.current[historyIndexRef.current];
+    if (snapshot) setFields(snapshot.map((f) => ({ ...f })));
+  }, []);
+
+  // Cmd+Z / Cmd+Shift+Z keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key === "z" && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+      if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); handleRedo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleUndo, handleRedo]);
+
+  // ── Collaboration presence ─────────────────────────────────────────────────
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
+
+  useEffect(() => {
+    if (!editorData) return;
+    const { id: templateId, } = editorData.template;
+    const { id: versionId } = editorData.version;
+    const sessionId = sessionIdRef.current;
+
+    // Register session
+    api.templates.registerSession(templateId, versionId, sessionId).catch(() => {});
+
+    // Poll active sessions every 15 s + heartbeat
+    const pollSessions = () => {
+      api.templates.getActiveSessions(templateId, versionId)
+        .then((res) => setActiveSessions(res.items.filter((s) => s.session_id !== sessionId)))
+        .catch(() => {});
+      api.templates.heartbeat(templateId, versionId, sessionId).catch(() => {});
+    };
+    pollSessions();
+    const interval = setInterval(pollSessions, 15_000);
+    return () => clearInterval(interval);
+  }, [editorData]);
 
   // Load preview URL for source file
   const loadSourcePreviewUrl = useCallback(async (sourceFile: EditorData["source_file"]): Promise<string | null> => {
@@ -253,6 +324,7 @@ export default function TemplateEditorPage() {
   // Add field
   const handleAddField = useCallback(
     (type: string) => {
+      pushHistory(fields);
       const newField: TemplateField = {
         field_key: generateFieldKey(type),
         label: type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " "),
@@ -266,7 +338,31 @@ export default function TemplateEditorPage() {
       };
       setFields([...fields, newField]);
     },
-    [fields, generateFieldKey]
+    [fields, generateFieldKey, pushHistory]
+  );
+
+  // Insert a component from the library as a new field
+  const handleInsertComponent = useCallback(
+    (component: TemplateComponent) => {
+      pushHistory(fields);
+      const node = component.node as Record<string, unknown>;
+      const pos = (node.position as Record<string, number> | undefined) ?? {};
+      const style = (node.style as Record<string, unknown> | undefined) ?? {};
+      const newField: TemplateField = {
+        field_key: generateFieldKey(`component_${component.name.toLowerCase().replace(/\s+/g, "_")}`),
+        label: component.name,
+        type: (node.type as string | undefined) ?? "text",
+        page_number: 1,
+        x: (pos.x as number | undefined) ?? 100,
+        y: (pos.y as number | undefined) ?? 100,
+        width: (pos.width as number | undefined) ?? 200,
+        height: (pos.height as number | undefined) ?? 40,
+        style: { ...style, _component_id: component.id },
+        required: false,
+      };
+      setFields([...fields, newField]);
+    },
+    [fields, generateFieldKey, pushHistory]
   );
 
   // Update field (with debouncing for position updates)
@@ -384,13 +480,14 @@ export default function TemplateEditorPage() {
   // Delete field
   const handleDeleteField = useCallback(
     (index: number) => {
+      pushHistory(fields);
       const field = fields[index];
       if (field) {
         usedFieldKeysRef.current.delete(field.field_key);
       }
       setFields(fields.filter((_, i) => i !== index));
     },
-    [fields]
+    [fields, pushHistory]
   );
 
   if (loading) {
@@ -473,6 +570,36 @@ export default function TemplateEditorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Presence avatars */}
+            {activeSessions.length > 0 && (
+              <div className="flex items-center gap-1 mr-1 text-xs text-muted-foreground">
+                <Users className="h-3.5 w-3.5" />
+                <span>{activeSessions.length} editing</span>
+              </div>
+            )}
+
+            {/* Undo / Redo */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="Undo (⌘Z)"
+              className="h-8 w-8 p-0"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title="Redo (⌘⇧Z)"
+              className="h-8 w-8 p-0"
+            >
+              <Redo2 className="h-4 w-4" />
+            </Button>
+
             {saveStatus === "saving" && (
               <span className="text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -725,6 +852,8 @@ export default function TemplateEditorPage() {
                 ))
               )}
             </div>
+
+            <ComponentLibraryPanel onInsert={handleInsertComponent} className="pt-2 border-t" />
           </div>
         </div>
       </div>

@@ -34,6 +34,25 @@ export interface RecentGeneratedTemplate {
   fields: TemplateField[];
 }
 
+export interface TemplateComponent {
+  id: string;
+  organization_id: string;
+  name: string;
+  description?: string;
+  node: Record<string, unknown>;
+  variants: Record<string, Record<string, unknown>>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActiveSession {
+  session_id: string;
+  user_id: string | null;
+  version_id: string;
+  started_at: string;
+  last_seen: string;
+}
+
 export interface InProgressTemplate {
   template_id: string;
   template_title: string;
@@ -370,6 +389,71 @@ export const templatesApi = {
       recent_generated: RecentGeneratedTemplate[];
       in_progress: InProgressTemplate[];
     }>(`/templates/recent-usage${queryParams}`);
+    return response.data!;
+  },
+
+  // ── Component library ────────────────────────────────────────────────────────
+
+  listComponents: async (): Promise<{ items: TemplateComponent[]; total: number }> => {
+    const response = await apiRequest<{ items: TemplateComponent[]; total: number }>(
+      `/templates/components`,
+    );
+    return response.data!;
+  },
+
+  getComponent: async (id: string): Promise<TemplateComponent> => {
+    const response = await apiRequest<TemplateComponent>(`/templates/components/${id}`);
+    return response.data!;
+  },
+
+  createComponent: async (dto: {
+    name: string;
+    description?: string;
+    node: Record<string, unknown>;
+    variants?: Record<string, Record<string, unknown>>;
+  }): Promise<TemplateComponent> => {
+    const response = await apiRequest<TemplateComponent>(`/templates/components`, {
+      method: "POST",
+      body: JSON.stringify(dto),
+    });
+    return response.data!;
+  },
+
+  updateComponent: async (
+    id: string,
+    dto: Partial<{ name: string; description: string; node: Record<string, unknown>; variants: Record<string, Record<string, unknown>> }>,
+  ): Promise<TemplateComponent> => {
+    const response = await apiRequest<TemplateComponent>(`/templates/components/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(dto),
+    });
+    return response.data!;
+  },
+
+  deleteComponent: async (id: string): Promise<void> => {
+    await apiRequest(`/templates/components/${id}`, { method: "DELETE" });
+  },
+
+  // ── Collaboration sessions ────────────────────────────────────────────────────
+
+  registerSession: async (templateId: string, versionId: string, sessionId: string): Promise<void> => {
+    await apiRequest(`/templates/${templateId}/versions/${versionId}/sessions`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+  },
+
+  heartbeat: async (templateId: string, versionId: string, sessionId: string): Promise<void> => {
+    await apiRequest(`/templates/${templateId}/versions/${versionId}/sessions/${sessionId}/heartbeat`, {
+      method: "PUT",
+      body: JSON.stringify({}),
+    });
+  },
+
+  getActiveSessions: async (templateId: string, versionId: string): Promise<{ items: ActiveSession[]; total: number }> => {
+    const response = await apiRequest<{ items: ActiveSession[]; total: number }>(
+      `/templates/${templateId}/versions/${versionId}/sessions`,
+    );
     return response.data!;
   },
 
