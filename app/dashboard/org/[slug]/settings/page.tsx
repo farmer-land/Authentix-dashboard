@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Key, Mail, LayoutList } from "lucide-react";
+import { Building2, Key, Mail, LayoutList, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useOrg } from "@/lib/org";
@@ -33,6 +33,18 @@ export default function SettingsPage() {
       title: "Email Delivery",
       description: "Configure email integration and delivery templates for certificates",
       href: orgPath("/settings/delivery"),
+    },
+    {
+      icon: Key,
+      title: "API Keys",
+      description: "Create and manage API keys for external integrations and the MCP server",
+      href: orgPath("/settings/api-keys"),
+    },
+    {
+      icon: Webhook,
+      title: "Webhooks",
+      description: "Configure outbound webhooks to receive real-time event notifications",
+      href: orgPath("/settings/webhooks"),
     },
   ];
 

@@ -64,6 +64,14 @@ export type {
   CampaignEmailType,
   CreateCampaignDto,
   UpdateCampaignDto,
+  ApiKey,
+  ApiKeyScope,
+  CreateApiKeyDto,
+  WebhookEndpoint,
+  WebhookEventType,
+  CreateWebhookEndpointDto,
+  WebhookDeliveryLog,
+  WebhookDeliveryStatus,
 } from "./delivery";
 
 // ── Domain API modules ────────────────────────────────────────────────────────

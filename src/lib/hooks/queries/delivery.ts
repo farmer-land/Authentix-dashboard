@@ -12,7 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useOrgSlug } from '@/lib/org';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
-import type { CreateDeliveryTemplateDto, CreateIntegrationDto, SendEmailDto, TestSendDto, UpdatePlatformDefaultSettingsDto, CreateSegmentDto, CreateBroadcastDto, CreateCampaignDto, UpdateCampaignDto, CampaignStatus } from '@/lib/api/client';
+import type { CreateDeliveryTemplateDto, CreateIntegrationDto, SendEmailDto, TestSendDto, UpdatePlatformDefaultSettingsDto, CreateSegmentDto, CreateBroadcastDto, CreateCampaignDto, UpdateCampaignDto, CampaignStatus, CreateApiKeyDto, CreateWebhookEndpointDto, WebhookEventType } from '@/lib/api/client';
 
 export const deliveryKeys = {
   all: (slug: string) => ['org', slug, 'delivery'] as const,
@@ -429,3 +429,93 @@ export function useCampaignRuns(campaignId: string | null | undefined) {
   });
 }
 
+
+// ── API Keys ──────────────────────────────────────────────────────────────────
+
+export function useApiKeys() {
+  const slug = useOrgSlug();
+  const query = useQuery({
+    queryKey: [...deliveryKeys.all(slug), 'api-keys'] as const,
+    queryFn: () => api.delivery.listApiKeys(),
+    staleTime: 2 * 60 * 1000,
+  });
+  return {
+    apiKeys: query.data ?? [],
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    refetch: query.refetch,
+  };
+}
+
+export function useCreateApiKey() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: (dto: CreateApiKeyDto) => api.delivery.createApiKey(dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...deliveryKeys.all(slug), 'api-keys'] }),
+  });
+}
+
+export function useRevokeApiKey() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: (id: string) => api.delivery.revokeApiKey(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...deliveryKeys.all(slug), 'api-keys'] }),
+  });
+}
+
+// ── Customer Webhooks ─────────────────────────────────────────────────────────
+
+export function useWebhookEndpoints() {
+  const slug = useOrgSlug();
+  const query = useQuery({
+    queryKey: [...deliveryKeys.all(slug), 'webhook-endpoints'] as const,
+    queryFn: () => api.delivery.listWebhookEndpoints(),
+    staleTime: 30 * 1000,
+  });
+  return {
+    endpoints: query.data ?? [],
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    refetch: query.refetch,
+  };
+}
+
+export function useCreateWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: (dto: CreateWebhookEndpointDto) => api.delivery.createWebhookEndpoint(dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...deliveryKeys.all(slug), 'webhook-endpoints'] }),
+  });
+}
+
+export function useUpdateWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: Partial<CreateWebhookEndpointDto> & { is_active?: boolean; event_types?: WebhookEventType[] } }) =>
+      api.delivery.updateWebhookEndpoint(id, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...deliveryKeys.all(slug), 'webhook-endpoints'] }),
+  });
+}
+
+export function useDeleteWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: (id: string) => api.delivery.deleteWebhookEndpoint(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...deliveryKeys.all(slug), 'webhook-endpoints'] }),
+  });
+}
+
+export function useWebhookDeliveryLogs(endpointId: string | null | undefined) {
+  const slug = useOrgSlug();
+  return useQuery({
+    queryKey: [...deliveryKeys.all(slug), 'webhook-logs', endpointId ?? ''] as const,
+    queryFn: () => api.delivery.listWebhookDeliveryLogs(endpointId!),
+    enabled: !!endpointId,
+    staleTime: 10 * 1000,
+  });
+}
