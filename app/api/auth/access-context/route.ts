@@ -1,4 +1,6 @@
+export const runtime = 'edge';
 import { NextResponse } from "next/server";
+
 import { serverApiRequest, isServerAuthenticated } from "@/lib/api/server";
 import { AccessContextResponseSchema } from "@/lib/api/schemas/auth";
 

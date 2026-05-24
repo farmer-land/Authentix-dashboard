@@ -11,7 +11,16 @@
  * - Hop-by-hop header stripping
  * - Request timeout/abort handling
  * - Sanitized error responses
+ *
+ * Edge Runtime: deployed to ALL Vercel edge regions globally (including Mumbai
+ * for Indian users), not just the project's serverless region (US East on free
+ * plan). This drops proxy latency from ~200ms (US East) to ~10ms (Mumbai edge)
+ * for Indian users, with a direct hop to Railway Singapore (~50ms) after that.
  */
+
+// Deploy to Vercel Edge Network — runs at the nearest edge node to the user.
+// For India-only users this means Mumbai edge (~10ms) instead of US East (~200ms).
+export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
