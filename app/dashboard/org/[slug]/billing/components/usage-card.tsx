@@ -57,24 +57,27 @@ export function UsageCard({ usage, billingProfile, isTrialing, orgBilling }: Usa
       )}
 
       <div>
-        <Line
-          label="Platform fee"
-          value={isTrialing ? '₹0' : formatINR(usage.platform_fee)}
-          sub={isTrialing ? `Waived during trial (₹${billingProfile.platform_fee_amount.toLocaleString('en-IN')}/mo)` : '/month'}
-          muted={isTrialing}
-        />
+        {billingProfile.platform_fee_amount > 0 && (
+          <Line
+            label="Platform fee"
+            value={isTrialing ? '₹0' : formatINR(usage.platform_fee)}
+            sub={isTrialing ? `Waived during trial (${formatINR(billingProfile.platform_fee_amount)}/mo)` : `1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}`}
+            muted={isTrialing}
+          />
+        )}
         <Line
           label="Certificates issued"
           value={String(usage.certificate_count)}
           sub={isTrialing
             ? `${Math.min(usage.certificate_count, orgBilling.trial_free_certificates_limit)} free · ${certsAboveTrial} billable`
-            : `× ${formatINR(billingProfile.certificate_unit_price)} each`}
-          muted={false}
+            : undefined}
         />
         <Line
           label="Certificate charges"
           value={isTrialing && certsAboveTrial === 0 ? '₹0' : formatINR(usage.usage_cost)}
-          sub={isTrialing && certsAboveTrial === 0 ? 'Covered by trial' : undefined}
+          sub={isTrialing && certsAboveTrial === 0
+            ? 'Covered by trial'
+            : `${isTrialing ? certsAboveTrial : usage.certificate_count} × ${formatINR(billingProfile.certificate_unit_price)} = ${formatINR(usage.usage_cost)}`}
           muted={isTrialing && certsAboveTrial === 0}
         />
 
@@ -82,7 +85,7 @@ export function UsageCard({ usage, billingProfile, isTrialing, orgBilling }: Usa
           <Line
             label="Campaign emails"
             value={formatINR(usage.broadcast_email_cost)}
-            sub={`${usage.broadcast_email_count} billable emails`}
+            sub={`${usage.broadcast_email_count} × ${formatINR(billingProfile.broadcast_email_unit_price)} = ${formatINR(usage.broadcast_email_cost)}`}
           />
         )}
 

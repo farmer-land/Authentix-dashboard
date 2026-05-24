@@ -91,31 +91,33 @@ export function BillingOverview({ organizationId }: BillingOverviewProps) {
 
       {/* Cost breakdown */}
       <div className="border-t border-gray-200 pt-4 space-y-2.5">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">
-            Platform fee — {billingProfile.plan_name}
-          </span>
-          <span className="font-medium text-gray-900">
-            {formatCurrency(usage.platform_fee, currency)}
-          </span>
-        </div>
+        {billingProfile.platform_fee_amount > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">
+              Platform fee — 1 × {formatCurrency(billingProfile.platform_fee_amount, currency)}
+            </span>
+            <span className="font-medium text-gray-900">
+              = {formatCurrency(usage.platform_fee, currency)}
+            </span>
+          </div>
+        )}
 
         <div className="flex justify-between text-sm">
           <span className="text-gray-600">
-            Certificates ({usage.certificate_count.toLocaleString()} × {formatCurrency(billingProfile.certificate_unit_price, currency)})
+            Certificates — {usage.certificate_count.toLocaleString()} × {formatCurrency(billingProfile.certificate_unit_price, currency)}
           </span>
           <span className="font-medium text-gray-900">
-            {formatCurrency(usage.usage_cost, currency)}
+            = {formatCurrency(usage.usage_cost, currency)}
           </span>
         </div>
 
         {usage.broadcast_email_count > 0 && (
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">
-              Campaign emails ({usage.broadcast_email_count.toLocaleString()} billable × {formatCurrency(billingProfile.broadcast_email_unit_price, currency)})
+              Campaign emails — {usage.broadcast_email_count.toLocaleString()} × {formatCurrency(billingProfile.broadcast_email_unit_price, currency)}
             </span>
             <span className="font-medium text-gray-900">
-              {formatCurrency(usage.broadcast_email_cost, currency)}
+              = {formatCurrency(usage.broadcast_email_cost, currency)}
             </span>
           </div>
         )}

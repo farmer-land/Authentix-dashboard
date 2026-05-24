@@ -331,13 +331,13 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
       )}
 
       <div className="px-5 py-4 space-y-0 divide-y divide-border/40">
-        {/* Platform fee row — only shown for active (non-trial) orgs with a platform fee */}
+        {/* Platform fee — only when non-zero and active (non-trial) */}
         {!isTrialing && usage.platform_fee > 0 && (
           <BillingLine
             label="Platform fee"
             value={formatINR(usage.platform_fee)}
-            sub={gstInclusive ? 'Monthly base fee · incl. GST' : 'Monthly base fee · charged only when ≥1 certificate is issued'}
-            tooltip={`A fixed monthly fee of ${formatINR(billingProfile.platform_fee_amount)} applied when at least one certificate is issued during the billing period. Waived during trial.`}
+            sub={`1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}${gstInclusive ? ' (incl. GST)' : ''}`}
+            tooltip="Fixed monthly fee charged when at least one certificate is issued. Waived during trial."
           />
         )}
 
@@ -345,26 +345,29 @@ function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFre
           label="Certificates issued"
           value={String(usage.certificate_count)}
           sub={isTrialing
-            ? `${Math.min(usage.certificate_count, orgBilling.trial_free_certificates_limit)} free · ${certsAboveTrial} billable @ ${formatINR(billingProfile.certificate_unit_price)} each${gstInclusive ? ' incl. GST' : ''}`
-            : `${formatINR(billingProfile.certificate_unit_price)} per certificate${gstInclusive ? ' (incl. GST)' : ''}`}
+            ? `${Math.min(usage.certificate_count, orgBilling.trial_free_certificates_limit)} free · ${certsAboveTrial} billable`
+            : `${formatINR(billingProfile.certificate_unit_price)} each${gstInclusive ? ' (incl. GST)' : ''}`}
           tooltip={isTrialing
-            ? `Your first ${orgBilling.trial_free_certificates_limit} certificates are free. Certificates beyond that are charged at ${formatINR(billingProfile.certificate_unit_price)} each${gstInclusive ? ' (GST inclusive)' : ''}.`
-            : `Each certificate generated this billing period costs ${formatINR(billingProfile.certificate_unit_price)}${gstInclusive ? ' including GST' : ''}.`}
+            ? `Your first ${orgBilling.trial_free_certificates_limit} certificates are free. Beyond that, charged at ${formatINR(billingProfile.certificate_unit_price)} each.`
+            : `Each certificate costs ${formatINR(billingProfile.certificate_unit_price)}${gstInclusive ? ' including GST' : ''}.`}
         />
+
         <BillingLine
           label="Certificate charges"
           value={isTrialing && certsAboveTrial === 0 ? '₹0' : formatINR(usage.usage_cost)}
-          sub={isTrialing && certsAboveTrial === 0 ? 'Covered by trial allowance' : `${isTrialing ? certsAboveTrial : usage.certificate_count} billable cert${(isTrialing ? certsAboveTrial : usage.certificate_count) !== 1 ? 's' : ''} × ${formatINR(billingProfile.certificate_unit_price)}`}
+          sub={isTrialing && certsAboveTrial === 0
+            ? 'Covered by trial allowance'
+            : `${isTrialing ? certsAboveTrial : usage.certificate_count} × ${formatINR(billingProfile.certificate_unit_price)} = ${formatINR(usage.usage_cost)}`}
           muted={isTrialing && certsAboveTrial === 0}
         />
 
-        {/* Campaign email row — only shown when billable emails exist */}
+        {/* Campaign emails — only shown when there are billable emails above the free quota */}
         {(usage.broadcast_email_count ?? 0) > 0 && (
           <BillingLine
-            label="Campaign emails — Authentix"
+            label="Campaign emails"
             value={formatINR(usage.broadcast_email_cost)}
-            sub={`${(usage.broadcast_email_count).toLocaleString('en-IN')} billable email${usage.broadcast_email_count !== 1 ? 's' : ''} × ${formatINR(billingProfile.broadcast_email_unit_price)}${gstInclusive ? ' incl. GST' : ''}`}
-            tooltip={`Campaign emails sent via Authentix. First ${billingProfile.broadcast_email_quota.toLocaleString()} per month are free. Charged at ${formatINR(billingProfile.broadcast_email_unit_price)}/email beyond that. Your own Resend/SMTP integration is always ₹0.`}
+            sub={`${usage.broadcast_email_count.toLocaleString('en-IN')} × ${formatINR(billingProfile.broadcast_email_unit_price)} = ${formatINR(usage.broadcast_email_cost)}`}
+            tooltip={`First ${billingProfile.broadcast_email_quota.toLocaleString()} emails/month are free. ${formatINR(billingProfile.broadcast_email_unit_price)}/email beyond that. Own Resend/SMTP is always ₹0.`}
           />
         )}
 
