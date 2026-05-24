@@ -69,44 +69,6 @@ interface TemplateListResponse {
 }
 
 // ============================================================================
-// Simple In-Memory Cache (burst protection)
-// ============================================================================
-
-interface CacheEntry {
-  data: TemplateListResponse;
-  timestamp: number;
-}
-
-const cache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 10_000; // 10 seconds
-
-function getCacheKey(organizationId: string, params: string): string {
-  return `${organizationId}:${params}`;
-}
-
-function getFromCache(key: string): TemplateListResponse | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-
-  const age = Date.now() - entry.timestamp;
-  if (age > CACHE_TTL_MS) {
-    cache.delete(key);
-    return null;
-  }
-
-  return entry.data;
-}
-
-function setCache(key: string, data: TemplateListResponse): void {
-  // Limit cache size
-  if (cache.size > 100) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey) cache.delete(oldestKey);
-  }
-  cache.set(key, { data, timestamp: Date.now() });
-}
-
-// ============================================================================
 // Handler
 // ============================================================================
 
@@ -128,24 +90,6 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get("sort_order") || "desc";
     const page = searchParams.get("page") || "1";
     const limit = searchParams.get("limit") || "50";
-
-    // _bust=1 skips the cache — sent by the templates page after upload/delete
-    const bust = searchParams.get("_bust");
-
-    const cacheKey = getCacheKey(
-      accessToken.slice(-16), // Use last 16 chars as pseudo-organization ID
-      `${sortBy}:${sortOrder}:${page}:${limit}`
-    );
-
-    // Check cache (skip when client requests a fresh fetch after mutation)
-    const cached = bust ? null : getFromCache(cacheKey);
-    if (cached) {
-      return NextResponse.json({
-        success: true,
-        data: cached,
-        cached: true,
-      });
-    }
 
     // Fetch templates list — backend includes preview_url and category/subcategory names via JOINs
     let templatesResponse;
@@ -295,9 +239,6 @@ export async function GET(request: NextRequest) {
       items: templatesWithPreviews,
       pagination: templatesResponse.data.pagination,
     };
-
-    // Update cache
-    setCache(cacheKey, result);
 
     return NextResponse.json({
       success: true,
