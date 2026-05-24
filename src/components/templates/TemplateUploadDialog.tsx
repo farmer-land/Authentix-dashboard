@@ -135,10 +135,9 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
       return;
     }
 
-    // Valid MIME types that match backend allowlist
+    // Certificate templates are image-only. PDFs can only be used as email attachments.
     // Note: image/jpg is not standard - browsers report image/jpeg
     const validTypes = [
-      'application/pdf',
       'image/png',
       'image/jpeg',
       'image/webp',
@@ -146,8 +145,6 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
       'image/avif',
       'image/heic',
       'image/heif',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     ];
 
     // HEIC/HEIF files often report empty MIME type on non-Apple browsers
@@ -162,7 +159,7 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
       }
       setError("");
     } else {
-      setError("Please upload a valid file (PDF, PNG, JPG, WebP, SVG, AVIF, HEIC, DOCX, PPTX)");
+      setError("Please upload an image file (PNG, JPG, WebP, SVG, AVIF, HEIC, HEIF). PDFs can only be used as email attachments.");
     }
   };
 
@@ -296,7 +293,6 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
 
   const getFileIcon = () => {
     if (!file) return <Upload className="h-6 w-6" />;
-    if (file.type === 'application/pdf') return <FileType className="h-6 w-6" />;
     if (file.type.startsWith('image/')) return <FileImage className="h-6 w-6" />;
     return <FileIcon className="h-6 w-6" />;
   };
@@ -356,7 +352,7 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
               <input
                 id="file-upload"
                 type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.webp,.svg,.avif,.heic,.heif,.docx,.pptx"
+                accept=".png,.jpg,.jpeg,.webp,.svg,.avif,.heic,.heif"
                 onChange={handleFileChange}
                 className="hidden"
                 disabled={uploading}
@@ -400,7 +396,7 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Supports: PDF, PNG, JPG, WebP, SVG, AVIF, HEIC/HEIF, DOCX, PPTX (Max 50MB)
+                    Image formats: PNG, JPG, WebP, SVG, AVIF, HEIC/HEIF (Max 50MB)
                   </p>
                 </div>
               )}

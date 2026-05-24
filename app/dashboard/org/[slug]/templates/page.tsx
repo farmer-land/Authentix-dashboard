@@ -85,7 +85,8 @@ export default function TemplatesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Page-level drag-and-drop: accept image/pdf anywhere on the page
+  // Page-level drag-and-drop: images only (PNG, JPG, WEBP, AVIF, SVG, HEIC, HEIF)
+  // PDFs are email attachments only and cannot be used as certificate templates.
   const { getRootProps: getPageRootProps, getInputProps: getPageInputProps } = useDropzone({
     onDrop: (acceptedFiles) => {
       const f = acceptedFiles[0];
@@ -97,7 +98,15 @@ export default function TemplatesPage() {
     },
     onDragEnter: () => setIsDragOver(true),
     onDragLeave: () => setIsDragOver(false),
-    accept: { 'image/jpeg': [], 'image/png': [], 'image/webp': [], 'application/pdf': [] },
+    accept: {
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
+      'image/avif': ['.avif'],
+      'image/svg+xml': ['.svg'],
+      'image/heic': ['.heic'],
+      'image/heif': ['.heif'],
+    },
     maxFiles: 1,
     noClick: true,
   });

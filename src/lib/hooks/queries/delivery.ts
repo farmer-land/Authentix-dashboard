@@ -12,7 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useOrgSlug } from '@/lib/org';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
-import type { CreateDeliveryTemplateDto, CreateIntegrationDto, SendEmailDto, TestSendDto, UpdatePlatformDefaultSettingsDto, CreateSegmentDto, CreateBroadcastDto } from '@/lib/api/client';
+import type { CreateDeliveryTemplateDto, CreateIntegrationDto, SendEmailDto, TestSendDto, UpdatePlatformDefaultSettingsDto, CreateSegmentDto, CreateBroadcastDto, CreateCampaignDto, UpdateCampaignDto, CampaignStatus } from '@/lib/api/client';
 
 export const deliveryKeys = {
   all: (slug: string) => ['org', slug, 'delivery'] as const,
@@ -25,6 +25,9 @@ export const deliveryKeys = {
   segments: (slug: string) => [...deliveryKeys.all(slug), 'segments'] as const,
   broadcasts: (slug: string) => [...deliveryKeys.all(slug), 'broadcasts'] as const,
   emailEvents: (slug: string, params?: Record<string, unknown>) => [...deliveryKeys.all(slug), 'email-events', params ?? {}] as const,
+  campaigns: (slug: string, params?: Record<string, unknown>) => [...deliveryKeys.all(slug), 'campaigns', params ?? {}] as const,
+  campaign: (slug: string, id: string) => [...deliveryKeys.all(slug), 'campaign', id] as const,
+  campaignRuns: (slug: string, campaignId: string) => [...deliveryKeys.all(slug), 'campaign-runs', campaignId] as const,
 };
 
 // ── Integrations ──────────────────────────────────────────────────────────────
@@ -339,6 +342,89 @@ export function useEmailEvents(params?: { limit?: number; offset?: number; event
   return useQuery({
     queryKey: deliveryKeys.emailEvents(slug, params as Record<string, unknown>),
     queryFn: () => api.delivery.listEmailEvents(params),
+    staleTime: 10 * 1000,
+  });
+}
+
+// ── Campaigns ─────────────────────────────────────────────────────────────────
+
+export function useCampaigns(params?: { limit?: number; offset?: number; status?: CampaignStatus; channel?: 'email' | 'whatsapp' }) {
+  const slug = useOrgSlug();
+  const query = useQuery({
+    queryKey: deliveryKeys.campaigns(slug, params as Record<string, unknown>),
+    queryFn: () => api.delivery.listCampaigns(params),
+    staleTime: 20 * 1000,
+  });
+  return {
+    campaigns: query.data?.campaigns ?? [],
+    total: query.data?.total ?? 0,
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    refetch: query.refetch,
+  };
+}
+
+export function useCampaign(id: string | null | undefined) {
+  const slug = useOrgSlug();
+  return useQuery({
+    queryKey: deliveryKeys.campaign(slug, id ?? ''),
+    queryFn: () => api.delivery.getCampaign(id!),
+    enabled: !!id,
+    staleTime: 20 * 1000,
+  });
+}
+
+export function useCreateCampaign() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: (dto: CreateCampaignDto) => api.delivery.createCampaign(dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: deliveryKeys.campaigns(slug) }),
+  });
+}
+
+export function useUpdateCampaign() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: UpdateCampaignDto }) =>
+      api.delivery.updateCampaign(id, dto),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: deliveryKeys.campaigns(slug) });
+      queryClient.invalidateQueries({ queryKey: deliveryKeys.campaign(slug, id) });
+    },
+  });
+}
+
+export function useDeleteCampaign() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: (id: string) => api.delivery.deleteCampaign(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: deliveryKeys.campaigns(slug) }),
+  });
+}
+
+export function useSendCampaign() {
+  const queryClient = useQueryClient();
+  const slug = useOrgSlug();
+  return useMutation({
+    mutationFn: ({ id, scheduledAt }: { id: string; scheduledAt?: string }) =>
+      api.delivery.sendCampaign(id, scheduledAt),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: deliveryKeys.campaigns(slug) });
+      queryClient.invalidateQueries({ queryKey: deliveryKeys.campaign(slug, id) });
+      queryClient.invalidateQueries({ queryKey: deliveryKeys.campaignRuns(slug, id) });
+    },
+  });
+}
+
+export function useCampaignRuns(campaignId: string | null | undefined) {
+  const slug = useOrgSlug();
+  return useQuery({
+    queryKey: deliveryKeys.campaignRuns(slug, campaignId ?? ''),
+    queryFn: () => api.delivery.listCampaignRuns(campaignId!),
+    enabled: !!campaignId,
     staleTime: 10 * 1000,
   });
 }

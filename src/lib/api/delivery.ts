@@ -235,6 +235,91 @@ export interface DeliveryEmailEvent {
   received_at: string;
 }
 
+// ── Campaigns ─────────────────────────────────────────────────────────────────
+
+export type CampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "cancelled" | "failed";
+export type CampaignRunStatus = "queued" | "processing" | "completed" | "partial" | "failed";
+export type CampaignAudienceType = "all_contacts" | "segment" | "manual_list" | "generation_job";
+export type CampaignEmailType = "marketing" | "transactional";
+
+export interface Campaign {
+  id: string;
+  organization_id: string;
+  name: string;
+  channel: "email" | "whatsapp";
+  status: CampaignStatus;
+  subject: string | null;
+  template_id: string | null;
+  body_override: string | null;
+  audience_type: CampaignAudienceType;
+  audience_ref: string | null;
+  scheduled_at: string | null;
+  integration_id: string | null;
+  from_name: string | null;
+  from_email: string | null;
+  reply_to: string | null;
+  email_type: CampaignEmailType;
+  total_recipients: number;
+  sent_count: number;
+  delivered_count: number;
+  opened_count: number;
+  clicked_count: number;
+  failed_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface CampaignRun {
+  id: string;
+  campaign_id: string;
+  organization_id: string;
+  status: CampaignRunStatus;
+  background_job_id: string | null;
+  total_recipients: number;
+  sent_count: number;
+  failed_count: number;
+  skipped_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error_summary: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface CreateCampaignDto {
+  name: string;
+  channel: "email" | "whatsapp";
+  subject?: string;
+  template_id?: string | null;
+  body_override?: string;
+  audience_type?: CampaignAudienceType;
+  audience_ref?: string | null;
+  scheduled_at?: string | null;
+  integration_id?: string | null;
+  from_name?: string;
+  from_email?: string;
+  reply_to?: string;
+  email_type?: CampaignEmailType;
+  inline_recipients?: Array<{ email: string; name?: string; [key: string]: unknown }>;
+}
+
+export interface UpdateCampaignDto {
+  name?: string;
+  subject?: string;
+  template_id?: string | null;
+  body_override?: string;
+  audience_type?: CampaignAudienceType;
+  audience_ref?: string | null;
+  scheduled_at?: string | null;
+  integration_id?: string | null;
+  from_name?: string;
+  from_email?: string;
+  reply_to?: string;
+  email_type?: CampaignEmailType;
+  inline_recipients?: Array<{ email: string; name?: string; [key: string]: unknown }>;
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 export const deliveryApi = {
@@ -516,6 +601,63 @@ export const deliveryApi = {
     const response = await apiRequest<{ events: DeliveryEmailEvent[]; total: number }>(
       `/delivery/events${qs.toString() ? `?${qs}` : ""}`,
     );
+    return response.data!;
+  },
+
+  // ── Campaigns ─────────────────────────────────────────────────────────────────
+
+  listCampaigns: async (params?: {
+    limit?: number;
+    offset?: number;
+    status?: CampaignStatus;
+    channel?: "email" | "whatsapp";
+  }): Promise<{ campaigns: Campaign[]; total: number }> => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    if (params?.status) qs.set("status", params.status);
+    if (params?.channel) qs.set("channel", params.channel);
+    const response = await apiRequest<{ campaigns: Campaign[]; total: number }>(
+      `/campaigns${qs.toString() ? `?${qs}` : ""}`,
+    );
+    return response.data!;
+  },
+
+  getCampaign: async (id: string): Promise<Campaign> => {
+    const response = await apiRequest<{ campaign: Campaign }>(`/campaigns/${id}`);
+    return response.data!.campaign;
+  },
+
+  createCampaign: async (dto: CreateCampaignDto): Promise<Campaign> => {
+    const response = await apiRequest<{ campaign: Campaign }>("/campaigns", {
+      method: "POST",
+      body: JSON.stringify(dto),
+    });
+    return response.data!.campaign;
+  },
+
+  updateCampaign: async (id: string, dto: UpdateCampaignDto): Promise<Campaign> => {
+    const response = await apiRequest<{ campaign: Campaign }>(`/campaigns/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(dto),
+    });
+    return response.data!.campaign;
+  },
+
+  deleteCampaign: async (id: string): Promise<void> => {
+    await apiRequest(`/campaigns/${id}`, { method: "DELETE" });
+  },
+
+  sendCampaign: async (id: string, scheduledAt?: string): Promise<{ campaign_run_id: string; job_id: string }> => {
+    const response = await apiRequest<{ campaign_run_id: string; job_id: string }>(
+      `/campaigns/${id}/send`,
+      { method: "POST", body: JSON.stringify({ scheduled_at: scheduledAt }) },
+    );
+    return response.data!;
+  },
+
+  listCampaignRuns: async (campaignId: string): Promise<{ runs: CampaignRun[] }> => {
+    const response = await apiRequest<{ runs: CampaignRun[] }>(`/campaigns/${campaignId}/runs`);
     return response.data!;
   },
 };

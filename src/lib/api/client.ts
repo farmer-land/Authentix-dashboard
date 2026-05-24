@@ -56,6 +56,14 @@ export type {
   CreateBroadcastDto,
   BroadcastStatus,
   EmailEventType,
+  Campaign,
+  CampaignRun,
+  CampaignStatus,
+  CampaignRunStatus,
+  CampaignAudienceType,
+  CampaignEmailType,
+  CreateCampaignDto,
+  UpdateCampaignDto,
 } from "./delivery";
 
 // ── Domain API modules ────────────────────────────────────────────────────────
