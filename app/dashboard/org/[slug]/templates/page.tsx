@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/lib/org";
-import { getCachedPreviewUrl, cachePreviewUrl, getPreviewCacheKey, clearPreviewCache } from "@/lib/utils/preview-url-cache";
+import { getCachedPreviewUrl, cachePreviewUrl, getPreviewCacheKey, clearPreviewCache, dedupePreviewFetch } from "@/lib/utils/preview-url-cache";
 import { useCatalogCategories } from "@/lib/hooks/use-catalog-categories";
 import { toast } from "sonner";
 
@@ -117,49 +117,48 @@ export default function TemplatesPage() {
     refreshTimeoutRef.current = setTimeout(() => loadTemplates(true), 1000);
   }, []);
 
-  // Load preview URL for a template (with caching)
+  // Load preview URL for a template (with persistent caching + in-flight deduplication)
   const loadPreviewUrl = useCallback(async (template: any): Promise<string | null> => {
-    // Normalize template ID (backend may return template_id or id)
     const templateId = template.id || template.template_id;
     if (!templateId) {
       console.warn('Template missing ID:', template);
       return null;
     }
 
-    // Normalize preview file ID (backend may return latest_preview_file_id or preview_file_id)
     const previewFileId = template.latest_preview_file_id || template.preview_file_id;
-    
     const cacheKey = getPreviewCacheKey(
       templateId,
       previewFileId,
       template.preview_bucket,
-      template.preview_path
+      template.preview_path,
     );
 
-    // Check cache first
+    // localStorage cache — survives page reloads (6-day TTL)
     const cached = getCachedPreviewUrl(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
-    // If preview_url already exists, cache and return it
+    // If backend already returned a preview_url in the list response, persist it
     if (template.preview_url) {
       cachePreviewUrl(cacheKey, template.preview_url);
       return template.preview_url;
     }
 
-    // If preview data exists but no URL, try to fetch it
-    // Check multiple possible field names for preview data (prioritize latest_preview_file_id from v_templates_list)
-    const hasPreviewData = 
-      template.latest_preview_file_id || // New: from v_templates_list view
-      template.preview_bucket || 
-      template.preview_path || 
+    // Deduplicate concurrent fetches for the same template
+    const hasPreviewData =
+      template.latest_preview_file_id ||
+      template.preview_bucket ||
+      template.preview_path ||
       template.preview_file_id ||
       template.preview?.bucket ||
       template.preview?.path ||
-      template.preview?.file_id;
+      template.preview?.file_id ||
+      template.latest_source_file_id ||
+      template.source_file?.url ||
+      template.source_file?.path;
 
-    if (hasPreviewData) {
+    if (!hasPreviewData) return null;
+
+    return dedupePreviewFetch(cacheKey, async () => {
       try {
         const url = await api.templates.getPreviewUrl(templateId);
         if (url) {
@@ -167,27 +166,10 @@ export default function TemplatesPage() {
           return url;
         }
       } catch (err) {
-        console.error(`Error loading preview for template ${templateId}:`, err);
+        console.debug(`Preview not available for template ${templateId}:`, err);
       }
-    }
-
-    // If no preview data, try to use source file as fallback
-    // This is useful for newly uploaded templates that don't have previews yet
-    if (template.latest_source_file_id || template.source_file?.url || template.source_file?.path) {
-      try {
-        // Try to get preview URL for source file
-        const url = await api.templates.getPreviewUrl(templateId);
-        if (url) {
-          cachePreviewUrl(cacheKey, url);
-          return url;
-        }
-      } catch (err) {
-        // Ignore errors for source file fallback
-        console.debug(`Source file preview not available for template ${templateId}`);
-      }
-    }
-
-    return null;
+      return null;
+    });
   }, []);
 
   // Load preview URLs for all templates
