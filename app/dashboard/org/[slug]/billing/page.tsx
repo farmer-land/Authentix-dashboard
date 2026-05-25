@@ -77,13 +77,21 @@ interface FeatureRow {
 
 const PLAN_FEATURES: FeatureRow[] = [
   // Certificates
-  { category: 'Certificates', feature: 'Monthly certificates', seed: '25', farm: '200', aura: '2,000', flex: 'Unlimited', highlight: true },
-  { category: 'Certificates', feature: 'Certificate verification', seed: '90 days', farm: 'Forever', aura: 'Forever', flex: 'Forever' },
-  { category: 'Certificates', feature: 'QR code on certificate', seed: true, farm: true, aura: true, flex: true },
+  { category: 'Certificates', feature: 'Monthly certificates included', seed: '25', farm: '200', aura: '2,000', flex: 'Unlimited', highlight: true },
+  { category: 'Certificates', feature: 'Extra certs (pay-as-you-go)', seed: false, farm: '₹10/cert', aura: '₹8/cert', flex: '₹5/cert' },
   { category: 'Certificates', feature: 'Bulk generation', seed: false, farm: true, aura: true, flex: true },
-  { category: 'Certificates', feature: 'Extra certs (overage)', seed: false, farm: '₹10/cert', aura: '₹8/cert', flex: '₹5/cert' },
+  { category: 'Certificates', feature: 'QR code on certificate', seed: true, farm: true, aura: true, flex: true },
+  { category: 'Certificates', feature: 'Certificate number format', seed: 'Default', farm: 'Custom', aura: 'Custom', flex: 'Custom' },
+  // Data Retention & Archive
+  { category: 'Data & Retention', feature: 'Certificate QR verification', seed: '90 days', farm: 'Forever', aura: 'Forever', flex: 'Forever', highlight: true },
+  { category: 'Data & Retention', feature: 'Permanent cert archive fee', seed: 'N/A', farm: '₹1/cert (one-time)', aura: '₹1/cert (one-time)', flex: '₹1/cert (one-time)' },
+  { category: 'Data & Retention', feature: 'Recipient data retention', seed: '90 days', farm: '3 years', aura: '7 years', flex: '7 years' },
+  { category: 'Data & Retention', feature: 'Legal / govt doc hold (challan)', seed: false, farm: '7 years', aura: '7 years', flex: '7 years' },
+  { category: 'Data & Retention', feature: 'Certificate valid after org closes', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Data & Retention', feature: 'Export your data anytime', seed: false, farm: true, aura: true, flex: true },
   // Contacts & Segments
   { category: 'Contacts', feature: 'Contacts included', seed: '500', farm: '3,000', aura: '25,000', flex: 'Unlimited' },
+  { category: 'Contacts', feature: 'Extra contacts (per 1,000)', seed: false, farm: '₹20/1k', aura: '₹15/1k', flex: '₹10/1k' },
   { category: 'Contacts', feature: 'CSV import', seed: true, farm: true, aura: true, flex: true },
   { category: 'Contacts', feature: 'Segments & filters', seed: false, farm: true, aura: true, flex: true },
   // Campaigns & Email
@@ -94,16 +102,19 @@ const PLAN_FEATURES: FeatureRow[] = [
   // Automations
   { category: 'Automations', feature: 'Automation workflows', seed: false, farm: true, aura: true, flex: true },
   { category: 'Automations', feature: 'Trigger-based rules', seed: false, farm: true, aura: true, flex: true },
-  // Branding
-  { category: 'Branding', feature: 'White-label certificates', seed: false, farm: true, aura: true, flex: true },
-  { category: 'Branding', feature: 'Custom verification domain', seed: false, farm: '₹499/mo add-on', aura: '₹499/mo add-on', flex: '₹499/mo add-on' },
-  { category: 'Branding', feature: 'Remove Authentix branding', seed: false, farm: true, aura: true, flex: true },
   // Storage & Team
   { category: 'Storage & Team', feature: 'Storage included', seed: '1 GB', farm: '10 GB', aura: '100 GB', flex: '500 GB' },
+  { category: 'Storage & Team', feature: 'Extra storage (per 10 GB)', seed: false, farm: '₹50/10GB', aura: '₹40/10GB', flex: '₹30/10GB' },
   { category: 'Storage & Team', feature: 'Team members', seed: '1', farm: '5', aura: '20', flex: 'Unlimited' },
+  // Branding
+  { category: 'Branding', feature: 'White-label certificates', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Branding', feature: 'Remove Authentix branding', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Branding', feature: 'Custom verification domain', seed: false, farm: '₹499/mo add-on', aura: '₹499/mo add-on', flex: '₹499/mo add-on' },
   // Billing
   { category: 'Billing', feature: 'Monthly platform fee', seed: '₹0', farm: '₹499', aura: '₹1,999', flex: '₹7,999', highlight: true },
-  { category: 'Billing', feature: 'GST', seed: 'Incl.', farm: 'Incl.', aura: 'Incl.', flex: 'Incl.' },
+  { category: 'Billing', feature: 'Per-certificate fee', seed: '₹10', farm: '₹10', aura: '₹8', flex: '₹5' },
+  { category: 'Billing', feature: 'GST (mandatory, Govt. of India)', seed: '18% extra', farm: '18% extra', aura: '18% extra', flex: '18% extra', highlight: true },
+  { category: 'Billing', feature: 'Certificate credits (one-time packs)', seed: false, farm: true, aura: true, flex: true },
 ];
 
 const PLAN_KEYS: PlanKey[] = ['Seed', 'Farm', 'Aura', 'Flex'];
@@ -239,7 +250,7 @@ function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClo
         {/* Footer */}
         <div className="shrink-0 px-7 py-4 border-t border-border/60 bg-muted/20 flex items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            Prices include GST · Overage billed monthly · All plans include permanent certificate archive
+            All prices excl. GST (18% GST added as per Govt. of India mandate) · Overage billed monthly · Prices auto-update from DB
           </p>
           <button
             onClick={onClose}
@@ -296,8 +307,11 @@ export default function BillingPage() {
   const isOverdue    = org_billing.billing_status === 'overdue';
   const isLocked     = org_billing.billing_status === 'locked';
 
-  // Product-owner domains (Authentix team) or Seed plan = complimentary — show usage only, no billing UI
-  const isComplimentary = is_product_owner || (billing_profile.plan_name === 'Seed' && !isTrialing);
+  // Product-owner (Authentix team) sees full billing for monitoring + a no-charge banner
+  // Seed plan (free tier clients) sees usage-only, no billing details
+  const isProductOwner  = is_product_owner;
+  const isSeedFree      = !is_product_owner && billing_profile.plan_name === 'Seed' && !isTrialing;
+  const isComplimentary = isSeedFree; // hides payment UI, invoice history, etc.
 
   const planName   = billing_profile.plan_name ?? 'Flex';
   const planConfig = PLAN_CONFIG[planName] ?? PLAN_CONFIG['Flex']!;
@@ -355,8 +369,8 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Trial / lock banners inside hero */}
-        {isTrialing && !isComplimentary && (
+        {/* Banners inside hero */}
+        {isTrialing && !isProductOwner && (
           <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-brand-600">Free Trial</p>
@@ -375,12 +389,12 @@ export default function BillingPage() {
             </div>
           </div>
         )}
-        {isOverdue && (
+        {isOverdue && !isProductOwner && (
           <AlertBar icon={<AlertTriangle className="w-4 h-4 shrink-0" />} color="red">
             Payment overdue — pay now to avoid service interruption.
           </AlertBar>
         )}
-        {isLocked && (
+        {isLocked && !isProductOwner && (
           <AlertBar icon={<Lock className="w-4 h-4 shrink-0" />} color="red">
             Account locked. Contact{' '}
             <a href="mailto:billing@digicertificates.in" className="underline font-medium">
@@ -392,7 +406,15 @@ export default function BillingPage() {
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
-              Your account has complimentary access — no billing applies.
+              Complimentary access — no billing applies to this account.
+            </p>
+          </div>
+        )}
+        {isProductOwner && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-violet-500/10 border border-violet-500/20 px-4 py-3">
+            <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
+            <p className="text-sm text-violet-700 dark:text-violet-400 font-medium">
+              Product-owner account — billing shown for monitoring only, no charges apply.
             </p>
           </div>
         )}
@@ -404,15 +426,15 @@ export default function BillingPage() {
           icon={<Zap className="w-4 h-4" />}
           label="Certificates"
           value={String(current_usage.certificate_count)}
-          sub={isComplimentary ? 'issued this month' : isTrialing ? `${trialCertsLeft} free left` : `× ${fmt(billing_profile.certificate_unit_price)}`}
+          sub={isComplimentary ? 'issued this month' : isTrialing && !isProductOwner ? `${trialCertsLeft} free left` : `× ${fmt(billing_profile.certificate_unit_price)}`}
           color="default"
         />
         {!isComplimentary && (
           <Metric
             icon={<TrendingUp className="w-4 h-4" />}
             label="Est. this period"
-            value={billFree ? '₹0' : fmt(current_usage.estimated_total)}
-            sub={billFree ? 'Trial covers this' : `Incl. ${current_usage.gst_rate}% GST`}
+            value={billFree && !isProductOwner ? '₹0' : fmt(current_usage.estimated_total)}
+            sub={billFree && !isProductOwner ? 'Trial covers this' : `Incl. ${current_usage.gst_rate}% GST`}
             color={!billFree && current_usage.estimated_total > 0 ? 'brand' : 'default'}
           />
         )}
@@ -428,24 +450,24 @@ export default function BillingPage() {
         <Metric
           icon={<Users className="w-4 h-4" />}
           label="Plan"
-          value={isComplimentary ? planName : isTrialing ? 'Trial' : planName}
-          sub={isComplimentary ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
+          value={planName}
+          sub={isProductOwner ? 'Monitoring' : isComplimentary ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
           color="default"
         />
       </div>
 
-      {/* ── Usage breakdown — always shown ──────────────────────────────────── */}
+      {/* ── Usage/billing breakdown ──────────────────────────────────────────── */}
       <UsageBreakdown
         usage={current_usage}
         billingProfile={billing_profile}
-        isTrialing={isTrialing && !isComplimentary}
+        isTrialing={isTrialing && !isProductOwner}
         orgBilling={org_billing}
-        billFree={billFree}
+        billFree={billFree && !isProductOwner}
         isComplimentary={isComplimentary}
       />
 
-      {/* ── Payment section ─────────────────────────────────────────────────── */}
-      {!isComplimentary && !billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
+      {/* ── Payment section (hidden for product owners and complimentary) ─────── */}
+      {!isComplimentary && !isProductOwner && !billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
         RAZORPAY_ENABLED
           ? (
             <PayCard
@@ -466,7 +488,7 @@ export default function BillingPage() {
           )
       )}
 
-      {/* ── Invoice history ──────────────────────────────────────────────────── */}
+      {/* ── Invoice history (visible for product owners + paying clients) ─────── */}
       {!isComplimentary && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
