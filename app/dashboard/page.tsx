@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 export default function DashboardResolver() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     async function resolveOrg() {
@@ -44,7 +45,7 @@ export default function DashboardResolver() {
         }
 
         if (data.setup_state === "needs_bootstrap") {
-          setError("Your account has no organization. Please contact support.");
+          setError("We couldn't finish setting up your account. Try again or sign in with a different email.");
           return;
         }
 
@@ -63,25 +64,28 @@ export default function DashboardResolver() {
       }
     }
     resolveOrg();
-  }, [router]);
+  }, [router, retryCount]);
 
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4 max-w-md px-4">
           <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-destructive">Setup Error</h2>
+            <h2 className="text-lg font-semibold">Account setup incomplete</h2>
             <p className="text-sm text-muted-foreground">{error}</p>
           </div>
           <div className="flex flex-col gap-2 pt-4">
             <button
-              onClick={() => router.refresh()}
+              onClick={() => { setError(null); setRetryCount((c) => c + 1); }}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
             >
               Retry
             </button>
             <button
-              onClick={() => router.push("/login")}
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST", redirect: "manual" });
+                window.location.assign("/login");
+              }}
               className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
             >
               Return to Login

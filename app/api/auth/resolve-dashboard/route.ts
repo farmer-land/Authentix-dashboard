@@ -23,6 +23,20 @@ export async function POST() {
       method: "POST",
     });
 
+    // Auto-bootstrap: user authenticated but has no org (signup bootstrap didn't run).
+    // Try once before surfacing the error to the frontend.
+    if (result.data?.setup_state === "needs_bootstrap") {
+      try {
+        await serverApiRequest("/auth/bootstrap", { method: "POST" });
+        const retryResult = await serverApiRequest<ResolveDashboardResponse>("/auth/resolve-dashboard", {
+          method: "POST",
+        });
+        return NextResponse.json({ success: true, data: retryResult.data });
+      } catch {
+        // Bootstrap failed — let the frontend show the error
+      }
+    }
+
     return NextResponse.json({ success: true, data: result.data });
   } catch (error) {
     console.error("[API] resolve-dashboard error:", error);

@@ -1,49 +1,98 @@
 'use client';
 
 import { useEffect } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import { useBillingOverview } from '@/lib/hooks/queries/billing';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
+import { getOrganizationLogoUrl } from '@/lib/utils/organization-logo';
 import { InvoiceList } from './components/invoice-list';
 import { preloadRazorpay } from '@/lib/razorpay';
 import { PayNowButton } from './components/pay-now-button';
-import { AlertTriangle, Lock, TrendingUp, Receipt, Sparkles, Zap, Mail, Info } from 'lucide-react';
+import {
+  Zap, TrendingUp, Receipt, Sparkles, Info, Mail, Users,
+  HardDrive, ArrowUpRight, CheckCircle2, AlertTriangle, Lock,
+  Building2,
+} from 'lucide-react';
 import type { CurrentUsage, BillingProfile, OrgBilling, InvoiceEntity } from '@/lib/billing-ui/types';
 
+// ── Feature flag ─────────────────────────────────────────────────────────────
+// Set NEXT_PUBLIC_ENABLE_RAZORPAY_BILLING=true in env when Razorpay is ready.
+const RAZORPAY_ENABLED = process.env.NEXT_PUBLIC_ENABLE_RAZORPAY_BILLING === 'true';
 
-function formatINR(amount: number) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmt(amount: number) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency', currency: 'INR', maximumFractionDigits: 0,
+  }).format(amount);
+}
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+// ── Plan config ───────────────────────────────────────────────────────────────
+const PLAN_CONFIG: Record<string, {
+  gradient: string; badge: string; badgeText: string; tagline: string;
+} | undefined> = {
+  Seed:  {
+    gradient: 'from-slate-500/10 via-slate-400/5 to-transparent',
+    badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    badgeText: 'Seed',
+    tagline: 'Partner account — complimentary access',
+  },
+  Farm:  {
+    gradient: 'from-emerald-500/12 via-emerald-400/5 to-transparent',
+    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    badgeText: 'Farm',
+    tagline: '200 certs/month · email campaigns · automations',
+  },
+  Aura:  {
+    gradient: 'from-violet-500/12 via-violet-400/5 to-transparent',
+    badge: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+    badgeText: 'Aura',
+    tagline: '2,000 certs/month · full segmentation · AI generation',
+  },
+  Flex:  {
+    gradient: 'from-brand-500/12 via-brand-400/5 to-transparent',
+    badge: 'bg-brand-500/10 text-brand-600 dark:text-brand-400',
+    badgeText: 'Flex',
+    tagline: 'Unlimited certs · all channels · multi-team',
+  },
+};
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function BillingPage() {
   const { organization } = useOrganization();
   const { overview, loading, error, refresh } = useBillingOverview();
 
-  useEffect(() => { preloadRazorpay(); }, []);
+  useEffect(() => { if (RAZORPAY_ENABLED) preloadRazorpay(); }, []);
 
   const org = organization as unknown as {
     id: string; name: string; slug: string; email?: string; phone?: string;
+    logo_url?: string | null;
   } | undefined;
 
+  const logoUrl = getOrganizationLogoUrl(org);
+
+  // ── Loading skeleton ────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-6 max-w-5xl mx-auto animate-pulse">
-        <div className="h-10 w-48 rounded-lg bg-muted" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="max-w-3xl mx-auto space-y-5 pb-16 animate-pulse">
+        <div className="h-44 rounded-3xl bg-muted" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[1,2,3,4].map(i => <div key={i} className="h-28 rounded-2xl bg-muted" />)}
         </div>
-        <div className="h-80 rounded-2xl bg-muted" />
-        <div className="h-64 rounded-2xl bg-muted" />
+        <div className="h-72 rounded-3xl bg-muted" />
+        <div className="h-48 rounded-3xl bg-muted" />
       </div>
     );
   }
 
   if (error || !overview) {
     return (
-      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 max-w-lg">
+      <div className="max-w-md mx-auto mt-16 rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
         <p className="font-semibold text-destructive">Failed to load billing</p>
         <p className="text-sm text-muted-foreground mt-1">{error ?? 'Please refresh the page.'}</p>
       </div>
@@ -51,397 +100,413 @@ export default function BillingPage() {
   }
 
   const { org_billing, current_usage, billing_profile, recent_invoices, total_outstanding } = overview;
-  const isTrialing = org_billing.billing_status === 'trialing';
-  const isOverdue  = org_billing.billing_status === 'overdue';
-  const isLocked   = org_billing.billing_status === 'locked';
+  const isTrialing   = org_billing.billing_status === 'trialing';
+  const isOverdue    = org_billing.billing_status === 'overdue';
+  const isLocked     = org_billing.billing_status === 'locked';
 
-  const trialCertsLeft = Math.max(0, org_billing.trial_free_certificates_limit - org_billing.trial_free_certificates_used);
-  const trialPct = org_billing.trial_free_certificates_limit > 0
-    ? Math.min(100, Math.round((org_billing.trial_free_certificates_used / org_billing.trial_free_certificates_limit) * 100))
-    : 0;
+  // Seed plan = whitelisted/complimentary — show usage only, no billing UI
+  const isComplimentary = billing_profile.plan_name === 'Seed' && !isTrialing;
 
-  const billFree = isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit;
-  const broadcastEmailCount = current_usage.broadcast_email_count ?? 0;
-  const hasEmailUsage = broadcastEmailCount > 0;
-  const planName = billing_profile.plan_name ?? 'Flex';
+  const planName   = billing_profile.plan_name ?? 'Flex';
+  const planConfig = PLAN_CONFIG[planName] ?? PLAN_CONFIG['Flex']!;
 
-  // First payable invoice — used for the pay card so we show the exact outstanding amount
-  const pendingInvoice = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
+  const billFree        = isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit;
+  const trialCertsLeft  = Math.max(0, org_billing.trial_free_certificates_limit - org_billing.trial_free_certificates_used);
+  const pendingInvoice  = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="max-w-3xl mx-auto space-y-5 pb-16">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
-          {org && <p className="text-sm text-muted-foreground mt-0.5">{org.name}</p>}
+      {/* ── Plan hero card ────────────────────────────────────────────────── */}
+      <div className={`relative overflow-hidden rounded-3xl border bg-card bg-linear-to-br ${planConfig.gradient} p-7`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Org logo */}
+            <div className="relative shrink-0">
+              {logoUrl ? (
+                <div className="w-14 h-14 rounded-2xl border bg-background shadow-sm overflow-hidden flex items-center justify-center">
+                  <Image src={logoUrl} alt={org?.name ?? ''} width={56} height={56} className="object-contain" />
+                </div>
+              ) : (
+                <div className="w-14 h-14 rounded-2xl border bg-muted flex items-center justify-center">
+                  <Building2 className="w-6 h-6 text-muted-foreground/40" />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide ${planConfig.badge}`}>
+                  {planConfig.badgeText}
+                </span>
+                <StatusDot status={org_billing.billing_status} />
+              </div>
+              <h1 className="text-xl font-bold tracking-tight">{org?.name ?? 'Billing'}</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">{planConfig.tagline}</p>
+            </div>
+          </div>
+
+          {/* Authentix logo — top right */}
+          <div className="shrink-0 opacity-60">
+            <Image src="/brand/authentix-24-24.svg" alt="Authentix" width={28} height={28} />
+          </div>
         </div>
-        <StatusBadge status={org_billing.billing_status} />
+
+        {/* Trial / lock banners inside hero */}
+        {isTrialing && (
+          <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-brand-600">Free Trial</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {trialCertsLeft} of {org_billing.trial_free_certificates_limit} free certs remaining
+                {org_billing.trial_ends_at && ` · Expires ${fmtDate(org_billing.trial_ends_at)}`}
+              </p>
+            </div>
+            <div className="shrink-0">
+              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-brand-500 transition-all"
+                  style={{ width: `${Math.min(100, Math.round((org_billing.trial_free_certificates_used / org_billing.trial_free_certificates_limit) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        {isOverdue && (
+          <AlertBar icon={<AlertTriangle className="w-4 h-4 shrink-0" />} color="red">
+            Payment overdue — pay now to avoid service interruption.
+          </AlertBar>
+        )}
+        {isLocked && (
+          <AlertBar icon={<Lock className="w-4 h-4 shrink-0" />} color="red">
+            Account locked. Contact{' '}
+            <a href="mailto:billing@digicertificates.in" className="underline font-medium">
+              billing@digicertificates.in
+            </a>
+          </AlertBar>
+        )}
+        {isComplimentary && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
+              Your account has complimentary access — no billing applies.
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* ── Alert banners ───────────────────────────────────────────────────── */}
-      {isTrialing && (
-        <TrialBanner
-          used={org_billing.trial_free_certificates_used}
-          limit={org_billing.trial_free_certificates_limit}
-          trialEndsAt={org_billing.trial_ends_at}
-          remaining={trialCertsLeft}
-          pct={trialPct}
-          pricePerCert={billing_profile.certificate_unit_price}
-          broadcastEmailPrice={billing_profile.broadcast_email_unit_price}
-          broadcastEmailQuota={billing_profile.broadcast_email_quota}
-        />
-      )}
-      {isOverdue && (
-        <Alert icon={<AlertTriangle className="w-4 h-4" />} color="red" title="Payment overdue">
-          You have an unpaid invoice. Pay now to avoid service interruption.
-        </Alert>
-      )}
-      {isLocked && (
-        <Alert icon={<Lock className="w-4 h-4" />} color="red" title="Account locked">
-          Your account is locked due to non-payment. Contact{' '}
-          <a href="mailto:billing@digicertificates.in" className="underline">billing@digicertificates.in</a>.
-        </Alert>
-      )}
-
       {/* ── Metric cards ────────────────────────────────────────────────────── */}
-      <div className={`grid gap-4 grid-cols-2 ${hasEmailUsage ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
-        <MetricCard
+      <div className={`grid gap-3 ${isComplimentary ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2 md:grid-cols-4'}`}>
+        <Metric
           icon={<Zap className="w-4 h-4" />}
           label="Certificates"
           value={String(current_usage.certificate_count)}
-          sub={isTrialing ? `${trialCertsLeft} free remaining` : `× ${formatINR(billing_profile.certificate_unit_price)} each`}
-          tooltip={isTrialing
-            ? `First ${org_billing.trial_free_certificates_limit} certificates are free. Charged at ${formatINR(billing_profile.certificate_unit_price)}/cert beyond that.`
-            : `Every certificate generated this month is charged at ${formatINR(billing_profile.certificate_unit_price)}.`}
+          sub={isTrialing ? `${trialCertsLeft} free left` : isComplimentary ? 'issued this month' : `× ${fmt(billing_profile.certificate_unit_price)}`}
           color="default"
         />
-        {hasEmailUsage && (
-          <MetricCard
-            icon={<Mail className="w-4 h-4" />}
-            label="Campaign emails"
-            value={String(broadcastEmailCount)}
-            sub={`Billable above ${billing_profile.broadcast_email_quota} free/month`}
-            tooltip={`Campaign emails sent via Authentix. First ${billing_profile.broadcast_email_quota} per month included. Charged at ${formatINR(billing_profile.broadcast_email_unit_price)}/email beyond that.`}
-            color="default"
+        {!isComplimentary && (
+          <Metric
+            icon={<TrendingUp className="w-4 h-4" />}
+            label="Est. this period"
+            value={billFree ? '₹0' : fmt(current_usage.estimated_total)}
+            sub={billFree ? 'Trial covers this' : `Incl. ${current_usage.gst_rate}% GST`}
+            color={!billFree && current_usage.estimated_total > 0 ? 'brand' : 'default'}
           />
         )}
-        <MetricCard
-          icon={<TrendingUp className="w-4 h-4" />}
-          label="Estimated bill"
-          value={billFree ? '₹0' : formatINR(current_usage.estimated_total)}
-          sub={billFree ? 'Covered by trial' : `Incl. ${current_usage.gst_rate}% GST`}
-          tooltip="What you would be charged if invoiced right now for the current billing period. Updates as you issue certificates or send emails."
-          color={!billFree && current_usage.estimated_total > 0 ? 'brand' : 'default'}
-        />
-        <MetricCard
-          icon={<Receipt className="w-4 h-4" />}
-          label="Outstanding"
-          value={total_outstanding > 0 ? formatINR(total_outstanding) : '₹0'}
-          sub={total_outstanding > 0 ? 'Pending payment' : 'All clear'}
-          tooltip={total_outstanding > 0
-            ? "Total due on invoices already issued. Pay these to keep your account in good standing."
-            : "No unpaid invoices. You're all clear."}
-          color={total_outstanding > 0 ? 'red' : 'default'}
-        />
-        <MetricCard
-          icon={<Sparkles className="w-4 h-4" />}
+        {!isComplimentary && (
+          <Metric
+            icon={<Receipt className="w-4 h-4" />}
+            label="Outstanding"
+            value={total_outstanding > 0 ? fmt(total_outstanding) : '₹0'}
+            sub={total_outstanding > 0 ? 'Pending payment' : 'All clear'}
+            color={total_outstanding > 0 ? 'red' : 'default'}
+          />
+        )}
+        <Metric
+          icon={<Users className="w-4 h-4" />}
           label="Plan"
-          value={isTrialing ? 'Free Trial' : planName}
-          sub={isTrialing ? 'Pay-as-you-go after trial' : 'Pay only for what you use'}
+          value={isTrialing ? 'Trial' : planName}
+          sub={isComplimentary ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
           color="default"
         />
       </div>
 
-      {/* ── Usage breakdown ─────────────────────────────────────────────────── */}
-      <UsageBreakdown
-        usage={current_usage}
-        billingProfile={billing_profile}
-        isTrialing={isTrialing}
-        orgBilling={org_billing}
-        billFree={billFree}
-      />
-
-      {/* ── Pay card ────────────────────────────────────────────────────────── */}
-      {!billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
-        <PayCard
-          pendingInvoice={pendingInvoice}
-          estimatedTotal={current_usage.estimated_total}
-          certCount={current_usage.certificate_count}
-          emailCount={broadcastEmailCount}
-          orgName={org?.name}
-          orgEmail={org?.email}
-          onSuccess={refresh}
+      {/* ── Usage breakdown (hidden for complimentary) ───────────────────────── */}
+      {!isComplimentary && (
+        <UsageBreakdown
+          usage={current_usage}
+          billingProfile={billing_profile}
+          isTrialing={isTrialing}
+          orgBilling={org_billing}
+          billFree={billFree}
         />
       )}
 
-      {/* ── Invoice history ─────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold">Invoice History</h2>
-          <span className="text-xs text-muted-foreground">
-            {recent_invoices.length} invoice{recent_invoices.length !== 1 ? 's' : ''}
-          </span>
+      {/* ── Payment section ─────────────────────────────────────────────────── */}
+      {!isComplimentary && !billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
+        RAZORPAY_ENABLED
+          ? (
+            <PayCard
+              pendingInvoice={pendingInvoice}
+              estimatedTotal={current_usage.estimated_total}
+              certCount={current_usage.certificate_count}
+              emailCount={current_usage.broadcast_email_count ?? 0}
+              orgName={org?.name}
+              orgEmail={org?.email}
+              onSuccess={refresh}
+            />
+          )
+          : (
+            <ManualPayCard
+              pendingInvoice={pendingInvoice}
+              estimatedTotal={current_usage.estimated_total}
+            />
+          )
+      )}
+
+      {/* ── Invoice history ──────────────────────────────────────────────────── */}
+      {!isComplimentary && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Invoice History</h2>
+            <span className="text-xs text-muted-foreground">
+              {recent_invoices.length} invoice{recent_invoices.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <InvoiceList
+            organizationId={org?.id ?? ''}
+            orgName={org?.name}
+            orgEmail={org?.email}
+          />
         </div>
-        <InvoiceList organizationId={org?.id ?? ''} orgName={org?.name} orgEmail={org?.email} />
-      </div>
+      )}
+
     </div>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── StatusDot ────────────────────────────────────────────────────────────────
+const STATUS_DOT: Record<string, { dot: string; label: string; text: string }> = {
+  trialing: { dot: 'bg-brand-500',   label: 'Trial',    text: 'text-brand-600' },
+  active:   { dot: 'bg-emerald-500', label: 'Active',   text: 'text-emerald-600' },
+  overdue:  { dot: 'bg-red-500',     label: 'Overdue',  text: 'text-red-500' },
+  locked:   { dot: 'bg-red-600',     label: 'Locked',   text: 'text-red-600' },
+  past_due: { dot: 'bg-orange-500',  label: 'Past due', text: 'text-orange-500' },
+};
+const FALLBACK_DOT = { dot: 'bg-emerald-500', label: 'Active', text: 'text-emerald-600' };
 
-function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+function StatusDot({ status }: { status: string }) {
+  const s = STATUS_DOT[status] ?? FALLBACK_DOT;
   return (
-    <span className="relative group/tip inline-flex items-center">
-      {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 w-60 rounded-lg border border-border/60 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150 whitespace-normal text-left">
-        {content}
-      </span>
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const map = {
-    trialing: { label: 'Free Trial',  dot: 'bg-brand-500',   bg: 'bg-brand-500/10',   text: 'text-brand-500' },
-    active:   { label: 'Active',      dot: 'bg-emerald-500', bg: 'bg-emerald-500/10', text: 'text-emerald-600' },
-    overdue:  { label: 'Overdue',     dot: 'bg-red-500',     bg: 'bg-red-500/10',     text: 'text-red-500' },
-    locked:   { label: 'Locked',      dot: 'bg-red-600',     bg: 'bg-red-600/10',     text: 'text-red-600' },
-  } as const;
-  const s = map[status as keyof typeof map] ?? map.active;
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${s.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot} animate-pulse`} />
       {s.label}
     </span>
   );
 }
 
-function Alert({ icon, color, title, children }: { icon: React.ReactNode; color: 'red' | 'yellow'; title: string; children: React.ReactNode }) {
-  const colors = { red: 'border-red-500/30 bg-red-500/8 text-red-400', yellow: 'border-yellow-500/30 bg-yellow-500/8 text-yellow-400' };
+// ── AlertBar ─────────────────────────────────────────────────────────────────
+function AlertBar({ icon, color, children }: { icon: React.ReactNode; color: 'red' | 'yellow'; children: React.ReactNode }) {
+  const cls = color === 'red'
+    ? 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'
+    : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400';
   return (
-    <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3.5 ${colors[color]}`}>
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <div className="text-sm">
-        <span className="font-semibold">{title} — </span>
-        <span className="text-muted-foreground">{children}</span>
-      </div>
+    <div className={`mt-4 flex items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
+      {icon}
+      <span>{children}</span>
     </div>
   );
 }
 
-function MetricCard({ icon, label, value, sub, tooltip, color }: {
-  icon: React.ReactNode; label: string; value: string; sub?: string; tooltip?: string;
+// ── Metric ───────────────────────────────────────────────────────────────────
+function Metric({ icon, label, value, sub, color }: {
+  icon: React.ReactNode; label: string; value: string; sub?: string;
   color: 'default' | 'brand' | 'red';
 }) {
-  const valueColor = { default: 'text-foreground', brand: 'text-brand-500', red: 'text-red-400' };
-  const iconColor  = { default: 'text-muted-foreground', brand: 'text-brand-500', red: 'text-red-400' };
-  const ring       = { default: '', brand: 'ring-1 ring-brand-500/20', red: 'ring-1 ring-red-500/20' };
+  const val = { default: 'text-foreground',      brand: 'text-brand-500',  red: 'text-red-500' };
+  const ico = { default: 'text-muted-foreground', brand: 'text-brand-500',  red: 'text-red-500' };
   return (
-    <div className={`rounded-2xl border bg-card p-4 space-y-2 ${ring[color]}`}>
-      <div className={`flex items-center gap-2 ${iconColor[color]}`}>
+    <div className="rounded-2xl border bg-card p-4 space-y-2.5">
+      <div className={`flex items-center gap-1.5 ${ico[color]}`}>
         {icon}
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-        {tooltip && (
-          <Tooltip content={tooltip}>
-            <span className="ml-auto cursor-help">
-              <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
-            </span>
-          </Tooltip>
-        )}
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
       </div>
-      <p className={`text-2xl font-bold tabular-nums ${valueColor[color]}`}>{value}</p>
+      <p className={`text-2xl font-bold tabular-nums ${val[color]}`}>{value}</p>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
 
-function TrialBanner({ used, limit, trialEndsAt, remaining, pct, pricePerCert, broadcastEmailPrice, broadcastEmailQuota }: {
-  used: number; limit: number; trialEndsAt: string | null; remaining: number;
-  pct: number; pricePerCert: number; broadcastEmailPrice: number; broadcastEmailQuota: number;
-}) {
-  const barColor = pct >= 90 ? 'bg-red-500' : pct >= 65 ? 'bg-yellow-500' : 'bg-brand-500';
-  return (
-    <div className="rounded-2xl border border-brand-500/25 bg-brand-500/5 px-5 py-4">
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="inline-flex items-center rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-semibold text-brand-600">Free Trial</span>
-            {trialEndsAt && <span className="text-xs text-muted-foreground">Expires {formatDate(trialEndsAt)}</span>}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{remaining} free certificate{remaining !== 1 ? 's' : ''} remaining</span>{' '}
-            of your {limit}-certificate allowance
-          </p>
-        </div>
-        <div className="text-right text-xs text-muted-foreground shrink-0 space-y-0.5">
-          <p className="text-sm font-bold text-foreground">₹{pricePerCert}/cert <span className="font-normal">after trial</span></p>
-          <p>Campaign emails: ₹{broadcastEmailPrice}/email · {broadcastEmailQuota.toLocaleString()} free/month</p>
-        </div>
-      </div>
-      <div>
-        <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-          <span>{used} used</span><span>{limit} total</span>
-        </div>
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
+// ── UsageBreakdown ────────────────────────────────────────────────────────────
 function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree }: {
-  usage: CurrentUsage; billingProfile: BillingProfile; isTrialing: boolean; orgBilling: OrgBilling; billFree: boolean;
+  usage: CurrentUsage; billingProfile: BillingProfile;
+  isTrialing: boolean; orgBilling: OrgBilling; billFree: boolean;
 }) {
   const certsAboveTrial = isTrialing
     ? Math.max(0, usage.certificate_count - orgBilling.trial_free_certificates_limit)
     : usage.certificate_count;
-
   const gstInclusive = billingProfile.gst_inclusive ?? true;
-  const gstLabel = gstInclusive
-    ? `GST (${usage.gst_rate}% — included in prices)`
-    : `GST @ ${usage.gst_rate}%`;
-  const gstTooltip = gstInclusive
-    ? `GST is already included in all displayed prices. The ₹${usage.gst_amount.toFixed(2)} shown is the embedded tax component extracted from your total — it is not charged on top.`
-    : `${usage.gst_rate}% Goods & Services Tax applied on the subtotal as per Indian tax regulations.`;
 
   return (
-    <div className="rounded-2xl border bg-card overflow-hidden">
-      <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
+    <div className="rounded-3xl border bg-card overflow-hidden">
+      <div className="px-6 py-4 border-b border-border/60 flex items-center justify-between">
         <div>
-          <h2 className="font-semibold">Current Billing Period</h2>
+          <h2 className="font-semibold">Current Period</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {billingProfile.plan_name ?? 'Flex'} · Pay only for what you use
-            {gstInclusive && <span className="ml-1 text-muted-foreground/70">· All prices incl. GST</span>}
+            {billingProfile.plan_name} · Pay only for what you use
+            {gstInclusive && <span className="opacity-60"> · All prices incl. GST</span>}
           </p>
         </div>
-        <span className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5">Auto-invoiced monthly</span>
+        <span className="flex items-center gap-1.5 text-xs font-medium text-brand-500">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+          Live
+        </span>
       </div>
 
-      {isTrialing && (
-        <div className="mx-5 mt-4 rounded-xl bg-brand-500/8 border border-brand-500/15 px-4 py-2.5">
-          <p className="text-sm font-medium text-brand-600">
-            Trial active — {Math.max(0, orgBilling.trial_free_certificates_limit - orgBilling.trial_free_certificates_used)} free cert{Math.max(0, orgBilling.trial_free_certificates_limit - orgBilling.trial_free_certificates_used) !== 1 ? 's' : ''} remaining
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">Certificates within your {orgBilling.trial_free_certificates_limit}-cert limit are free. Charges apply beyond that.</p>
-        </div>
-      )}
-
-      <div className="px-5 py-4 space-y-0 divide-y divide-border/40">
-        {/* Platform fee — show whenever the plan has one so users can see the rate.
-            When no certs issued yet this month the charge is ₹0 (applied on first cert). */}
+      <div className="px-6 py-5 divide-y divide-border/40 space-y-0">
         {billingProfile.platform_fee_amount > 0 && (
-          <BillingLine
+          <Row
             label="Platform fee"
-            value={isTrialing ? '₹0' : usage.certificate_count === 0 ? `₹0` : formatINR(usage.platform_fee)}
-            sub={
-              isTrialing
-                ? `Waived during trial (${formatINR(billingProfile.platform_fee_amount)}/month)`
-                : usage.certificate_count === 0
-                  ? `${formatINR(billingProfile.platform_fee_amount)}/month — applied when first certificate is issued`
-                  : `1 × ${formatINR(billingProfile.platform_fee_amount)} = ${formatINR(usage.platform_fee)}${gstInclusive ? ' (incl. GST)' : ''}`
-            }
+            value={isTrialing ? '₹0' : usage.certificate_count === 0 ? '₹0' : fmt(usage.platform_fee)}
+            sub={isTrialing
+              ? `Waived during trial (${fmt(billingProfile.platform_fee_amount)}/mo)`
+              : usage.certificate_count === 0
+                ? `${fmt(billingProfile.platform_fee_amount)}/month — charged on first cert`
+                : `1 × ${fmt(billingProfile.platform_fee_amount)}`}
             muted={isTrialing || usage.certificate_count === 0}
-            tooltip="Fixed monthly fee charged when at least one certificate is issued this month. Waived during trial."
           />
         )}
 
-        <BillingLine
+        <Row
           label="Certificates issued"
-          value={String(usage.certificate_count)}
-          sub={isTrialing
-            ? `${Math.min(usage.certificate_count, orgBilling.trial_free_certificates_limit)} free · ${certsAboveTrial} billable`
-            : `${formatINR(billingProfile.certificate_unit_price)} each${gstInclusive ? ' (incl. GST)' : ''}`}
-          tooltip={isTrialing
-            ? `Your first ${orgBilling.trial_free_certificates_limit} certificates are free. Beyond that, charged at ${formatINR(billingProfile.certificate_unit_price)} each.`
-            : `Each certificate costs ${formatINR(billingProfile.certificate_unit_price)}${gstInclusive ? ' including GST' : ''}.`}
-        />
-
-        <BillingLine
-          label="Certificate charges"
-          value={isTrialing && certsAboveTrial === 0 ? '₹0' : formatINR(usage.usage_cost)}
+          value={isTrialing && certsAboveTrial === 0 ? '₹0' : fmt(usage.usage_cost)}
           sub={isTrialing && certsAboveTrial === 0
-            ? 'Covered by trial allowance'
-            : `${isTrialing ? certsAboveTrial : usage.certificate_count} × ${formatINR(billingProfile.certificate_unit_price)} = ${formatINR(usage.usage_cost)}`}
+            ? `${usage.certificate_count} cert${usage.certificate_count !== 1 ? 's' : ''} — covered by trial`
+            : `${isTrialing ? certsAboveTrial : usage.certificate_count} × ${fmt(billingProfile.certificate_unit_price)}`}
           muted={isTrialing && certsAboveTrial === 0}
         />
 
-        {/* Campaign emails — only shown when there are billable emails above the free quota */}
         {(usage.broadcast_email_count ?? 0) > 0 && (
-          <BillingLine
+          <Row
             label="Campaign emails"
-            value={formatINR(usage.broadcast_email_cost)}
-            sub={`${usage.broadcast_email_count.toLocaleString('en-IN')} × ${formatINR(billingProfile.broadcast_email_unit_price)} = ${formatINR(usage.broadcast_email_cost)}`}
-            tooltip={`First ${billingProfile.broadcast_email_quota.toLocaleString()} emails/month are free. ${formatINR(billingProfile.broadcast_email_unit_price)}/email beyond that. Own Resend/SMTP is always ₹0.`}
+            value={fmt(usage.broadcast_email_cost)}
+            sub={`${usage.broadcast_email_count?.toLocaleString('en-IN')} × ${fmt(billingProfile.broadcast_email_unit_price)}`}
           />
         )}
 
-        <div className="pt-3 space-y-1.5">
-          <BillingLine
-            label={gstInclusive ? 'Base amount (excl. GST)' : 'Subtotal (excl. GST)'}
-            value={billFree ? '₹0' : formatINR(usage.subtotal)}
-            muted
-          />
-          <BillingLine
-            label={gstLabel}
-            value={billFree ? '₹0' : formatINR(usage.gst_amount)}
-            tooltip={gstTooltip}
+        <div className="pt-4 space-y-1.5">
+          <Row label="Subtotal (excl. GST)" value={billFree ? '₹0' : fmt(usage.subtotal)} muted />
+          <Row
+            label={gstInclusive ? `GST ${usage.gst_rate}% (included in prices)` : `GST @ ${usage.gst_rate}%`}
+            value={billFree ? '₹0' : fmt(usage.gst_amount)}
             muted
           />
         </div>
 
-        <div className="flex items-center justify-between pt-4 mt-1">
+        <div className="flex items-center justify-between pt-5">
           <div>
-            <span className="font-semibold">Period estimate</span>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {gstInclusive ? 'All prices incl. GST · ' : ''}Live — updates as you use the platform
-            </p>
+            <p className="font-semibold">Total estimate</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Updates live as you use the platform</p>
           </div>
-          <span className={`text-2xl font-bold tabular-nums ${billFree ? 'text-brand-500' : 'text-foreground'}`}>
-            {billFree ? '₹0' : formatINR(usage.estimated_total)}
-            {billFree && <span className="text-xs font-normal text-muted-foreground ml-1.5 block text-right">trial covers this</span>}
-          </span>
+          <p className={`text-3xl font-bold tabular-nums ${billFree ? 'text-brand-500' : 'text-foreground'}`}>
+            {billFree ? '₹0' : fmt(usage.estimated_total)}
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function PayCard({ pendingInvoice, estimatedTotal, certCount, emailCount, orgName, orgEmail, onSuccess }: {
-  pendingInvoice?: InvoiceEntity;
-  estimatedTotal: number;
-  certCount: number;
-  emailCount: number;
-  orgName?: string;
-  orgEmail?: string;
-  onSuccess?: () => void;
+function Row({ label, value, sub, muted }: { label: string; value: string; sub?: string; muted?: boolean }) {
+  return (
+    <div className="flex items-start justify-between py-3 gap-4">
+      <div className="min-w-0">
+        <p className={`text-sm ${muted ? 'text-muted-foreground' : ''}`}>{label}</p>
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+      </div>
+      <span className={`text-sm font-medium tabular-nums shrink-0 ${muted ? 'text-muted-foreground' : ''}`}>{value}</span>
+    </div>
+  );
+}
+
+// ── ManualPayCard ─────────────────────────────────────────────────────────────
+// Shown when RAZORPAY_ENABLED = false. Replace bank details as needed.
+function ManualPayCard({ pendingInvoice, estimatedTotal }: {
+  pendingInvoice?: InvoiceEntity; estimatedTotal: number;
 }) {
-  const hasOutstanding = !!pendingInvoice;
-  const amount = hasOutstanding
-    ? pendingInvoice!.amount_due_paise / 100
-    : estimatedTotal;
+  const amount = pendingInvoice ? pendingInvoice.amount_due_paise / 100 : estimatedTotal;
+  const hasInvoice = !!pendingInvoice;
 
   return (
-    <div className="rounded-2xl border bg-card overflow-hidden">
-      <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between gap-4">
+    <div className="rounded-3xl border bg-card overflow-hidden">
+      <div className="px-6 py-5 border-b border-border/60 flex items-center justify-between gap-4">
+        <div>
+          <p className="font-semibold">
+            {hasInvoice ? `Invoice ${pendingInvoice!.invoice_number}` : 'Amount due this period'}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Pay via bank transfer or UPI — confirmed within 24 hours
+          </p>
+        </div>
+        <p className="text-3xl font-bold tabular-nums shrink-0">{fmt(amount)}</p>
+      </div>
+
+      <div className="px-6 py-5 space-y-4">
+        <div className="grid sm:grid-cols-3 gap-3">
+          <PayDetail label="UPI ID" value="billing@digicertificates" />
+          <PayDetail label="Account" value="XXXX XXXX XXXX" />
+          <PayDetail label="IFSC" value="XXXX0000000" />
+        </div>
+
+        <div className="flex items-center gap-2.5 rounded-2xl bg-muted/50 border border-border/60 px-4 py-3">
+          <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            After paying, email your receipt to{' '}
+            <a href="mailto:billing@digicertificates.in" className="font-medium text-foreground hover:text-brand-500 transition-colors">
+              billing@digicertificates.in
+            </a>
+            {' '}and we'll mark your invoice paid within 24 hours.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PayDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-muted/50 border border-border/60 px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1">{label}</p>
+      <p className="text-sm font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+// ── PayCard (Razorpay — shown only when RAZORPAY_ENABLED=true) ───────────────
+function PayCard({ pendingInvoice, estimatedTotal, certCount, emailCount, orgName, orgEmail, onSuccess }: {
+  pendingInvoice?: InvoiceEntity; estimatedTotal: number;
+  certCount: number; emailCount: number;
+  orgName?: string; orgEmail?: string; onSuccess?: () => void;
+}) {
+  const hasOutstanding = !!pendingInvoice;
+  const amount = hasOutstanding ? pendingInvoice!.amount_due_paise / 100 : estimatedTotal;
+
+  return (
+    <div className="rounded-3xl border bg-card overflow-hidden">
+      <div className="px-6 py-5 border-b border-border/60 flex items-center justify-between gap-4">
         <div>
           <p className="font-semibold">
             {hasOutstanding ? 'Amount outstanding' : 'Pay current period'}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {hasOutstanding
-              ? `Invoice ${pendingInvoice!.invoice_number} · Paying resets your billing period to today`
-              : 'Pay now to reset your billing period · Invoice generated immediately'}
+              ? `Invoice ${pendingInvoice!.invoice_number} · Resets billing period on payment`
+              : 'Invoice generated immediately on payment'}
           </p>
         </div>
-        <span className="text-2xl font-bold tabular-nums shrink-0">
-          {formatINR(amount)}
-        </span>
+        <p className="text-3xl font-bold tabular-nums shrink-0">{fmt(amount)}</p>
       </div>
-      <div className="px-5 py-4">
+      <div className="px-6 py-5">
         <PayNowButton
           amount={amount}
           invoiceId={pendingInvoice?.id}
@@ -453,29 +518,6 @@ function PayCard({ pendingInvoice, estimatedTotal, certCount, emailCount, orgNam
           onSuccess={onSuccess}
         />
       </div>
-    </div>
-  );
-}
-
-function BillingLine({ label, value, sub, tooltip, muted }: {
-  label: string; value: string; sub?: string; tooltip?: string; muted?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between py-2.5 gap-4">
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className={`text-sm ${muted ? 'text-muted-foreground' : 'text-foreground'}`}>{label}</span>
-          {tooltip && (
-            <Tooltip content={tooltip}>
-              <span className="cursor-help shrink-0">
-                <Info className="w-3 h-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
-              </span>
-            </Tooltip>
-          )}
-        </div>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-      </div>
-      <span className={`text-sm font-medium tabular-nums shrink-0 ${muted ? 'text-muted-foreground' : 'text-foreground'}`}>{value}</span>
     </div>
   );
 }

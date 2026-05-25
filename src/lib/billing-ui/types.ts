@@ -33,7 +33,10 @@ export interface InvoiceEntity {
   // Computed by backend
   payable: boolean;
   payable_reason: string | null;
-  payment_cta_url: string | null;  // Use this for the "Pay Now" button URL
+  payment_cta_url: string | null;
+  // Manual payment tracking (set when team marks invoice paid offline)
+  marked_paid_at: string | null;
+  marked_paid_by: string | null;
 }
 
 export interface InvoiceLineItem {
