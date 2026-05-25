@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useBillingOverview } from '@/lib/hooks/queries/billing';
@@ -12,7 +12,7 @@ import { PayNowButton } from './components/pay-now-button';
 import {
   Zap, TrendingUp, Receipt, Sparkles, Info, Mail, Users,
   HardDrive, ArrowUpRight, CheckCircle2, AlertTriangle, Lock,
-  Building2,
+  Building2, X, Check, Minus, ChevronRight,
 } from 'lucide-react';
 import type { CurrentUsage, BillingProfile, OrgBilling, InvoiceEntity } from '@/lib/billing-ui/types';
 
@@ -62,10 +62,202 @@ const PLAN_CONFIG: Record<string, {
   },
 };
 
+// ── Plan features data ────────────────────────────────────────────────────────
+type PlanKey = 'Seed' | 'Farm' | 'Aura' | 'Flex';
+
+interface FeatureRow {
+  category: string;
+  feature: string;
+  seed: string | boolean;
+  farm: string | boolean;
+  aura: string | boolean;
+  flex: string | boolean;
+  highlight?: boolean;
+}
+
+const PLAN_FEATURES: FeatureRow[] = [
+  // Certificates
+  { category: 'Certificates', feature: 'Monthly certificates', seed: '25', farm: '200', aura: '2,000', flex: 'Unlimited', highlight: true },
+  { category: 'Certificates', feature: 'Certificate verification', seed: '90 days', farm: 'Forever', aura: 'Forever', flex: 'Forever' },
+  { category: 'Certificates', feature: 'QR code on certificate', seed: true, farm: true, aura: true, flex: true },
+  { category: 'Certificates', feature: 'Bulk generation', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Certificates', feature: 'Extra certs (overage)', seed: false, farm: '₹10/cert', aura: '₹8/cert', flex: '₹5/cert' },
+  // Contacts & Segments
+  { category: 'Contacts', feature: 'Contacts included', seed: '500', farm: '3,000', aura: '25,000', flex: 'Unlimited' },
+  { category: 'Contacts', feature: 'CSV import', seed: true, farm: true, aura: true, flex: true },
+  { category: 'Contacts', feature: 'Segments & filters', seed: false, farm: true, aura: true, flex: true },
+  // Campaigns & Email
+  { category: 'Email Campaigns', feature: 'Email campaigns', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Email Campaigns', feature: 'Free campaign emails/month', seed: false, farm: '2,000', aura: '2,000', flex: '2,000' },
+  { category: 'Email Campaigns', feature: 'Extra campaign emails', seed: false, farm: '₹0.20/email', aura: '₹0.20/email', flex: '₹0.20/email' },
+  { category: 'Email Campaigns', feature: 'Custom sender domain', seed: false, farm: true, aura: true, flex: true },
+  // Automations
+  { category: 'Automations', feature: 'Automation workflows', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Automations', feature: 'Trigger-based rules', seed: false, farm: true, aura: true, flex: true },
+  // Branding
+  { category: 'Branding', feature: 'White-label certificates', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Branding', feature: 'Custom verification domain', seed: false, farm: '₹499/mo add-on', aura: '₹499/mo add-on', flex: '₹499/mo add-on' },
+  { category: 'Branding', feature: 'Remove Authentix branding', seed: false, farm: true, aura: true, flex: true },
+  // Storage & Team
+  { category: 'Storage & Team', feature: 'Storage included', seed: '1 GB', farm: '10 GB', aura: '100 GB', flex: '500 GB' },
+  { category: 'Storage & Team', feature: 'Team members', seed: '1', farm: '5', aura: '20', flex: 'Unlimited' },
+  // Billing
+  { category: 'Billing', feature: 'Monthly platform fee', seed: '₹0', farm: '₹499', aura: '₹1,999', flex: '₹7,999', highlight: true },
+  { category: 'Billing', feature: 'GST', seed: 'Incl.', farm: 'Incl.', aura: 'Incl.', flex: 'Incl.' },
+];
+
+const PLAN_KEYS: PlanKey[] = ['Seed', 'Farm', 'Aura', 'Flex'];
+
+const PLAN_COLORS: Record<PlanKey, { header: string; active: string; dot: string }> = {
+  Seed: { header: 'text-slate-600 dark:text-slate-300', active: 'bg-slate-100 dark:bg-slate-800/60', dot: 'bg-slate-400' },
+  Farm: { header: 'text-emerald-700 dark:text-emerald-400', active: 'bg-emerald-50 dark:bg-emerald-900/20', dot: 'bg-emerald-500' },
+  Aura: { header: 'text-violet-700 dark:text-violet-400', active: 'bg-violet-50 dark:bg-violet-900/20', dot: 'bg-violet-500' },
+  Flex: { header: 'text-brand-600 dark:text-brand-400', active: 'bg-brand-500/8 dark:bg-brand-500/10', dot: 'bg-brand-500' },
+};
+
+function CellValue({ val, planKey, activePlan }: { val: string | boolean; planKey: PlanKey; activePlan: string }) {
+  const isActive = planKey === activePlan;
+  if (val === true) return <Check className={`w-4 h-4 mx-auto ${isActive ? PLAN_COLORS[planKey].header : 'text-emerald-500'}`} />;
+  if (val === false) return <Minus className="w-4 h-4 mx-auto text-muted-foreground/30" />;
+  return (
+    <span className={`text-xs font-medium tabular-nums ${isActive ? PLAN_COLORS[planKey].header : 'text-foreground/80'}`}>
+      {val}
+    </span>
+  );
+}
+
+function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClose: () => void; activePlan: string }) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const categories = [...new Set(PLAN_FEATURES.map(f => f.category))];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative z-10 w-full max-w-4xl max-h-[88vh] flex flex-col rounded-3xl border bg-card shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-5 border-b border-border/60 shrink-0">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">Plan comparison</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Your current plan is highlighted —{' '}
+              <span className={`font-semibold ${PLAN_COLORS[activePlan as PlanKey]?.header ?? ''}`}>{activePlan}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-xl p-2 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground mt-0.5 shrink-0"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable table area */}
+        <div className="flex-1 overflow-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            {/* Sticky plan header row */}
+            <thead className="sticky top-0 z-10 bg-card border-b border-border/60">
+              <tr>
+                <th className="text-left py-4 px-6 font-medium text-muted-foreground w-[200px]">Feature</th>
+                {PLAN_KEYS.map(pk => {
+                  const isActive = pk === activePlan;
+                  const col = PLAN_COLORS[pk];
+                  return (
+                    <th key={pk} className={`text-center py-4 px-3 font-bold ${col.header} ${isActive ? col.active : ''} transition-colors`}>
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+                          <span>{pk}</span>
+                        </div>
+                        {isActive && (
+                          <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">
+                            Your plan
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+
+            <tbody>
+              {categories.map((category, ci) => {
+                const rows = PLAN_FEATURES.filter(f => f.category === category);
+                return rows.map((row, ri) => {
+                  const isFirstInCat = ri === 0;
+                  return (
+                    <tr
+                      key={`${category}-${row.feature}`}
+                      className={`border-b border-border/30 last:border-0 transition-colors ${row.highlight ? 'bg-muted/30' : 'hover:bg-muted/20'}`}
+                    >
+                      <td className="py-3 pl-6 pr-3 align-middle">
+                        {isFirstInCat && (
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1 -mt-0.5">
+                            {category}
+                          </p>
+                        )}
+                        <span className={`text-sm ${row.highlight ? 'font-semibold' : 'text-foreground/80'}`}>
+                          {row.feature}
+                        </span>
+                      </td>
+                      {PLAN_KEYS.map(pk => {
+                        const isActive = pk === activePlan;
+                        const col = PLAN_COLORS[pk];
+                        return (
+                          <td
+                            key={pk}
+                            className={`py-3 px-3 text-center align-middle ${isActive ? col.active : ''}`}
+                          >
+                            <CellValue val={row[pk.toLowerCase() as 'seed' | 'farm' | 'aura' | 'flex']} planKey={pk} activePlan={activePlan} />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                });
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 px-7 py-4 border-t border-border/60 bg-muted/20 flex items-center justify-between gap-4">
+          <p className="text-xs text-muted-foreground">
+            Prices include GST · Overage billed monthly · All plans include permanent certificate archive
+          </p>
+          <button
+            onClick={onClose}
+            className="shrink-0 text-xs font-medium px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function BillingPage() {
   const { organization } = useOrganization();
   const { overview, loading, error, refresh } = useBillingOverview();
+  const [planModalOpen, setPlanModalOpen] = useState(false);
 
   useEffect(() => { if (RAZORPAY_ENABLED) preloadRazorpay(); }, []);
 
@@ -116,6 +308,7 @@ export default function BillingPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-16">
+      <PlanFeaturesModal open={planModalOpen} onClose={() => setPlanModalOpen(false)} activePlan={planName} />
 
       {/* ── Plan hero card ────────────────────────────────────────────────── */}
       <div className={`relative overflow-hidden rounded-3xl border bg-card bg-linear-to-br ${planConfig.gradient} p-7`}>
@@ -142,7 +335,17 @@ export default function BillingPage() {
                 <StatusDot status={org_billing.billing_status} />
               </div>
               <h1 className="text-xl font-bold tracking-tight">{org?.name ?? 'Billing'}</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">{planConfig.tagline}</p>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <p className="text-xs text-muted-foreground">{planConfig.tagline}</p>
+                <button
+                  onClick={() => setPlanModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground/70 hover:text-foreground transition-colors group"
+                >
+                  <Info className="w-3 h-3" />
+                  <span className="group-hover:underline underline-offset-2">What's included</span>
+                  <ChevronRight className="w-3 h-3 opacity-50" />
+                </button>
+              </div>
             </div>
           </div>
 
