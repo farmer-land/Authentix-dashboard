@@ -28,10 +28,19 @@ export const usersApi = {
       if (data.full_name !== undefined) formData.append("full_name", data.full_name);
       if (avatarFile) formData.append("avatar", avatarFile);
 
+      let accessToken: string | undefined;
+      try {
+        const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+        const supabase = createSupabaseBrowserClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        accessToken = session?.access_token ?? undefined;
+      } catch { /* non-browser context */ }
+
       const response = await fetch(`${API_BASE_URL}/users/me`, {
         method: "PATCH",
         body: formData,
         credentials: "include",
+        headers: accessToken ? { "X-Supabase-Token": accessToken } : undefined,
       });
 
       if (!response.ok) {

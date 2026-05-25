@@ -39,11 +39,12 @@ export interface InvoiceEntity {
 export interface InvoiceLineItem {
   id: string;
   invoice_id: string;
+  item_type: 'platform_fee' | 'certificate_usage' | 'adjustment';
   description: string;
   quantity: number;
-  unit_price: number;  // paise
-  amount: number;      // paise
-  certificate_id: string | null;
+  unit_price_paise: number;
+  amount_paise: number;
+  tax_paise: number;
   created_at: string;
 }
 

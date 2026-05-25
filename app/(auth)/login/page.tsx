@@ -1,17 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Loader2, ArrowLeft, Mail } from "lucide-react";
+import { Loader2, ArrowLeft, Mail, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { loginAction, type LoginState } from "./actions";
 import Image from "next/image";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 function SubmitButton({ step }: { step: "email" | "otp" }) {
   const { pending } = useFormStatus();
@@ -45,6 +47,7 @@ const initialState: LoginState = {
 function LoginPageContent() {
   const [state, formAction] = useActionState(loginAction, initialState);
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   // URL params let signup redirect directly to OTP step
   const urlStep = searchParams.get("otp") === "1" ? "otp" : "email";
@@ -53,6 +56,78 @@ function LoginPageContent() {
   // Action state takes precedence over URL params once the action has fired
   const step = state.step !== "email" || state.email ? state.step : urlStep;
   const activeEmail = state.email || urlEmail;
+
+  // Store bridge_secret in sessionStorage exactly once when the action returns it.
+  // The secret must not persist in React state beyond this effect.
+  const bridgeSecretRef = useRef<string | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevBridgeIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (state.bridge_secret) {
+      sessionStorage.setItem("bridge_secret", state.bridge_secret);
+      bridgeSecretRef.current = state.bridge_secret;
+    }
+  }, [state.bridge_secret]);
+
+  // Cross-device polling: watch for magic link click on Device B
+  useEffect(() => {
+    const bridgeId = state.bridge_id;
+    if (!bridgeId || step !== "otp") {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Don't restart polling if bridge_id hasn't changed
+    if (bridgeId === prevBridgeIdRef.current) return;
+    prevBridgeIdRef.current = bridgeId;
+
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    async function checkBridgeStatus() {
+      const secret = sessionStorage.getItem("bridge_secret") || bridgeSecretRef.current;
+      if (!secret || !bridgeId) return;
+
+      try {
+        const res = await fetch(
+          `/api/proxy/auth/magic/status?bridge_id=${encodeURIComponent(bridgeId)}&secret=${encodeURIComponent(secret)}`,
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          success: boolean;
+          data?: { status: string; email?: string; otp?: string };
+        };
+        const data = json.data;
+
+        if (data?.status === "completed" && data.otp && data.email) {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          sessionStorage.removeItem("bridge_secret");
+
+          // Sign Device A in using the one-time OTP generated for it
+          const supabase = createSupabaseBrowserClient();
+          const { error } = await supabase.auth.verifyOtp({
+            email: data.email,
+            token: data.otp,
+            type: "magiclink",
+          });
+
+          if (!error) {
+            router.push("/dashboard");
+          }
+        }
+      } catch {
+        // Silently ignore poll errors — will retry on next interval
+      }
+    }
+
+    pollIntervalRef.current = setInterval(checkBridgeStatus, 2000);
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [state.bridge_id, step, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -112,6 +187,9 @@ function LoginPageContent() {
               </div>
             ) : (
               <div className="space-y-2">
+                <Label htmlFor="token" className="text-sm font-medium">
+                  Sign-in code
+                </Label>
                 <Input
                   id="token"
                   name="token"
@@ -167,6 +245,24 @@ function LoginPageContent() {
             )}
           </form>
         </Card>
+
+        {/* Cross-device waiting indicator — shown in OTP step when bridge is active */}
+        {step === "otp" && state.bridge_id && (
+          <div className="mt-4 rounded-xl border border-border/60 bg-muted/30 px-4 py-3 flex items-start gap-3">
+            <Smartphone className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-medium text-foreground">Sign in from another device</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Click the magic link in your email on any device and this page will
+                automatically sign you in.
+              </p>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                <span className="text-[11px] text-muted-foreground">Waiting for link click…</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {step === "email" && (
           <div className="space-y-3 mt-6">

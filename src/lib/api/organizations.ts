@@ -30,6 +30,13 @@ export const organizationsApi = {
       postal_code?: string | null;
       gst_number?: string | null;
       cin_number?: string | null;
+      billing_email?: string | null;
+      billing_currency?: string | null;
+      billing_address?: string | null;
+      billing_city?: string | null;
+      billing_state?: string | null;
+      billing_country?: string | null;
+      billing_postal_code?: string | null;
       verification_message?: string | null;
     },
     logoFile?: File,
@@ -39,10 +46,21 @@ export const organizationsApi = {
       formData.append("metadata", JSON.stringify(data));
       formData.append("file", logoFile);
 
+      // Explicitly attach the session token so the proxy doesn't have to fall
+      // back to cookie extraction (which is unreliable for multipart requests).
+      let accessToken: string | undefined;
+      try {
+        const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+        const supabase = createSupabaseBrowserClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        accessToken = session?.access_token ?? undefined;
+      } catch { /* non-browser context */ }
+
       const response = await fetch(`${API_BASE_URL}/organizations/me`, {
         method: "PUT",
         body: formData,
         credentials: "include",
+        headers: accessToken ? { "X-Supabase-Token": accessToken } : undefined,
       });
 
       const result = (await response.json()) as ApiResponse<Organization>;

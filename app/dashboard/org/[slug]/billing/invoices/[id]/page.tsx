@@ -129,8 +129,8 @@ export default function InvoiceDetailPage() {
                   <tr key={item.id}>
                     <td className="py-2.5 pr-4 text-sm">{item.description}</td>
                     <td className="py-2.5 text-right tabular-nums text-muted-foreground">{item.quantity}</td>
-                    <td className="py-2.5 text-right tabular-nums text-muted-foreground">{formatINR(item.unit_price)}</td>
-                    <td className="py-2.5 text-right tabular-nums font-medium">{formatINR(item.amount)}</td>
+                    <td className="py-2.5 text-right tabular-nums text-muted-foreground">{formatINR(item.unit_price_paise)}</td>
+                    <td className="py-2.5 text-right tabular-nums font-medium">{formatINR(item.amount_paise)}</td>
                   </tr>
                 ))}
               </tbody>

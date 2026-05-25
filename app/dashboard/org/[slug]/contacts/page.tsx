@@ -117,7 +117,7 @@ function AccordionActions({
   onDelete?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+    <div className="flex items-center gap-1 shrink-0">
       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onGenerateCerts}>
         <Award className="h-3 w-3 mr-1" /> Certificates
       </Button>
@@ -416,33 +416,35 @@ function ImportAccordionRow({
 
   return (
     <div className="border-t first:border-t-0">
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
-        <FileText className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{session.file_name}</p>
-          <p className="text-xs text-muted-foreground">
-            {session.imported.toLocaleString()} contact{session.imported !== 1 ? "s" : ""}
-            {session.skipped > 0 && `, ${session.skipped.toLocaleString()} skipped`}
-            {" · "}
-            {formatDistanceToNow(new Date(session.imported_at), { addSuffix: true })}
-          </p>
-          {session.skipped > 0 && session.imported === 0 && (
-            <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-              Rows skipped — check that each row has a valid email address
+      <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
+        <button
+          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+          <FileText className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{session.file_name}</p>
+            <p className="text-xs text-muted-foreground">
+              {session.imported.toLocaleString()} contact{session.imported !== 1 ? "s" : ""}
+              {session.skipped > 0 && `, ${session.skipped.toLocaleString()} skipped`}
+              {" · "}
+              {formatDistanceToNow(new Date(session.imported_at), { addSuffix: true })}
             </p>
-          )}
-        </div>
+            {session.skipped > 0 && session.imported === 0 && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                Rows skipped — check that each row has a valid email address
+              </p>
+            )}
+          </div>
+        </button>
         <AccordionActions
           onGenerateCerts={() => onGenerateCerts(session.source_ref)}
           onBroadcast={() => onBroadcast(session.source_ref)}
           onUseLater={onUseLater}
           onDelete={onDelete}
         />
-      </button>
+      </div>
 
       {open && (
         <div className="px-4 pb-3 bg-muted/5 space-y-2">
@@ -865,23 +867,25 @@ export default function ContactsPage() {
       {/* All Contacts accordion */}
       <div className="border rounded-xl overflow-hidden">
         {/* Header */}
-        <button
-          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-          onClick={() => setAllContactsOpen((v) => !v)}
-        >
-          <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform", allContactsOpen && "rotate-180")} />
-          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">All Contacts</p>
-            {total > 0 && (
-              <p className="text-xs text-muted-foreground">{total.toLocaleString()} contact{total !== 1 ? "s" : ""}</p>
-            )}
-          </div>
+        <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+          <button
+            className="flex items-center gap-3 flex-1 min-w-0 text-left"
+            onClick={() => setAllContactsOpen((v) => !v)}
+          >
+            <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform", allContactsOpen && "rotate-180")} />
+            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">All Contacts</p>
+              {total > 0 && (
+                <p className="text-xs text-muted-foreground">{total.toLocaleString()} contact{total !== 1 ? "s" : ""}</p>
+              )}
+            </div>
+          </button>
           <AccordionActions
             onGenerateCerts={() => setCertModal({ open: true })}
             onBroadcast={() => handleBroadcast()}
           />
-        </button>
+        </div>
 
         {/* Body — file sub-accordions */}
         {allContactsOpen && (

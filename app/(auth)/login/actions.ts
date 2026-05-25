@@ -2,12 +2,17 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { BACKEND_PRIMARY_URL } from "@/lib/config/env";
 
 export interface LoginState {
   error: string | null;
   success: boolean;
   step: "email" | "otp";
   email: string;
+  /** Cross-device bridge session ID (public — safe to expose) */
+  bridge_id?: string;
+  /** Cross-device bridge secret (one-time — client must move to sessionStorage) */
+  bridge_secret?: string;
 }
 
 const PERSONAL_DOMAINS = new Set([
@@ -19,6 +24,28 @@ const PERSONAL_DOMAINS = new Set([
 function isPersonalEmail(email: string): boolean {
   const domain = email.split("@")[1]?.toLowerCase() ?? "";
   return PERSONAL_DOMAINS.has(domain);
+}
+
+/**
+ * Initiate a cross-device bridge session before sending the magic link.
+ * Returns { bridge_id, bridge_secret } or null on failure (graceful degradation).
+ */
+async function initiateBridgeSession(
+  email: string,
+): Promise<{ bridge_id: string; bridge_secret: string } | null> {
+  try {
+    const res = await fetch(`${BACKEND_PRIMARY_URL}/auth/magic/initiate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { success: boolean; data?: { bridge_id: string; bridge_secret: string } };
+    return json.success && json.data ? json.data : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function loginAction(
@@ -49,11 +76,21 @@ export async function loginAction(
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+    // Create the cross-device bridge session before sending the OTP.
+    // If this fails we still send the OTP — user can enter the code manually.
+    const bridge = await initiateBridgeSession(email);
+
+    // Embed bridge_id in the magic link redirect URL so Device B lands on our handler.
+    const magicCallbackUrl = bridge
+      ? `${appUrl}/auth/magic-callback?bridge_id=${encodeURIComponent(bridge.bridge_id)}`
+      : `${appUrl}/auth/callback`;
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: false,
-        emailRedirectTo: `${appUrl}/auth/callback`,
+        emailRedirectTo: magicCallbackUrl,
       },
     });
 
@@ -63,7 +100,13 @@ export async function loginAction(
       redirect(`/signup?email=${encodeURIComponent(email)}`);
     }
 
-    return { error: null, success: true, step: "otp", email };
+    return {
+      error: null,
+      success: true,
+      step: "otp",
+      email,
+      ...(bridge && { bridge_id: bridge.bridge_id, bridge_secret: bridge.bridge_secret }),
+    };
   }
 
   // OTP verification step
