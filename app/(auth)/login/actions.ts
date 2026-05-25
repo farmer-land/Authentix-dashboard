@@ -64,8 +64,8 @@ export async function loginAction(
 
   // OTP verification
   const token = ((formData.get("token") as string) || "").trim();
-  if (!token || token.length < 6) {
-    return { error: "Please enter the code from your email", success: false, step: "otp", email };
+  if (!token || token.length < 8) {
+    return { error: "Please enter the 8-digit code from your email", success: false, step: "otp", email };
   }
 
   const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
