@@ -83,12 +83,13 @@ const PLAN_FEATURES: FeatureRow[] = [
   { category: 'Certificates', feature: 'QR code on certificate', seed: true, farm: true, aura: true, flex: true },
   { category: 'Certificates', feature: 'Certificate number format', seed: 'Default', farm: 'Custom', aura: 'Custom', flex: 'Custom' },
   // Data Retention & Archive
-  { category: 'Data & Retention', feature: 'Certificate QR verification', seed: '90 days', farm: 'Forever', aura: 'Forever', flex: 'Forever', highlight: true },
-  { category: 'Data & Retention', feature: 'Permanent cert archive fee', seed: 'N/A', farm: '₹1/cert (one-time)', aura: '₹1/cert (one-time)', flex: '₹1/cert (one-time)' },
+  { category: 'Data & Retention', feature: 'Certificate QR verification', seed: 'Forever', farm: 'Forever', aura: 'Forever', flex: 'Forever', highlight: true },
+  { category: 'Data & Retention', feature: 'Permanent cert archive fee', seed: '₹1/cert (one-time)', farm: '₹1/cert (one-time)', aura: '₹1/cert (one-time)', flex: '₹1/cert (one-time)' },
   { category: 'Data & Retention', feature: 'Recipient data retention', seed: '90 days', farm: '3 years', aura: '7 years', flex: '7 years' },
   { category: 'Data & Retention', feature: 'Legal / govt doc hold (challan)', seed: false, farm: '7 years', aura: '7 years', flex: '7 years' },
-  { category: 'Data & Retention', feature: 'Certificate valid after org closes', seed: false, farm: true, aura: true, flex: true },
-  { category: 'Data & Retention', feature: 'Export your data anytime', seed: false, farm: true, aura: true, flex: true },
+  { category: 'Data & Retention', feature: 'Certificate valid after org closes', seed: true, farm: true, aura: true, flex: true },
+  { category: 'Data & Retention', feature: 'Export your data anytime', seed: true, farm: true, aura: true, flex: true },
+  { category: 'Data & Retention', feature: 'Auto-purge personal data on schedule', seed: true, farm: true, aura: true, flex: true },
   // Contacts & Segments
   { category: 'Contacts', feature: 'Contacts included', seed: '500', farm: '3,000', aura: '25,000', flex: 'Unlimited' },
   { category: 'Contacts', feature: 'Extra contacts (per 1,000)', seed: false, farm: '₹20/1k', aura: '₹15/1k', flex: '₹10/1k' },

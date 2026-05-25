@@ -76,6 +76,7 @@ export type {
 
 // ── Domain API modules ────────────────────────────────────────────────────────
 
+import { adminApi } from "./admin";
 import { authApi } from "./auth";
 import { templatesApi } from "./templates";
 import { certificatesApi } from "./certificates";
@@ -99,6 +100,7 @@ import { usersApi } from "./users";
  *   const cert = await api.certificates.get(id);
  */
 export const api = {
+  admin: adminApi,
   auth: authApi,
   templates: templatesApi,
   certificates: certificatesApi,
