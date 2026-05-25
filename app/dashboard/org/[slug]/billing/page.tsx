@@ -332,7 +332,7 @@ export default function BillingPage() {
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide ${planConfig.badge}`}>
                   {planConfig.badgeText}
                 </span>
-                <StatusDot status={org_billing.billing_status} />
+                <StatusDot status={isComplimentary ? 'active' : org_billing.billing_status} />
               </div>
               <h1 className="text-xl font-bold tracking-tight">{org?.name ?? 'Billing'}</h1>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -356,7 +356,7 @@ export default function BillingPage() {
         </div>
 
         {/* Trial / lock banners inside hero */}
-        {isTrialing && (
+        {isTrialing && !isComplimentary && (
           <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-brand-600">Free Trial</p>
@@ -404,7 +404,7 @@ export default function BillingPage() {
           icon={<Zap className="w-4 h-4" />}
           label="Certificates"
           value={String(current_usage.certificate_count)}
-          sub={isTrialing ? `${trialCertsLeft} free left` : isComplimentary ? 'issued this month' : `× ${fmt(billing_profile.certificate_unit_price)}`}
+          sub={isComplimentary ? 'issued this month' : isTrialing ? `${trialCertsLeft} free left` : `× ${fmt(billing_profile.certificate_unit_price)}`}
           color="default"
         />
         {!isComplimentary && (
@@ -428,22 +428,21 @@ export default function BillingPage() {
         <Metric
           icon={<Users className="w-4 h-4" />}
           label="Plan"
-          value={isTrialing ? 'Trial' : planName}
+          value={isComplimentary ? planName : isTrialing ? 'Trial' : planName}
           sub={isComplimentary ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
           color="default"
         />
       </div>
 
-      {/* ── Usage breakdown (hidden for complimentary) ───────────────────────── */}
-      {!isComplimentary && (
-        <UsageBreakdown
-          usage={current_usage}
-          billingProfile={billing_profile}
-          isTrialing={isTrialing}
-          orgBilling={org_billing}
-          billFree={billFree}
-        />
-      )}
+      {/* ── Usage breakdown — always shown ──────────────────────────────────── */}
+      <UsageBreakdown
+        usage={current_usage}
+        billingProfile={billing_profile}
+        isTrialing={isTrialing && !isComplimentary}
+        orgBilling={org_billing}
+        billFree={billFree}
+        isComplimentary={isComplimentary}
+      />
 
       {/* ── Payment section ─────────────────────────────────────────────────── */}
       {!isComplimentary && !billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
@@ -541,14 +540,41 @@ function Metric({ icon, label, value, sub, color }: {
 }
 
 // ── UsageBreakdown ────────────────────────────────────────────────────────────
-function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree }: {
+function UsageBreakdown({ usage, billingProfile, isTrialing, orgBilling, billFree, isComplimentary }: {
   usage: CurrentUsage; billingProfile: BillingProfile;
   isTrialing: boolean; orgBilling: OrgBilling; billFree: boolean;
+  isComplimentary: boolean;
 }) {
   const certsAboveTrial = isTrialing
     ? Math.max(0, usage.certificate_count - orgBilling.trial_free_certificates_limit)
     : usage.certificate_count;
   const gstInclusive = billingProfile.gst_inclusive ?? true;
+
+  // Product-owner / complimentary view — show counts only, no pricing
+  if (isComplimentary) {
+    return (
+      <div className="rounded-3xl border bg-card overflow-hidden">
+        <div className="px-6 py-4 border-b border-border/60 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Usage this month</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Tracking only — no charges apply to this account
+            </p>
+          </div>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-brand-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+            Live
+          </span>
+        </div>
+        <div className="px-6 py-5 divide-y divide-border/40">
+          <Row label="Certificates issued" value={String(usage.certificate_count)} sub="This calendar month" />
+          {(usage.broadcast_email_count ?? 0) > 0 && (
+            <Row label="Campaign emails sent" value={String(usage.broadcast_email_count)} />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-3xl border bg-card overflow-hidden">
