@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Loader2, ArrowLeft, Mail, Smartphone } from "lucide-react";
+import { Loader2, ArrowLeft, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -169,8 +169,8 @@ function LoginPageContent() {
             )}
 
             {step === "email" ? (
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm font-medium leading-none">
                   Work email
                 </Label>
                 <Input
@@ -186,8 +186,8 @@ function LoginPageContent() {
                 />
               </div>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="token" className="text-sm font-medium">
+              <div className="space-y-1.5">
+                <Label htmlFor="token" className="text-sm font-medium leading-none">
                   Sign-in code
                 </Label>
                 <Input
@@ -265,21 +265,12 @@ function LoginPageContent() {
         )}
 
         {step === "email" && (
-          <div className="space-y-3 mt-6">
-            <p className="text-center text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/signup"
-                className="font-medium text-primary hover:text-primary/80"
-              >
-                Sign up
-              </Link>
-            </p>
-            <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
-              <Mail className="h-3.5 w-3.5" />
-              <span>No password needed — we email you a sign-in code</span>
-            </div>
-          </div>
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="font-medium text-primary hover:text-primary/80">
+              Sign up
+            </Link>
+          </p>
         )}
       </div>
     </div>
