@@ -24,7 +24,17 @@ import {
   Filter,
   Activity,
   Megaphone,
+  ShieldCheck,
 } from "lucide-react";
+
+// Domains whose users are Authentix product-owners — shown differently in nav
+const PRODUCT_OWNER_DOMAINS = ['xencus.com', 'yhills.com'] as const;
+
+function isProductOwnerEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const domain = email.split('@')[1]?.toLowerCase() ?? '';
+  return (PRODUCT_OWNER_DOMAINS as readonly string[]).includes(domain);
+}
 import Image from "next/image";
 import { api } from "@/lib/api/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -256,6 +266,7 @@ interface UserMenuProps {
   readonly mounted: boolean;
   readonly expanded: boolean;
   readonly onOpenChange: (open: boolean) => void;
+  readonly isProductOwner: boolean;
 }
 
 function UserMenu({
@@ -268,6 +279,7 @@ function UserMenu({
   mounted,
   expanded,
   onOpenChange,
+  isProductOwner,
 }: UserMenuProps) {
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -285,7 +297,9 @@ function UserMenu({
           ) : (
             <>
               <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold overflow-hidden shrink-0 text-xs">
-                {organizationLogo ? (
+                {isProductOwner ? (
+                  <ShieldCheck className="h-4 w-4" />
+                ) : organizationLogo ? (
                   <img
                     src={organizationLogo}
                     alt=""
@@ -298,8 +312,13 @@ function UserMenu({
               {expanded && (
                 <div className="text-left min-w-0 flex-1">
                   <p className="text-xs font-medium truncate">{profileName || "User"}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
                     {organizationName || "Organization"}
+                    {isProductOwner && (
+                      <span className="inline-block text-[9px] font-semibold text-primary/70 bg-primary/10 rounded px-1 leading-tight">
+                        TEAM
+                      </span>
+                    )}
                   </p>
                 </div>
               )}
@@ -309,7 +328,14 @@ function UserMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
         <DropdownMenuLabel>
-          <p className="text-sm font-medium">{profileName}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium">{profileName}</p>
+            {isProductOwner && (
+              <span className="text-[9px] font-bold text-primary/80 bg-primary/10 rounded px-1 py-px leading-tight">
+                PRODUCT OWNER
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">{user?.email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -354,7 +380,9 @@ export function DashboardShell({
   // Derived values
   const profileName =
     initialUser?.full_name ?? initialUser?.email?.split("@")[0] ?? "User";
-  const organizationName = initialOrganization?.name ?? "Organization";
+  const isProductOwner  = isProductOwnerEmail(initialUser?.email);
+  // Product-owner accounts show "Authentix" as the workspace name in nav
+  const organizationName = isProductOwner ? "Authentix" : (initialOrganization?.name ?? "Organization");
   const organizationLogo = initialOrganization?.logo ?? null;
 
   // Mounted effect for hydration safety
@@ -534,6 +562,7 @@ export function DashboardShell({
                 mounted={mounted}
                 expanded={isExpanded}
                 onOpenChange={setDropdownOpen}
+                isProductOwner={isProductOwner}
               />
 
               <ThemeButton

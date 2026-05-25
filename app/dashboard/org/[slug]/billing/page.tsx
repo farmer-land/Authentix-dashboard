@@ -99,13 +99,13 @@ export default function BillingPage() {
     );
   }
 
-  const { org_billing, current_usage, billing_profile, recent_invoices, total_outstanding } = overview;
+  const { org_billing, current_usage, billing_profile, recent_invoices, total_outstanding, is_product_owner } = overview;
   const isTrialing   = org_billing.billing_status === 'trialing';
   const isOverdue    = org_billing.billing_status === 'overdue';
   const isLocked     = org_billing.billing_status === 'locked';
 
-  // Seed plan = whitelisted/complimentary — show usage only, no billing UI
-  const isComplimentary = billing_profile.plan_name === 'Seed' && !isTrialing;
+  // Product-owner domains (Authentix team) or Seed plan = complimentary — show usage only, no billing UI
+  const isComplimentary = is_product_owner || (billing_profile.plan_name === 'Seed' && !isTrialing);
 
   const planName   = billing_profile.plan_name ?? 'Flex';
   const planConfig = PLAN_CONFIG[planName] ?? PLAN_CONFIG['Flex']!;

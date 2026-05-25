@@ -94,6 +94,7 @@ export interface BillingOverview {
   org_billing: OrgBilling;
   recent_invoices: InvoiceEntity[];
   total_outstanding: number;  // rupees
+  is_product_owner: boolean; // org domain is on product-owner whitelist (Authentix team) — usage-only, no charges
 }
 
 export interface PaymentStatusInfo {
