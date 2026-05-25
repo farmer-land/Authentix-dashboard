@@ -119,14 +119,14 @@ function LoginPageContent() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={8}
-                  placeholder="00000000"
+                  placeholder="000000"
                   required
                   autoComplete="one-time-code"
                   autoFocus
                   className="h-10 text-center tracking-[0.4em] text-lg font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Enter the 8-digit code from your email
+                  Enter the code from your email
                 </p>
               </div>
             )}

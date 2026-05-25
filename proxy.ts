@@ -120,6 +120,14 @@ export async function proxy(request: NextRequest) {
     return nonceResponse();
   }
 
+  // /auth/* routes must be public — they SET the session (PKCE exchange, magic link
+  // callback). Blocking them while unauthenticated breaks the entire login flow:
+  // the middleware would redirect /auth/callback to /login before the code can be
+  // exchanged, consuming the Supabase token and invalidating the OTP.
+  if (pathname.startsWith("/auth/")) {
+    return nonceResponse();
+  }
+
   // Public routes
   if (PUBLIC_ROUTES.includes(pathname)) {
     if (isAuthenticated && (pathname === "/login" || pathname === "/signup")) {
