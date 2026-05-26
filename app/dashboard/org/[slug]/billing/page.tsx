@@ -560,6 +560,7 @@ export default function BillingPage() {
       {deleteOpen && (
         <DeleteAccountDialog
           orgName={org?.name ?? 'this organisation'}
+          totalOutstanding={total_outstanding}
           onCancel={() => setDeleteOpen(false)}
           onConfirm={async () => {
             await api.billing.requestAccountDeletion();
@@ -849,97 +850,140 @@ function BillingCapsPanel({
   const [cap, setCap] = useState(caps.cert_cap_monthly);
   const [autoTopup, setAutoTopup] = useState(caps.auto_topup_certs);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const pct = Math.min(100, cap > 0 ? Math.round((certUsed / cap) * 100) : 0);
-  const barColor = pct >= 90 ? 'bg-destructive' : pct >= 70 ? 'bg-amber-500' : 'bg-brand-500';
+  const unlimited = cap === 0;
+  const pct = Math.min(100, !unlimited && cap > 0 ? Math.round((certUsed / cap) * 100) : certUsed > 0 ? 5 : 0);
+  const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-brand-500';
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave({ cert_cap_monthly: cap, auto_topup_certs: autoTopup }); }
-    finally { setSaving(false); }
+    try {
+      await onSave({ cert_cap_monthly: cap, auto_topup_certs: autoTopup });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally { setSaving(false); }
   };
 
   return (
     <div className="rounded-3xl border bg-card overflow-hidden">
+      {/* Header — always visible */}
       <button
         onClick={onToggle}
-        className="w-full px-6 py-4 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors text-left"
+        className="w-full px-6 py-5 flex items-center justify-between gap-4 hover:bg-muted/20 transition-colors text-left"
       >
         <div className="flex items-center gap-3">
-          <Sliders className="w-4 h-4 text-muted-foreground" />
+          <div className="p-2 rounded-xl bg-muted/60">
+            <Sliders className="w-4 h-4 text-muted-foreground" />
+          </div>
           <div>
             <p className="font-semibold text-sm">Usage Limits</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Monthly cert cap: <span className="font-medium text-foreground">{cap.toLocaleString()}</span>
+              {unlimited ? 'Unlimited certs' : `Cap: ${cap.toLocaleString()} certs/month`}
               {' · '}{certUsed.toLocaleString()} used this month
             </p>
           </div>
         </div>
-        <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+        <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
       </button>
 
       {open && (
-        <div className="px-6 pb-6 border-t border-border/60 pt-5 space-y-5">
-          {/* Cert usage bar */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium">Certificates this month</span>
-              <span className="text-xs text-muted-foreground tabular-nums">{certUsed} / {cap}</span>
+        <div className="px-6 pb-6 pt-1 border-t border-border/40 space-y-6">
+
+          {/* Usage bar */}
+          <div className="pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Certificates this month</span>
+              <span className="text-xs font-mono tabular-nums">
+                <span className="text-foreground font-semibold">{certUsed.toLocaleString()}</span>
+                <span className="text-muted-foreground">
+                  {unlimited ? ' issued' : ` / ${cap.toLocaleString()}`}
+                </span>
+              </span>
             </div>
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                style={{ width: `${Math.max(pct, certUsed > 0 ? 2 : 0)}%` }}
+              />
             </div>
+            {!unlimited && pct >= 80 && (
+              <p className="text-[11px] text-amber-500 mt-1.5">
+                {pct >= 100 ? 'Cap reached — generation paused.' : `${100 - pct}% of cap remaining.`}
+              </p>
+            )}
           </div>
 
-          {/* Cap slider */}
-          <div>
-            <label className="text-xs font-medium block mb-2">Monthly certificate cap</label>
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min={10}
-                max={5000}
-                step={10}
-                value={cap}
-                onChange={e => setCap(Number(e.target.value))}
-                className="flex-1 accent-brand-500"
-              />
-              <input
-                type="number"
-                min={0}
-                max={99999}
-                value={cap}
-                onChange={e => setCap(Math.max(0, Number(e.target.value)))}
-                className="w-20 rounded-lg border border-border/60 bg-muted/40 px-2 py-1 text-sm text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
+          {/* Cap control */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Monthly certificate cap</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Unlimited</span>
+                <button
+                  onClick={() => setCap(v => v === 0 ? 200 : 0)}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${unlimited ? 'bg-brand-500' : 'bg-border'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${unlimited ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1.5">
-              Generation pauses when this limit is reached. 0 = unlimited.
+
+            {!unlimited && (
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={10}
+                  max={5000}
+                  step={10}
+                  value={cap}
+                  onChange={e => setCap(Number(e.target.value))}
+                  className="flex-1 h-1.5 rounded-full appearance-none bg-muted [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-brand-500 [&::-webkit-slider-thumb]:cursor-pointer accent-brand-500"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={99999}
+                  value={cap}
+                  onChange={e => setCap(Math.max(1, Number(e.target.value)))}
+                  className="w-20 rounded-xl border border-border/60 bg-muted/40 px-3 py-1.5 text-sm text-right tabular-nums font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                />
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground">
+              {unlimited ? 'No limit — generate as many certs as your plan allows.' : 'Generation pauses when this limit is reached.'}
             </p>
           </div>
 
-          {/* Auto-topup toggle */}
-          <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
-            <div>
-              <p className="text-sm font-medium">Auto top-up</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Automatically purchase {caps.topup_block_size} extra certs when limit is reached
-              </p>
-            </div>
-            <button
+          {/* Auto top-up */}
+          {!unlimited && (
+            <div
               onClick={() => setAutoTopup(v => !v)}
-              className={`relative w-10 h-6 rounded-full transition-colors ${autoTopup ? 'bg-brand-500' : 'bg-muted'}`}
+              className={`flex items-center justify-between rounded-2xl border px-4 py-3.5 cursor-pointer transition-colors ${autoTopup ? 'border-brand-500/30 bg-brand-500/5' : 'border-border/60 bg-muted/20'}`}
             >
-              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${autoTopup ? 'translate-x-5' : 'translate-x-1'}`} />
-            </button>
-          </div>
+              <div>
+                <p className="text-sm font-medium">Auto top-up</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Buy {caps.topup_block_size} extra certs automatically when cap is hit
+                </p>
+              </div>
+              <div className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${autoTopup ? 'bg-brand-500' : 'bg-border'}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoTopup ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </div>
+            </div>
+          )}
 
+          {/* Save */}
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full py-2 rounded-xl text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 transition-colors"
+            className={`w-full py-2.5 rounded-2xl text-sm font-semibold transition-all ${
+              saved
+                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                : 'bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50'
+            }`}
           >
-            {saving ? 'Saving…' : 'Save limits'}
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save limits'}
           </button>
         </div>
       )}
@@ -949,15 +993,17 @@ function BillingCapsPanel({
 
 // ── DeleteAccountDialog ──────────────────────────────────────────────────────
 function DeleteAccountDialog({
-  orgName, onCancel, onConfirm,
+  orgName, totalOutstanding, onCancel, onConfirm,
 }: {
   orgName: string;
+  totalOutstanding: number;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
 }) {
   const [typed, setTyped] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [step, setStep] = useState<'warning' | 'confirm'>('warning');
+  const hasPendingBill = totalOutstanding > 0;
   const confirmed = typed.trim().toLowerCase() === 'delete';
 
   const handleConfirm = async () => {
@@ -974,65 +1020,110 @@ function DeleteAccountDialog({
   }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-background rounded-2xl border border-border shadow-2xl overflow-hidden">
-        <div className="px-6 pt-6 pb-4 flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-destructive/10">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="w-full max-w-md bg-background rounded-3xl border border-border shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 flex items-start gap-3 border-b border-border/40">
+          <div className="p-2 rounded-xl bg-destructive/10 shrink-0">
             <ShieldAlert className="w-5 h-5 text-destructive" />
           </div>
-          <div className="flex-1">
-            <h2 className="font-semibold">Delete account — {orgName}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">This action cannot be undone.</p>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-semibold">Delete account</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{orgName}</p>
           </div>
-          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground">
+          <button onClick={onCancel} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {step === 'warning' ? (
-          <div className="px-6 pb-6 space-y-4">
-            <div className="rounded-xl bg-muted/50 border border-border/60 p-4 space-y-2 text-sm">
-              <p className="font-medium">What happens when you delete:</p>
-              <ul className="text-muted-foreground space-y-1.5 text-xs list-none">
-                <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" /> All certificate QR links stay active <span className="font-medium text-foreground">forever</span></li>
-                <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" /> Your account is immediately deactivated</li>
-                <li className="flex gap-2"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" /> Personal data (names, emails) purged after 1 year per DPDPA</li>
-                <li className="flex gap-2"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" /> Invoice + payment records kept 7 years (IT Act / GST Act)</li>
-                <li className="flex gap-2"><X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" /> You will lose access to the dashboard immediately</li>
+        {/* Blocked — pending balance */}
+        {hasPendingBill ? (
+          <div className="px-6 py-6 space-y-4">
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Outstanding balance — {fmt(totalOutstanding)}</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Please clear your outstanding balance before deleting your account.
+                Once paid, you can return to request deletion.
+              </p>
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>After deletion:</p>
+              <ul className="space-y-0.5 pl-3">
+                <li>• All certificate QR links remain active forever</li>
+                <li>• Invoice records are retained 7 years (GST Act)</li>
+                <li>• Personal data purged after 1 year (DPDPA)</li>
               </ul>
             </div>
-            <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
+            <button onClick={onCancel} className="w-full py-2.5 rounded-2xl text-sm font-medium border border-border/60 hover:bg-muted/40 transition-colors">
+              Close
+            </button>
+          </div>
+
+        ) : step === 'warning' ? (
+          <div className="px-6 py-5 space-y-4">
+            <div className="rounded-2xl bg-muted/40 border border-border/50 p-4 space-y-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">What happens when you delete</p>
+              <div className="space-y-2 text-xs">
+                <div className="flex gap-2.5 items-start">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                  <span className="text-muted-foreground">Certificate QR links stay active <span className="font-semibold text-foreground">forever</span> — students can always verify</span>
+                </div>
+                <div className="flex gap-2.5 items-start">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                  <span className="text-muted-foreground">No further charges after deletion</span>
+                </div>
+                <div className="flex gap-2.5 items-start">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                  <span className="text-muted-foreground">Personal data (names, emails) purged after 1 year — DPDPA 2023</span>
+                </div>
+                <div className="flex gap-2.5 items-start">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                  <span className="text-muted-foreground">Invoice & payment records kept 7 years — IT Act / GST Act</span>
+                </div>
+                <div className="flex gap-2.5 items-start">
+                  <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />
+                  <span className="text-muted-foreground">Dashboard access lost immediately — this cannot be undone</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button onClick={onCancel} className="flex-1 py-2.5 rounded-2xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
                 Cancel
               </button>
               <button
                 onClick={() => setStep('confirm')}
-                className="flex-1 py-2 rounded-xl text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                className="flex-1 py-2.5 rounded-2xl text-sm font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/15 transition-colors"
               >
                 I understand, continue
               </button>
             </div>
           </div>
+
         ) : (
-          <div className="px-6 pb-6 space-y-4">
+          <div className="px-6 py-5 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Type <span className="font-mono font-bold text-foreground">delete</span> to confirm permanent account deletion.
+              Type <span className="font-mono font-semibold text-foreground bg-muted px-1.5 py-0.5 rounded">delete</span> to confirm.
             </p>
             <input
               autoFocus
               value={typed}
               onChange={e => setTyped(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && confirmed) void handleConfirm(); }}
               placeholder="delete"
-              className="w-full rounded-xl border border-border/60 bg-muted/40 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-destructive/50"
+              className="w-full rounded-2xl border border-border/60 bg-muted/40 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-destructive/40"
             />
-            <div className="flex gap-3">
-              <button onClick={() => setStep('warning')} className="flex-1 py-2 rounded-xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
+            <div className="flex gap-2.5">
+              <button onClick={() => setStep('warning')} className="flex-1 py-2.5 rounded-2xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
                 Back
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={!confirmed || confirming}
-                className="flex-1 py-2 rounded-xl text-sm font-medium bg-destructive text-white hover:bg-destructive/90 disabled:opacity-40 transition-colors"
+                className="flex-1 py-2.5 rounded-2xl text-sm font-semibold bg-destructive text-white hover:bg-destructive/90 disabled:opacity-40 transition-all"
               >
                 {confirming ? 'Deleting…' : 'Delete account'}
               </button>
