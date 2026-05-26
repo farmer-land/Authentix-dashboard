@@ -8,17 +8,21 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
   Users, Upload, Loader2,
   Award, Mail, ChevronDown, FileText, Trash2, Search, PenLine,
-  Megaphone, CheckCircle2,
+  Megaphone, CheckCircle2, Download, AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
 import { useTemplates } from "@/lib/hooks/queries/templates";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -27,8 +31,40 @@ import { FieldMappingModal, CONTACT_PLATFORM_FIELDS } from "@/components/contact
 import { useQueryClient } from "@tanstack/react-query";
 import { nanoid } from "nanoid";
 
-const BATCH_SIZE = 500;
+// Rows per API call — small enough to finish in <5s even under load
+const BATCH_SIZE = 100;
+// Max concurrent batch calls to the backend
+const BATCH_CONCURRENCY = 3;
 const ACCEPTED_TYPES = ".xlsx,.xls,.csv,.tsv,.tab,.md,.markdown";
+
+// LocalStorage key for the user's one-time quota preference
+const quotaPrefKey = (slug: string) => `contact_quota_pref:${slug}`;
+
+type QuotaPref = 'auto_bill' | 'limit_only' | 'acknowledged';
+
+function getQuotaPref(slug: string): QuotaPref | null {
+  try { return localStorage.getItem(quotaPrefKey(slug)) as QuotaPref | null; } catch { return null; }
+}
+function setQuotaPref(slug: string, pref: QuotaPref) {
+  try { localStorage.setItem(quotaPrefKey(slug), pref); } catch { /* noop */ }
+}
+
+/** Run an array of async tasks with limited concurrency. */
+async function parallelBatch<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number,
+): Promise<T[]> {
+  const results: T[] = [];
+  let index = 0;
+  async function worker() {
+    while (index < tasks.length) {
+      const i = index++;
+      results[i] = await tasks[i]!();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
+}
 
 // ── Import session tracking ────────────────────────────────────────────────────
 
@@ -589,8 +625,25 @@ export default function ContactsPage() {
   // All contacts accordion
   const [allContactsOpen, setAllContactsOpen] = useState(true);
 
-  // Total contact count (for the accordion header)
+  // Total contact count (for the accordion header and quota check)
   const { total } = useEmailContacts({ limit: 1 });
+
+  // Billing caps — for contact quota display and pre-import quota check
+  const { data: billingCaps } = useQuery({
+    queryKey: ['billing', 'caps'],
+    queryFn: () => api.billing.getCaps(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const contactCap = billingCaps?.contact_cap ?? 0; // 0 = unlimited
+
+  // Quota modal — shown once when an import will exceed the contact cap
+  const [quotaModal, setQuotaModal] = useState<{
+    open: boolean;
+    currentCount: number;
+    newRows: number;
+    cap: number;
+    onProceed: (mode: 'all' | 'limit_only' | 'acknowledged') => void;
+  } | null>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
     try {
@@ -627,50 +680,33 @@ export default function ContactsPage() {
     }
   }, [orgSlug]);
 
-  const handleMappingConfirm = useCallback(
-    async (mapping: Record<string, string>) => {
-      if (!parsedFile) return;
-      const { headers, rows, fileName, fileHash } = parsedFile;
-      setParsedFile(null);
-      // Persist the column mapping so future imports with same headers auto-map
-      saveMappingProfile(orgSlug, headers, mapping);
-
-      const source_ref = nanoid();
-      const mappedCsvCols = new Set(Object.values(mapping));
-      const extraCols = headers.filter((h) => !mappedCsvCols.has(h));
-
-      const normalizedRows: Record<string, string>[] = rows.map((row) => {
-        const normalized: Record<string, string> = {};
-        for (const [platformKey, csvCol] of Object.entries(mapping)) {
-          normalized[platformKey] = row[csvCol] ?? "";
-        }
-        for (const col of extraCols) {
-          normalized[col] = row[col] ?? "";
-        }
-        return normalized;
-      });
-
-      setIsImporting(true);
+  const runImport = useCallback(
+    async (normalizedRows: Record<string, string>[], fileName: string, fileHash: string, source_ref: string) => {
       const batches: Record<string, string>[][] = [];
       for (let i = 0; i < normalizedRows.length; i += BATCH_SIZE) {
         batches.push(normalizedRows.slice(i, i + BATCH_SIZE));
       }
 
-      const toastId = batches.length > 1
-        ? toast.loading(`Importing batch 1 of ${batches.length}…`)
-        : toast.loading("Importing contacts…");
+      const toastId = toast.loading(
+        batches.length > 1
+          ? `Importing ${normalizedRows.length.toLocaleString()} contacts in ${batches.length} batches…`
+          : "Importing contacts…"
+      );
 
       let totalImported = 0;
       let totalSkipped = 0;
       const allErrors: string[] = [];
       const allSkippedDetails: Array<{ index: number; email?: string; reason: string }> = [];
 
+      setIsImporting(true);
       try {
-        for (let i = 0; i < batches.length; i++) {
-          if (batches.length > 1) {
-            toast.loading(`Importing batch ${i + 1} of ${batches.length}…`, { id: toastId });
-          }
-          const result = await api.delivery.importContactsBatch(batches[i]!, source_ref);
+        // Parallel batches — BATCH_CONCURRENCY at a time, much faster for large files
+        const tasks = batches.map((batch) => () =>
+          api.delivery.importContactsBatch(batch, source_ref)
+        );
+        const results = await parallelBatch(tasks, BATCH_CONCURRENCY);
+
+        for (const result of results) {
           totalImported += result.imported;
           totalSkipped += result.skipped;
           allErrors.push(...result.errors);
@@ -755,6 +791,71 @@ export default function ContactsPage() {
     router.push(`/dashboard/org/${orgSlug}/broadcasts?${qs.toString()}`);
   };
 
+  const handleMappingConfirm = useCallback((mapping: Record<string, string>) => {
+    if (!parsedFile) return;
+
+    saveMappingProfile(orgSlug, parsedFile.headers, mapping);
+
+    // Normalize each row: csvHeader → platformKey (or keep under original key for __custom__)
+    const normalizedRows = parsedFile.rows.map((row) => {
+      const out: Record<string, string> = {};
+      for (const [csvHeader, platformKey] of Object.entries(mapping)) {
+        const val = row[csvHeader];
+        if (val === undefined) continue;
+        if (platformKey === "__custom__") {
+          out[csvHeader] = val;
+        } else {
+          out[platformKey] = val;
+        }
+      }
+      // Split recipient_name into first_name / last_name when separate fields are absent
+      if (out.recipient_name) {
+        const parts = out.recipient_name.trim().split(/\s+/);
+        if (!out.first_name) out.first_name = parts[0] ?? "";
+        if (!out.last_name && parts.length > 1) out.last_name = parts.slice(1).join(" ");
+      }
+      return out;
+    });
+
+    const source_ref = nanoid();
+    const { fileName, fileHash } = parsedFile;
+    setParsedFile(null);
+
+    const pref = getQuotaPref(orgSlug);
+    const willExceed = contactCap > 0 && total + normalizedRows.length > contactCap;
+
+    if (willExceed && !pref) {
+      setQuotaModal({
+        open: true,
+        currentCount: total,
+        newRows: normalizedRows.length,
+        cap: contactCap,
+        onProceed: (mode) => {
+          setQuotaModal(null);
+          if (mode === "limit_only") {
+            setQuotaPref(orgSlug, "limit_only");
+            const remaining = Math.max(0, contactCap - total);
+            runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref);
+          } else if (mode === "acknowledged") {
+            setQuotaPref(orgSlug, "acknowledged");
+            runImport(normalizedRows, fileName, fileHash, source_ref);
+          } else {
+            setQuotaPref(orgSlug, "auto_bill");
+            runImport(normalizedRows, fileName, fileHash, source_ref);
+          }
+        },
+      });
+    } else {
+      // Pref already set — respect it silently
+      if (pref === "limit_only" && willExceed) {
+        const remaining = Math.max(0, contactCap - total);
+        runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref);
+      } else {
+        runImport(normalizedRows, fileName, fileHash, source_ref);
+      }
+    }
+  }, [parsedFile, orgSlug, contactCap, total, runImport]);
+
   return (
     <div
       className="relative space-y-6 max-w-7xl mx-auto"
@@ -792,12 +893,34 @@ export default function ContactsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {total > 0
-              ? `${total.toLocaleString()} contact${total !== 1 ? "s" : ""}`
-              : "Import from CSV, Excel, TSV, or Markdown"}
+            {contactCap > 0
+              ? `${total.toLocaleString()} / ${contactCap.toLocaleString()} · ${Math.max(0, contactCap - total).toLocaleString()} remaining`
+              : total > 0
+                ? `${total.toLocaleString()} contact${total !== 1 ? "s" : ""}`
+                : "Import from CSV, Excel, TSV, or Markdown"}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {total > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <Download className="h-4 w-4 mr-1.5" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => api.delivery.exportContacts("csv")}>
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => api.delivery.exportContacts("json")}>
+                  Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => api.delivery.exportContacts("markdown")}>
+                  Export as Markdown
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -809,7 +932,6 @@ export default function ContactsPage() {
               : <Upload className="h-4 w-4 mr-2" />}
             {isImporting ? "Importing…" : "Import contacts"}
           </Button>
-          <p className="text-xs text-muted-foreground hidden sm:block">or drop a file anywhere</p>
         </div>
       </div>
 
@@ -977,6 +1099,47 @@ export default function ContactsPage() {
         onSelect={handleBroadcastTemplateSelect}
         onScratch={handleBroadcastScratch}
       />
+
+      {/* Quota modal — shown once when import would exceed the contact cap */}
+      {quotaModal && (
+        <Dialog open={quotaModal.open} onOpenChange={(open) => !open && setQuotaModal(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-500" /> Contact limit reached
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p>
+                You have <strong>{quotaModal.currentCount.toLocaleString()}</strong> contacts and your plan allows{" "}
+                <strong>{quotaModal.cap.toLocaleString()}</strong>. This import adds{" "}
+                <strong>{quotaModal.newRows.toLocaleString()}</strong> more, exceeding your limit by{" "}
+                <strong>{(quotaModal.currentCount + quotaModal.newRows - quotaModal.cap).toLocaleString()}</strong>.
+              </p>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                Extra contacts are billed as add-ons. Deleting contacts later does <strong>not</strong> reverse this charge.
+              </div>
+            </div>
+            <div className="space-y-2 pt-1">
+              <Button className="w-full" onClick={() => quotaModal.onProceed("all")}>
+                Import all &amp; auto-bill extras
+              </Button>
+              {quotaModal.currentCount < quotaModal.cap && (
+                <Button variant="outline" className="w-full" onClick={() => quotaModal.onProceed("limit_only")}>
+                  Import only {Math.max(0, quotaModal.cap - quotaModal.currentCount).toLocaleString()} (stay within limit)
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={() => quotaModal.onProceed("acknowledged")}
+              >
+                I'll figure it out later
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Delete import confirmation — two modes: hide from list, or fully delete contacts */}
       <AlertDialog

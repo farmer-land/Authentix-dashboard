@@ -143,6 +143,21 @@ export const billingApi = {
     return response.data!;
   },
 
+  async getCaps(): Promise<{
+    cert_cap_monthly: number;
+    contact_cap: number;
+    auto_topup_certs: boolean;
+    topup_block_size: number;
+  }> {
+    const response = await apiRequest<{
+      cert_cap_monthly: number;
+      contact_cap: number;
+      auto_topup_certs: boolean;
+      topup_block_size: number;
+    }>("/billing/caps");
+    return response.data!;
+  },
+
   async updateCaps(caps: {
     cert_cap_monthly?: number;
     contact_cap?: number;

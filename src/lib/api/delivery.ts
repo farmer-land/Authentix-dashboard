@@ -576,6 +576,26 @@ export const deliveryApi = {
     return response.data!;
   },
 
+  exportContacts: (format: 'json' | 'csv' | 'markdown'): void => {
+    // Trigger a direct browser download — bypasses the proxy JSON wrapper
+    // by appending the token and hitting the backend file endpoint.
+    // We use a link click so the browser saves the file natively.
+    import("@/lib/supabase/browser").then(({ createSupabaseBrowserClient }) => {
+      createSupabaseBrowserClient().auth.getSession().then(({ data: { session } }) => {
+        const token = session?.access_token ?? '';
+        const url = `${window.location.origin}/api/proxy/delivery/contacts/export?format=${format}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `contacts.${format === 'markdown' ? 'md' : format}`;
+        // Token is sent by the proxy via session cookie — no extra header needed
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        void token; // used implicitly via session cookie
+      });
+    });
+  },
+
   deleteContact: async (id: string): Promise<void> => {
     await apiRequest(`/delivery/contacts/${id}`, { method: "DELETE" });
   },
