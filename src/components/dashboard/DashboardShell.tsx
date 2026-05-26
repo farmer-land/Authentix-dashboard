@@ -52,6 +52,8 @@ import { OrgProvider } from "@/lib/org";
 import { NotificationPanel } from "@/components/dashboard/NotificationPanel";
 import { JobNotificationProvider } from "@/lib/notifications/job-notifications";
 import { BillingStatusBanner } from "@/components/dashboard/BillingStatusBanner";
+import { useOrganization } from "@/lib/hooks/queries/organizations";
+import { effectiveFeatures } from "@/lib/feature-flags";
 
 // ============================================================================
 // Types
@@ -79,6 +81,8 @@ interface NavItem {
   readonly name: string;
   readonly href: string;
   readonly icon: React.ComponentType<{ className?: string }>;
+  /** Synthetic or real feature flag required. Absent = always visible. */
+  readonly feature?: string;
 }
 
 interface NavGroup {
@@ -101,26 +105,26 @@ const NAVIGATION_GROUPS: readonly NavGroup[] = [
   {
     label: "Certificates",
     items: [
-      { name: "Templates",      href: "/templates",              icon: FileText  },
-      { name: "Generate",       href: "/generate-certificate",   icon: Sparkles  },
-      { name: "Issued",         href: "/certificates",            icon: FileCheck },
-      { name: "Verification",    href: "/verification-logs",       icon: Shield    },
+      { name: "Templates",    href: "/templates",            icon: FileText,  feature: "certs" },
+      { name: "Generate",     href: "/generate-certificate", icon: Sparkles,  feature: "certs" },
+      { name: "Issued",       href: "/certificates",         icon: FileCheck, feature: "certs" },
+      { name: "Verification", href: "/verification-logs",    icon: Shield,    feature: "certs" },
     ],
   },
   {
     label: "Email",
     items: [
-      { name: "Templates",      href: "/email-templates",         icon: Mail      },
-      { name: "Campaigns",      href: "/broadcasts",              icon: Megaphone },
-      { name: "Delivery Logs",  href: "/delivery-events",         icon: Activity  },
+      { name: "Templates",     href: "/email-templates",  icon: Mail,      feature: "email_templates" },
+      { name: "Campaigns",     href: "/broadcasts",       icon: Megaphone, feature: "campaigns_email" },
+      { name: "Delivery Logs", href: "/delivery-events",  icon: Activity,  feature: "delivery_logs"   },
     ],
   },
   {
     label: "Contacts",
     items: [
-      { name: "Contacts",  href: "/contacts",                icon: UserRound },
-      { name: "Segments",  href: "/segments",                icon: Filter    },
-      { name: "Imports",   href: "/imports",                 icon: Upload    },
+      { name: "Contacts", href: "/contacts",  icon: UserRound, feature: "contacts" },
+      { name: "Segments", href: "/segments",  icon: Filter,    feature: "campaigns_email" },
+      { name: "Imports",  href: "/imports",   icon: Upload,    feature: "contacts" },
     ],
   },
 ] as const;
@@ -145,6 +149,7 @@ interface SidebarNavProps {
   readonly pathname: string;
   readonly expanded: boolean;
   readonly pendingJobsCount: number;
+  readonly isProductOwner: boolean;
 }
 
 function NavLink({
@@ -196,20 +201,28 @@ function NavLink({
   );
 }
 
-function SidebarNav({ slug, pathname, expanded, pendingJobsCount }: SidebarNavProps) {
+function SidebarNav({ slug, pathname, expanded, pendingJobsCount, isProductOwner }: SidebarNavProps) {
   const basePath = `/dashboard/org/${slug}`;
+  const { organization } = useOrganization();
+
+  // Build effective feature set — includes synthetic flags (contacts, email_templates, etc.)
+  const features = effectiveFeatures(organization?.features ?? ['certs', 'cert_delivery_email']);
+
+  // Filter groups: keep groups that have at least one visible item
+  const visibleGroups = NAVIGATION_GROUPS.map(group => ({
+    ...group,
+    items: group.items.filter(item => !item.feature || features.has(item.feature)),
+  })).filter(group => group.items.length > 0);
 
   return (
     <nav className="flex-1 p-2 overflow-y-auto space-y-0.5">
-      {NAVIGATION_GROUPS.map((group, gi) => (
+      {visibleGroups.map((group, gi) => (
         <div key={gi} className={gi > 0 ? "mt-3" : undefined}>
-          {/* Section label — visible only when expanded */}
           {group.label && expanded && (
             <p className="px-3 pb-1 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 select-none">
               {group.label}
             </p>
           )}
-          {/* Divider — visible when collapsed */}
           {group.label && !expanded && gi > 0 && (
             <div className="mx-auto w-5 border-t border-border/50 mb-1" />
           )}
@@ -225,6 +238,27 @@ function SidebarNav({ slug, pathname, expanded, pendingJobsCount }: SidebarNavPr
           ))}
         </div>
       ))}
+
+      {/* Admin section — product owner only */}
+      {isProductOwner && (
+        <div className="mt-3">
+          {expanded && (
+            <p className="px-3 pb-1 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 select-none">
+              Admin
+            </p>
+          )}
+          {!expanded && (
+            <div className="mx-auto w-5 border-t border-border/50 mb-1" />
+          )}
+          <NavLink
+            item={{ name: "Organizations", href: "/admin", icon: ShieldCheck }}
+            basePath={basePath}
+            pathname={pathname}
+            expanded={expanded}
+            pendingJobsCount={0}
+          />
+        </div>
+      )}
     </nav>
   );
 }
@@ -520,6 +554,7 @@ export function DashboardShell({
               pathname={pathname}
               expanded={isExpanded}
               pendingJobsCount={pendingJobsCount}
+              isProductOwner={isProductOwner}
             />
 
             {/* Bottom actions */}

@@ -109,6 +109,13 @@ export const organizationsApi = {
     return response.data!;
   },
 
+  updateFeatures: async (features: string[]): Promise<void> => {
+    await apiRequest("/organizations/me/features", {
+      method: "PUT",
+      body: JSON.stringify({ features }),
+    });
+  },
+
   rotateAPIKey: async () => {
     const response = await apiRequest<{
       application_id: string;
