@@ -12,9 +12,11 @@ import { PayNowButton } from './components/pay-now-button';
 import {
   Zap, TrendingUp, Receipt, Sparkles, Info, Mail, Users,
   HardDrive, ArrowUpRight, CheckCircle2, AlertTriangle, Lock,
-  Building2, X, Check, Minus, ChevronRight,
+  Building2, X, Check, Minus, ChevronRight, Moon, Sliders,
+  Trash2, ShieldAlert,
 } from 'lucide-react';
-import type { CurrentUsage, BillingProfile, OrgBilling, InvoiceEntity } from '@/lib/billing-ui/types';
+import { api } from '@/lib/api/client';
+import type { CurrentUsage, BillingProfile, OrgBilling, BillingCaps, InvoiceEntity } from '@/lib/billing-ui/types';
 
 // ── Feature flag ─────────────────────────────────────────────────────────────
 // Set NEXT_PUBLIC_ENABLE_RAZORPAY_BILLING=true in env when Razorpay is ready.
@@ -270,6 +272,8 @@ export default function BillingPage() {
   const { organization } = useOrganization();
   const { overview, loading, error, refresh } = useBillingOverview();
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [capsOpen, setCapsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => { if (RAZORPAY_ENABLED) preloadRazorpay(); }, []);
 
@@ -303,10 +307,11 @@ export default function BillingPage() {
     );
   }
 
-  const { org_billing, current_usage, billing_profile, recent_invoices, total_outstanding, is_product_owner } = overview;
-  const isTrialing   = org_billing.billing_status === 'trialing';
-  const isOverdue    = org_billing.billing_status === 'overdue';
-  const isLocked     = org_billing.billing_status === 'locked';
+  const { org_billing, current_usage, billing_profile, billing_caps, recent_invoices, total_outstanding, is_product_owner } = overview;
+  const isTrialing    = org_billing.billing_status === 'trialing';
+  const isOverdue     = org_billing.billing_status === 'overdue';
+  const isLocked      = org_billing.billing_status === 'locked';
+  const isHibernating = org_billing.billing_status === 'hibernating';
 
   // Product-owner (Authentix team) sees full billing for monitoring + a no-charge banner
   // Seed plan (free tier clients) sees usage-only, no billing details
@@ -317,7 +322,7 @@ export default function BillingPage() {
   const planName   = billing_profile.plan_name ?? 'Flex';
   const planConfig = PLAN_CONFIG[planName] ?? PLAN_CONFIG['Flex']!;
 
-  const billFree        = isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit;
+  const billFree        = isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit || isHibernating;
   const trialCertsLeft  = Math.max(0, org_billing.trial_free_certificates_limit - org_billing.trial_free_certificates_used);
   const pendingInvoice  = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
 
@@ -387,6 +392,18 @@ export default function BillingPage() {
                   style={{ width: `${Math.min(100, Math.round((org_billing.trial_free_certificates_used / org_billing.trial_free_certificates_limit) * 100))}%` }}
                 />
               </div>
+            </div>
+          </div>
+        )}
+        {isHibernating && !isProductOwner && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 px-4 py-3">
+            <Moon className="w-4 h-4 text-sky-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-sky-700 dark:text-sky-400">Account hibernating — no charges</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Inactive since {org_billing.hibernated_since ? fmtDate(org_billing.hibernated_since) : '—'}.
+                Billing resumes when you next generate a certificate or send a campaign.
+              </p>
             </div>
           </div>
         )}
@@ -504,6 +521,51 @@ export default function BillingPage() {
             orgEmail={org?.email}
           />
         </div>
+      )}
+
+      {/* ── Billing caps (cert generation limit) ─────────────────────────────── */}
+      {!isComplimentary && (
+        <>
+          <BillingCapsPanel
+            caps={billing_caps}
+            certUsed={current_usage.certificate_count}
+            open={capsOpen}
+            onToggle={() => setCapsOpen(v => !v)}
+            onSave={async (c) => { await api.billing.updateCaps(c); refresh(); }}
+          />
+        </>
+      )}
+
+      {/* ── Account deletion ─────────────────────────────────────────────────── */}
+      {!isProductOwner && (
+        <div className="rounded-3xl border border-destructive/20 bg-card overflow-hidden">
+          <div className="px-6 py-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-destructive">Delete Account</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Data retained per legal schedule. Certificate QR links remain active forever.
+              </p>
+            </div>
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Request deletion
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteOpen && (
+        <DeleteAccountDialog
+          orgName={org?.name ?? 'this organisation'}
+          onCancel={() => setDeleteOpen(false)}
+          onConfirm={async () => {
+            await api.billing.requestAccountDeletion();
+            setDeleteOpen(false);
+          }}
+        />
       )}
 
     </div>
@@ -769,6 +831,214 @@ function PayCard({ pendingInvoice, estimatedTotal, certCount, emailCount, orgNam
           orgEmail={orgEmail}
           onSuccess={onSuccess}
         />
+      </div>
+    </div>
+  );
+}
+
+// ── BillingCapsPanel ─────────────────────────────────────────────────────────
+function BillingCapsPanel({
+  caps, certUsed, open, onToggle, onSave,
+}: {
+  caps: BillingCaps;
+  certUsed: number;
+  open: boolean;
+  onToggle: () => void;
+  onSave: (c: Partial<BillingCaps>) => Promise<void>;
+}) {
+  const [cap, setCap] = useState(caps.cert_cap_monthly);
+  const [autoTopup, setAutoTopup] = useState(caps.auto_topup_certs);
+  const [saving, setSaving] = useState(false);
+
+  const pct = Math.min(100, cap > 0 ? Math.round((certUsed / cap) * 100) : 0);
+  const barColor = pct >= 90 ? 'bg-destructive' : pct >= 70 ? 'bg-amber-500' : 'bg-brand-500';
+
+  const handleSave = async () => {
+    setSaving(true);
+    try { await onSave({ cert_cap_monthly: cap, auto_topup_certs: autoTopup }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="rounded-3xl border bg-card overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full px-6 py-4 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <Sliders className="w-4 h-4 text-muted-foreground" />
+          <div>
+            <p className="font-semibold text-sm">Usage Limits</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Monthly cert cap: <span className="font-medium text-foreground">{cap.toLocaleString()}</span>
+              {' · '}{certUsed.toLocaleString()} used this month
+            </p>
+          </div>
+        </div>
+        <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-6 pb-6 border-t border-border/60 pt-5 space-y-5">
+          {/* Cert usage bar */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium">Certificates this month</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{certUsed} / {cap}</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          {/* Cap slider */}
+          <div>
+            <label className="text-xs font-medium block mb-2">Monthly certificate cap</label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min={10}
+                max={5000}
+                step={10}
+                value={cap}
+                onChange={e => setCap(Number(e.target.value))}
+                className="flex-1 accent-brand-500"
+              />
+              <input
+                type="number"
+                min={0}
+                max={99999}
+                value={cap}
+                onChange={e => setCap(Math.max(0, Number(e.target.value)))}
+                className="w-20 rounded-lg border border-border/60 bg-muted/40 px-2 py-1 text-sm text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Generation pauses when this limit is reached. 0 = unlimited.
+            </p>
+          </div>
+
+          {/* Auto-topup toggle */}
+          <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Auto top-up</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Automatically purchase {caps.topup_block_size} extra certs when limit is reached
+              </p>
+            </div>
+            <button
+              onClick={() => setAutoTopup(v => !v)}
+              className={`relative w-10 h-6 rounded-full transition-colors ${autoTopup ? 'bg-brand-500' : 'bg-muted'}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${autoTopup ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full py-2 rounded-xl text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving…' : 'Save limits'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DeleteAccountDialog ──────────────────────────────────────────────────────
+function DeleteAccountDialog({
+  orgName, onCancel, onConfirm,
+}: {
+  orgName: string;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [typed, setTyped] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [step, setStep] = useState<'warning' | 'confirm'>('warning');
+  const confirmed = typed.trim().toLowerCase() === 'delete';
+
+  const handleConfirm = async () => {
+    if (!confirmed) return;
+    setConfirming(true);
+    try { await onConfirm(); }
+    finally { setConfirming(false); }
+  };
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-background rounded-2xl border border-border shadow-2xl overflow-hidden">
+        <div className="px-6 pt-6 pb-4 flex items-start gap-3">
+          <div className="p-2 rounded-xl bg-destructive/10">
+            <ShieldAlert className="w-5 h-5 text-destructive" />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-semibold">Delete account — {orgName}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">This action cannot be undone.</p>
+          </div>
+          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {step === 'warning' ? (
+          <div className="px-6 pb-6 space-y-4">
+            <div className="rounded-xl bg-muted/50 border border-border/60 p-4 space-y-2 text-sm">
+              <p className="font-medium">What happens when you delete:</p>
+              <ul className="text-muted-foreground space-y-1.5 text-xs list-none">
+                <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" /> All certificate QR links stay active <span className="font-medium text-foreground">forever</span></li>
+                <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" /> Your account is immediately deactivated</li>
+                <li className="flex gap-2"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" /> Personal data (names, emails) purged after 1 year per DPDPA</li>
+                <li className="flex gap-2"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" /> Invoice + payment records kept 7 years (IT Act / GST Act)</li>
+                <li className="flex gap-2"><X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" /> You will lose access to the dashboard immediately</li>
+              </ul>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => setStep('confirm')}
+                className="flex-1 py-2 rounded-xl text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+              >
+                I understand, continue
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-6 pb-6 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Type <span className="font-mono font-bold text-foreground">delete</span> to confirm permanent account deletion.
+            </p>
+            <input
+              autoFocus
+              value={typed}
+              onChange={e => setTyped(e.target.value)}
+              placeholder="delete"
+              className="w-full rounded-xl border border-border/60 bg-muted/40 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-destructive/50"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setStep('warning')} className="flex-1 py-2 rounded-xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
+                Back
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={!confirmed || confirming}
+                className="flex-1 py-2 rounded-xl text-sm font-medium bg-destructive text-white hover:bg-destructive/90 disabled:opacity-40 transition-colors"
+              >
+                {confirming ? 'Deleting…' : 'Delete account'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

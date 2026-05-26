@@ -142,6 +142,19 @@ export const billingApi = {
     }>("/billing/pay-now", { method: "POST" });
     return response.data!;
   },
+
+  async updateCaps(caps: {
+    cert_cap_monthly?: number;
+    contact_cap?: number;
+    auto_topup_certs?: boolean;
+    topup_block_size?: number;
+  }): Promise<void> {
+    await apiRequest("/billing/caps", { method: "PUT", body: JSON.stringify(caps) });
+  },
+
+  async requestAccountDeletion(): Promise<void> {
+    await apiRequest("/billing/account", { method: "DELETE" });
+  },
 };
 
 export interface PaymentMethod {

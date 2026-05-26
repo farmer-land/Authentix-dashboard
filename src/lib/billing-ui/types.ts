@@ -76,12 +76,21 @@ export interface CurrentUsage {
 }
 
 export interface OrgBilling {
-  billing_status: 'trialing' | 'active' | 'overdue' | 'locked' | string;
+  billing_status: 'trialing' | 'active' | 'overdue' | 'locked' | 'hibernating' | string;
   trial_ends_at: string | null;
   trial_free_certificates_limit: number;
   trial_free_certificates_used: number;
   dashboard_locked_at: string | null;
   billing_grace_ends_at: string | null;
+  last_active_at: string | null;
+  hibernated_since: string | null;    // ISO date when org went idle; null when not hibernating
+}
+
+export interface BillingCaps {
+  cert_cap_monthly: number;
+  contact_cap: number;
+  auto_topup_certs: boolean;
+  topup_block_size: number;
 }
 
 export interface BillingOverview {
@@ -92,6 +101,7 @@ export interface BillingOverview {
   };
   current_usage: CurrentUsage;
   org_billing: OrgBilling;
+  billing_caps: BillingCaps;
   recent_invoices: InvoiceEntity[];
   total_outstanding: number;  // rupees
   is_product_owner: boolean; // org domain is on product-owner whitelist (Authentix team) — usage-only, no charges
