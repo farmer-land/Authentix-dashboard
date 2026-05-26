@@ -16,7 +16,16 @@ import {
   Trash2, ShieldAlert,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
+import { useUserProfile } from '@/lib/hooks/queries/users';
 import type { CurrentUsage, BillingProfile, OrgBilling, BillingCaps, InvoiceEntity } from '@/lib/billing-ui/types';
+
+// ── Product-owner detection (client-side, mirrors DashboardShell) ─────────────
+const PRODUCT_OWNER_DOMAINS = ['xencus.com', 'yhills.com'] as const;
+function isProductOwnerEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const domain = email.split('@')[1]?.toLowerCase() ?? '';
+  return (PRODUCT_OWNER_DOMAINS as readonly string[]).includes(domain);
+}
 
 // ── Feature flag ─────────────────────────────────────────────────────────────
 // Set NEXT_PUBLIC_ENABLE_RAZORPAY_BILLING=true in env when Razorpay is ready.
@@ -271,6 +280,7 @@ function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClo
 export default function BillingPage() {
   const { organization } = useOrganization();
   const { overview, loading, error, refresh } = useBillingOverview();
+  const { profile } = useUserProfile();
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -307,24 +317,27 @@ export default function BillingPage() {
     );
   }
 
-  const { org_billing, current_usage, billing_profile, billing_caps, recent_invoices, total_outstanding, is_product_owner } = overview;
+  const { org_billing, current_usage, billing_profile, recent_invoices, total_outstanding } = overview;
+  // Defensive defaults — old backend may not return these fields yet
+  const billing_caps: BillingCaps = overview.billing_caps ?? { cert_cap_monthly: 200, contact_cap: 3000, auto_topup_certs: false, topup_block_size: 100 };
+
   const isTrialing    = org_billing.billing_status === 'trialing';
   const isOverdue     = org_billing.billing_status === 'overdue';
   const isLocked      = org_billing.billing_status === 'locked';
   const isHibernating = org_billing.billing_status === 'hibernating';
 
-  // Product-owner (Authentix team) sees usage counts only — no amounts, no invoices, no payment CTA
-  // Seed plan (free tier clients) same — usage-only view
-  const isProductOwner  = is_product_owner;
-  const isSeedFree      = !is_product_owner && billing_profile.plan_name === 'Seed' && !isTrialing;
-  const isComplimentary = isProductOwner || isSeedFree; // usage-only mode for both
+  // Product-owner detection: client-side email domain check (primary, same as DashboardShell).
+  // Does NOT rely on API is_product_owner flag — avoids DB/RLS fragility.
+  const isProductOwner  = isProductOwnerEmail((profile as { email?: string } | null)?.email) || overview.is_product_owner;
+  const isSeedFree      = !isProductOwner && billing_profile.plan_name === 'Seed' && !isTrialing;
+  const isComplimentary = isProductOwner || isSeedFree;
 
   const planName   = billing_profile.plan_name ?? 'Flex';
   const planConfig = PLAN_CONFIG[planName] ?? PLAN_CONFIG['Flex']!;
 
-  const billFree        = isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit || isHibernating;
-  const trialCertsLeft  = Math.max(0, org_billing.trial_free_certificates_limit - org_billing.trial_free_certificates_used);
-  const pendingInvoice  = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
+  const billFree       = (isTrialing && current_usage.certificate_count <= org_billing.trial_free_certificates_limit) || isHibernating;
+  const trialCertsLeft = Math.max(0, org_billing.trial_free_certificates_limit - org_billing.trial_free_certificates_used);
+  const pendingInvoice = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-16">
