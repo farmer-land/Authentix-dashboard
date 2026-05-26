@@ -313,11 +313,11 @@ export default function BillingPage() {
   const isLocked      = org_billing.billing_status === 'locked';
   const isHibernating = org_billing.billing_status === 'hibernating';
 
-  // Product-owner (Authentix team) sees full billing for monitoring + a no-charge banner
-  // Seed plan (free tier clients) sees usage-only, no billing details
+  // Product-owner (Authentix team) sees usage counts only — no amounts, no invoices, no payment CTA
+  // Seed plan (free tier clients) same — usage-only view
   const isProductOwner  = is_product_owner;
   const isSeedFree      = !is_product_owner && billing_profile.plan_name === 'Seed' && !isTrialing;
-  const isComplimentary = isSeedFree; // hides payment UI, invoice history, etc.
+  const isComplimentary = isProductOwner || isSeedFree; // usage-only mode for both
 
   const planName   = billing_profile.plan_name ?? 'Flex';
   const planConfig = PLAN_CONFIG[planName] ?? PLAN_CONFIG['Flex']!;
@@ -420,19 +420,19 @@ export default function BillingPage() {
             </a>
           </AlertBar>
         )}
-        {isComplimentary && (
-          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
-              Complimentary access — no billing applies to this account.
-            </p>
-          </div>
-        )}
         {isProductOwner && (
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-violet-500/10 border border-violet-500/20 px-4 py-3">
             <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
             <p className="text-sm text-violet-700 dark:text-violet-400 font-medium">
-              Product-owner account — billing shown for monitoring only, no charges apply.
+              Product-owner account — usage tracking only, no charges apply.
+            </p>
+          </div>
+        )}
+        {isSeedFree && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
+              Complimentary access — no billing applies to this account.
             </p>
           </div>
         )}
@@ -444,7 +444,7 @@ export default function BillingPage() {
           icon={<Zap className="w-4 h-4" />}
           label="Certificates"
           value={String(current_usage.certificate_count)}
-          sub={isComplimentary ? 'issued this month' : isTrialing && !isProductOwner ? `${trialCertsLeft} free left` : `× ${fmt(billing_profile.certificate_unit_price)}`}
+          sub={isComplimentary ? 'issued this month' : isTrialing ? `${trialCertsLeft} free left` : `× ${fmt(billing_profile.certificate_unit_price)}`}
           color="default"
         />
         {!isComplimentary && (
@@ -469,7 +469,7 @@ export default function BillingPage() {
           icon={<Users className="w-4 h-4" />}
           label="Plan"
           value={planName}
-          sub={isProductOwner ? 'Monitoring' : isComplimentary ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
+          sub={isProductOwner ? 'Product owner' : isSeedFree ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
           color="default"
         />
       </div>
