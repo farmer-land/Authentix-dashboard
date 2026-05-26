@@ -339,6 +339,73 @@ export default function BillingPage() {
   const trialCertsLeft = Math.max(0, org_billing.trial_free_certificates_limit - org_billing.trial_free_certificates_used);
   const pendingInvoice = recent_invoices.find(inv => inv.payable && inv.amount_due_paise > 0);
 
+  // ── Product-owner: clean monitoring view, no billing UI ──────────────────
+  if (isProductOwner) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-5 pb-16">
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-3xl border bg-card bg-linear-to-br from-violet-500/8 via-violet-400/4 to-transparent p-7">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="relative shrink-0">
+                {logoUrl ? (
+                  <div className="w-14 h-14 rounded-2xl border bg-background shadow-sm overflow-hidden flex items-center justify-center">
+                    <Image src={logoUrl} alt={org?.name ?? ''} width={56} height={56} className="object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl border bg-muted flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-muted-foreground/40" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                    Internal
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live
+                  </span>
+                </div>
+                <h1 className="text-xl font-bold tracking-tight">{org?.name ?? 'Monitoring'}</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">Product account — usage monitoring only</p>
+              </div>
+            </div>
+            <div className="shrink-0 opacity-60">
+              <Image src="/brand/authentix-24-24.svg" alt="Authentix" width={28} height={28} />
+            </div>
+          </div>
+        </div>
+
+        {/* Usage stats */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <Metric
+            icon={<Zap className="w-4 h-4" />}
+            label="Certificates"
+            value={String(current_usage.certificate_count)}
+            sub="issued this month"
+            color="default"
+          />
+          <Metric
+            icon={<Mail className="w-4 h-4" />}
+            label="Campaign emails"
+            value={String(current_usage.broadcast_email_count ?? 0)}
+            sub="sent this month"
+            color="default"
+          />
+          <Metric
+            icon={<HardDrive className="w-4 h-4" />}
+            label="Account status"
+            value={org_billing.billing_status === 'trialing' ? 'Trial' : 'Active'}
+            sub="No charges apply"
+            color="default"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-16">
       <PlanFeaturesModal open={planModalOpen} onClose={() => setPlanModalOpen(false)} activePlan={planName} />
@@ -389,7 +456,7 @@ export default function BillingPage() {
         </div>
 
         {/* Banners inside hero */}
-        {isTrialing && !isProductOwner && (
+        {isTrialing && (
           <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-brand-600">Free Trial</p>
@@ -408,7 +475,7 @@ export default function BillingPage() {
             </div>
           </div>
         )}
-        {isHibernating && !isProductOwner && (
+        {isHibernating && (
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 px-4 py-3">
             <Moon className="w-4 h-4 text-sky-500 shrink-0" />
             <div>
@@ -420,26 +487,18 @@ export default function BillingPage() {
             </div>
           </div>
         )}
-        {isOverdue && !isProductOwner && (
+        {isOverdue && (
           <AlertBar icon={<AlertTriangle className="w-4 h-4 shrink-0" />} color="red">
             Payment overdue — pay now to avoid service interruption.
           </AlertBar>
         )}
-        {isLocked && !isProductOwner && (
+        {isLocked && (
           <AlertBar icon={<Lock className="w-4 h-4 shrink-0" />} color="red">
             Account locked. Contact{' '}
             <a href="mailto:billing@digicertificates.in" className="underline font-medium">
               billing@digicertificates.in
             </a>
           </AlertBar>
-        )}
-        {isProductOwner && (
-          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-violet-500/10 border border-violet-500/20 px-4 py-3">
-            <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
-            <p className="text-sm text-violet-700 dark:text-violet-400 font-medium">
-              Product-owner account — usage tracking only, no charges apply.
-            </p>
-          </div>
         )}
         {isSeedFree && (
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
@@ -464,8 +523,8 @@ export default function BillingPage() {
           <Metric
             icon={<TrendingUp className="w-4 h-4" />}
             label="Est. this period"
-            value={billFree && !isProductOwner ? '₹0' : fmt(current_usage.estimated_total)}
-            sub={billFree && !isProductOwner ? 'Trial covers this' : `Incl. ${current_usage.gst_rate}% GST`}
+            value={billFree ? '₹0' : fmt(current_usage.estimated_total)}
+            sub={billFree ? 'Trial covers this' : `Incl. ${current_usage.gst_rate}% GST`}
             color={!billFree && current_usage.estimated_total > 0 ? 'brand' : 'default'}
           />
         )}
@@ -482,7 +541,7 @@ export default function BillingPage() {
           icon={<Users className="w-4 h-4" />}
           label="Plan"
           value={planName}
-          sub={isProductOwner ? 'Product owner' : isSeedFree ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
+          sub={isSeedFree ? 'Partner access' : isTrialing ? 'Pay-as-you-go' : 'Active'}
           color="default"
         />
       </div>
@@ -491,14 +550,14 @@ export default function BillingPage() {
       <UsageBreakdown
         usage={current_usage}
         billingProfile={billing_profile}
-        isTrialing={isTrialing && !isProductOwner}
+        isTrialing={isTrialing}
         orgBilling={org_billing}
-        billFree={billFree && !isProductOwner}
+        billFree={billFree}
         isComplimentary={isComplimentary}
       />
 
-      {/* ── Payment section (hidden for product owners and complimentary) ─────── */}
-      {!isComplimentary && !isProductOwner && !billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
+      {/* ── Payment section (hidden for complimentary) ─────────────────────── */}
+      {!isComplimentary && !billFree && (pendingInvoice || current_usage.estimated_total > 0) && (
         RAZORPAY_ENABLED
           ? (
             <PayCard
@@ -550,25 +609,23 @@ export default function BillingPage() {
       )}
 
       {/* ── Account deletion ─────────────────────────────────────────────────── */}
-      {!isProductOwner && (
-        <div className="rounded-3xl border border-destructive/20 bg-card overflow-hidden">
-          <div className="px-6 py-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-destructive">Delete Account</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Data retained per legal schedule. Certificate QR links remain active forever.
-              </p>
-            </div>
-            <button
-              onClick={() => setDeleteOpen(true)}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Request deletion
-            </button>
+      <div className="rounded-3xl border border-destructive/20 bg-card overflow-hidden">
+        <div className="px-6 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold text-destructive">Delete Account</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Data retained per legal schedule. Certificate QR links remain active forever.
+            </p>
           </div>
+          <button
+            onClick={() => setDeleteOpen(true)}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Request deletion
+          </button>
         </div>
-      )}
+      </div>
 
       {deleteOpen && (
         <DeleteAccountDialog
