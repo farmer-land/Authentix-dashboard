@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { useEmailContacts, useDeliveryTemplates } from "@/lib/hooks/queries/delivery";
 import { useTemplates } from "@/lib/hooks/queries/templates";
+import { useUserProfile } from "@/lib/hooks/queries/users";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { formatDistanceToNow } from "date-fns";
@@ -634,7 +635,11 @@ export default function ContactsPage() {
     queryFn: () => api.billing.getCaps(),
     staleTime: 5 * 60 * 1000,
   });
-  const contactCap = billingCaps?.contact_cap ?? 0; // 0 = unlimited
+  const { profile } = useUserProfile();
+  const isProductOwner = ['xencus.com', 'yhills.com'].some(
+    (d) => profile?.email?.endsWith(`@${d}`)
+  );
+  const contactCap = isProductOwner ? 0 : (billingCaps?.contact_cap ?? 0); // 0 = unlimited
 
   // Quota modal — shown once when an import will exceed the contact cap
   const [quotaModal, setQuotaModal] = useState<{
