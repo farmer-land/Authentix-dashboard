@@ -239,26 +239,6 @@ function SidebarNav({ slug, pathname, expanded, pendingJobsCount, isProductOwner
         </div>
       ))}
 
-      {/* Admin section — product owner only */}
-      {isProductOwner && (
-        <div className="mt-3">
-          {expanded && (
-            <p className="px-3 pb-1 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 select-none">
-              Admin
-            </p>
-          )}
-          {!expanded && (
-            <div className="mx-auto w-5 border-t border-border/50 mb-1" />
-          )}
-          <NavLink
-            item={{ name: "Organizations", href: "/admin", icon: ShieldCheck }}
-            basePath={basePath}
-            pathname={pathname}
-            expanded={expanded}
-            pendingJobsCount={0}
-          />
-        </div>
-      )}
     </nav>
   );
 }
