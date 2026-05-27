@@ -158,6 +158,8 @@ interface DraggableFieldProps {
   onDragStart?: () => void;
   onResize: (width: number, height: number, initialCanvasWidth: number, initialFontSize: number) => void;
   onSelect: (e: React.MouseEvent) => void;
+  /** Live value from row 1 of imported data — overrides sampleValue when present */
+  previewValue?: string;
 }
 
 export function DraggableField({
@@ -169,6 +171,7 @@ export function DraggableField({
   onDragStart,
   onResize,
   onSelect,
+  previewValue,
 }: DraggableFieldProps) {
   const fieldRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -251,19 +254,19 @@ export function DraggableField({
   const handleResizeStart = (e: React.MouseEvent) => {
     if (field.locked) return;
     e.stopPropagation();
+    onDragStart?.();
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     initialDimsRef.current = { width: scaledWidth, height: scaledHeight };
     initialFieldRef.current = { width: field.width, fontSize: field.fontSize };
     setIsResizing(true);
   };
 
-  // Use explicit sampleValue, then fall back to type-default (so renaming a field
-  // doesn't accidentally replace "John Doe" with the new label name)
   const TYPE_SAMPLE_DEFAULTS: Record<string, string> = {
     name: 'John Doe', course: 'Web Development Fundamentals',
     start_date: 'January 15, 2026', end_date: 'March 15, 2026', custom_text: 'Custom Value',
   };
-  const displayValue = field.sampleValue || TYPE_SAMPLE_DEFAULTS[field.type] || field.label;
+  // Priority: live row-1 data > user-set sampleValue > type default > label
+  const displayValue = previewValue || field.sampleValue || TYPE_SAMPLE_DEFAULTS[field.type] || field.label;
 
   // Gradient / shadow styles for text content
   const isGradient = field.colorMode === 'linear' || field.colorMode === 'radial';

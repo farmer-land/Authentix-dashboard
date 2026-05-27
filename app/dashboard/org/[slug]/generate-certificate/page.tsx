@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useGenerateCertificateState } from './state/useGenerateCertificateState';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
@@ -109,6 +109,11 @@ export default function GenerateCertificatePage() {
   // Blob URLs are ephemeral and die when the page unloads — these images need re-uploading.
   const [imageLostFields, setImageLostFields] = useState<string[]>([]);
 
+  // Timestamp of the most recent successful DB save — drives "Saved X min ago" indicator.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // Holds the latest doSave fn so the manual Save button can bypass the 1s debounce.
+  const saveNowRef = useRef<(() => Promise<void>) | null>(null);
+
   // Written by handleTemplateSelect after fetching editor data so handleResumeSession
   // can compare session version vs current version without an extra API call.
   const lastLoadedVersionIdRef = useRef<string | null>(null);
@@ -124,6 +129,8 @@ export default function GenerateCertificatePage() {
   // ── Undo / Redo ───────────────────────────────────────────────────────────
   const historyRef = useRef<CertificateField[][]>([]);
   const futureRef  = useRef<CertificateField[][]>([]);
+  // Groups rapid property edits into one history entry per quiet window (500ms)
+  const updateGroupRef = useRef<{ fieldId: string | null; pushed: boolean; timer: ReturnType<typeof setTimeout> | null }>({ fieldId: null, pushed: false, timer: null });
 
   const pushToHistory = useCallback((snapshot: CertificateField[]) => {
     historyRef.current = [...historyRef.current.slice(-49), snapshot];
@@ -1039,11 +1046,20 @@ export default function GenerateCertificatePage() {
     setRightPanelVisible(true);
   };
 
-  const handleUpdateField = (fieldId: string, updates: Partial<CertificateField>) => {
+  const handleUpdateField = useCallback((fieldId: string, updates: Partial<CertificateField>) => {
+    const ref = updateGroupRef.current;
+    if (ref.fieldId !== fieldId || !ref.pushed) {
+      // New field or first edit after quiet window — snapshot before applying
+      pushToHistory(fields);
+      if (ref.timer) clearTimeout(ref.timer);
+      ref.fieldId = fieldId;
+      ref.pushed = true;
+      ref.timer = setTimeout(() => { ref.pushed = false; ref.timer = null; }, 500);
+    }
     setFields((prev) =>
       prev.map((field) => (field.id === fieldId ? { ...field, ...updates } : field))
     );
-  };
+  }, [fields, pushToHistory]);
 
   const handleDeleteField = (fieldId: string) => {
     pushToHistory(fields);
@@ -1105,7 +1121,14 @@ export default function GenerateCertificatePage() {
   // Snapshot current fields before a drag (called by DraggableField onDragStart)
   const handleFieldDragStart = useCallback(() => {
     pushToHistory(fields);
-  }, [fields, pushToHistory]);
+    // Mark the active field as "already pushed" so handleUpdateField doesn't
+    // double-push during the drag mousemove sequence
+    const ref = updateGroupRef.current;
+    if (ref.timer) clearTimeout(ref.timer);
+    ref.fieldId = selectedFieldId;
+    ref.pushed = true;
+    ref.timer = setTimeout(() => { ref.pushed = false; ref.timer = null; }, 500);
+  }, [fields, pushToHistory, selectedFieldId]);
 
   const handleFieldSelect = (fieldId: string) => {
     if (previewOpen) return;
@@ -1189,11 +1212,12 @@ export default function GenerateCertificatePage() {
   useEffect(() => {
     const templateId = template?.id;
     const versionId = templateVersionId;
-    
+
     if (!templateId || !versionId || fields.length === 0) return;
 
     setSaveStatus('saving');
-    const timeoutId = setTimeout(async () => {
+
+    const doSave = async () => {
       // Track field_keys to ensure uniqueness
       const usedFieldKeys = new Set<string>();
       
@@ -1393,7 +1417,7 @@ export default function GenerateCertificatePage() {
 
         await api.templates.saveFields(templateId, versionId, fieldsToSave);
         setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
+        setLastSavedAt(new Date());
         console.log('[Generate] Fields auto-saved to certificate_template_fields', {
           templateId,
           versionId,
@@ -1424,7 +1448,10 @@ export default function GenerateCertificatePage() {
           });
         }
       }
-    }, 1000); // Debounce: wait 1 second after last change
+    };
+
+    saveNowRef.current = doSave;
+    const timeoutId = setTimeout(doSave, 1000); // Debounce: wait 1 second after last change
 
     return () => clearTimeout(timeoutId);
   }, [fields, template?.id, templateVersionId]);
@@ -1534,6 +1561,18 @@ export default function GenerateCertificatePage() {
   };
 
   const selectedField = fields.find((f) => f.id === selectedFieldId);
+
+  // Row 1 live preview — fieldId → value from the first imported data row.
+  // Drives the canvas display without mutating field.sampleValue.
+  const livePreviewValues = useMemo((): Record<string, string> => {
+    const firstRow = importedData?.rows[0];
+    if (!firstRow) return {};
+    return Object.fromEntries(
+      fieldMappings
+        .filter(m => m.columnName && firstRow[m.columnName] != null && String(firstRow[m.columnName]).trim() !== '')
+        .map(m => [m.fieldId, String(firstRow[m.columnName])])
+    );
+  }, [importedData, fieldMappings]);
 
   // Step indicators
   const steps = [
@@ -2097,6 +2136,9 @@ export default function GenerateCertificatePage() {
                 canUndo={canUndo}
                 canRedo={canRedo}
                 saveStatus={saveStatus}
+                lastSavedAt={lastSavedAt}
+                onSaveNow={() => saveNowRef.current?.()}
+                livePreviewValues={livePreviewValues}
                 onFieldsDelete={handleFieldsDelete}
                 onFieldReorder={handleFieldReorder}
                 onFieldLock={handleFieldLock}

@@ -32,6 +32,7 @@ import {
   Italic,
   X,
   PlayCircle,
+  Save,
 } from 'lucide-react';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 
@@ -60,8 +61,12 @@ interface InfiniteCanvasProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
-  // Autosave status
+  // Autosave status + explicit save
   saveStatus?: SaveStatus;
+  lastSavedAt?: Date | null;
+  onSaveNow?: () => void;
+  /** fieldId → value from row 1 of imported data; drives live preview on the canvas */
+  livePreviewValues?: Record<string, string>;
   // Multi-select delete
   onFieldsDelete?: (ids: string[]) => void;
   // Field reorder (z-index)
@@ -90,6 +95,14 @@ interface InfiniteCanvasProps {
 const SNAP_SIZE = 8;
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 8;
+
+function formatSavedAgo(date: Date): string {
+  const mins = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  return hrs === 1 ? '1 hr ago' : `${hrs} hrs ago`;
+}
 
 // Per-field-type info shown in the help panel
 const FIELD_TYPE_INFO: Record<string, { label: string; description: string; tips: string[] }> = {
@@ -158,6 +171,9 @@ export function InfiniteCanvas({
   canUndo = false,
   canRedo = false,
   saveStatus = 'idle',
+  lastSavedAt,
+  onSaveNow,
+  livePreviewValues,
   onFieldsDelete,
   onFieldReorder,
   onFieldLock,
@@ -186,6 +202,17 @@ export function InfiniteCanvas({
   // Image drag-over state
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
+
+  // Alignment guide lines shown while dragging a field
+  const [guides, setGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
+
+  // Tick every 30s so "Saved X min ago" stays accurate without a re-render from the parent
+  const [, setSavedTick] = useState(0);
+  useEffect(() => {
+    if (!lastSavedAt) return;
+    const id = setInterval(() => setSavedTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [lastSavedAt]);
 
   // Template resize state
   const [isResizingTemplate, setIsResizingTemplate] = useState(false);
@@ -465,6 +492,10 @@ export function InfiniteCanvas({
         e.preventDefault();
         fitToScreen();
       }
+      if (mod && e.key === 's') {
+        e.preventDefault();
+        onSaveNow?.();
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -479,7 +510,14 @@ export function InfiniteCanvas({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [scale, onScaleChange, fitToScreen, selectedFieldId, fields, onFieldDelete, onFieldDuplicate, onUndo, onRedo, multiSelectedIds, onFieldsDelete]);
+  }, [scale, onScaleChange, fitToScreen, selectedFieldId, fields, onFieldDelete, onFieldDuplicate, onUndo, onRedo, multiSelectedIds, onFieldsDelete, onSaveNow]);
+
+  // Clear alignment guides when any drag ends
+  useEffect(() => {
+    const clear = () => setGuides([]);
+    document.addEventListener('mouseup', clear);
+    return () => document.removeEventListener('mouseup', clear);
+  }, []);
 
   // ── Mouse panning ─────────────────────────────────────────────────────────
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -663,8 +701,9 @@ export function InfiniteCanvas({
       ny = Math.round(ny / SNAP_SIZE) * SNAP_SIZE;
     }
 
-    // If multi-select active, move all selected fields together
+    // If multi-select active, move all selected fields together (no guides for multi-drag)
     if (multiSelectedIds.size > 1 && multiSelectedIds.has(id)) {
+      setGuides([]);
       for (const fid of multiSelectedIds) {
         const f = fields.find(ff => ff.id === fid);
         if (!f || f.locked) continue;
@@ -672,6 +711,38 @@ export function InfiniteCanvas({
       }
       return;
     }
+
+    // ── Alignment guides ──────────────────────────────────────────────────
+    const THRESHOLD = 5 / scale; // 5 screen-px tolerance, in PDF-space units
+    const dL = nx, dR = nx + field.width, dCX = nx + field.width / 2;
+    const dT = ny, dB = ny + field.height, dCY = ny + field.height / 2;
+    const seen = new Set<string>();
+    const newGuides: { type: 'h' | 'v'; pos: number }[] = [];
+    for (const other of fields) {
+      if (other.id === id) continue;
+      const oL = other.x, oR = other.x + other.width, oCX = other.x + other.width / 2;
+      const oT = other.y, oB = other.y + other.height, oCY = other.y + other.height / 2;
+      const checkV = (pdfX: number) => {
+        const key = `v${Math.round(pdfX)}`;
+        if (!seen.has(key)) { seen.add(key); newGuides.push({ type: 'v', pos: Math.round(pdfX * scale) }); }
+      };
+      const checkH = (pdfY: number) => {
+        const key = `h${Math.round(pdfY)}`;
+        if (!seen.has(key)) { seen.add(key); newGuides.push({ type: 'h', pos: Math.round(pdfY * scale) }); }
+      };
+      if (Math.abs(dCX - oCX) < THRESHOLD) checkV(oCX);
+      if (Math.abs(dL  - oL)  < THRESHOLD) checkV(oL);
+      if (Math.abs(dR  - oR)  < THRESHOLD) checkV(oR);
+      if (Math.abs(dL  - oR)  < THRESHOLD) checkV(oR);
+      if (Math.abs(dR  - oL)  < THRESHOLD) checkV(oL);
+      if (Math.abs(dCY - oCY) < THRESHOLD) checkH(oCY);
+      if (Math.abs(dT  - oT)  < THRESHOLD) checkH(oT);
+      if (Math.abs(dB  - oB)  < THRESHOLD) checkH(oB);
+      if (Math.abs(dT  - oB)  < THRESHOLD) checkH(oB);
+      if (Math.abs(dB  - oT)  < THRESHOLD) checkH(oT);
+    }
+    setGuides(newGuides);
+    // ─────────────────────────────────────────────────────────────────────
 
     onFieldUpdate(id, { x: nx, y: ny });
   }, [fields, scale, snapToGrid, onFieldUpdate, multiSelectedIds]);
@@ -858,6 +929,7 @@ export function InfiniteCanvas({
                   onDrag={(dx, dy) => handleFieldDrag(field.id, dx, dy)}
                   onDragStart={onFieldDragStart}
                   onResize={(w, h, iw, ifs) => handleFieldResize(field.id, w, h, iw, ifs)}
+                  previewValue={livePreviewValues?.[field.id]}
                   onSelect={e => {
                     e.stopPropagation();
                     if (e.shiftKey) {
@@ -876,6 +948,21 @@ export function InfiniteCanvas({
               </div>
             ))}
           </div>
+
+          {/* Alignment guides — rendered during field drag */}
+          {guides.length > 0 && (
+            <div className="absolute inset-0 pointer-events-none z-40" aria-hidden>
+              {guides.map((g, i) => (
+                <div
+                  key={i}
+                  style={g.type === 'h'
+                    ? { position: 'absolute', left: 0, right: 0, top: g.pos, height: 1, backgroundColor: 'rgba(255, 55, 136, 0.85)', boxShadow: '0 0 3px rgba(255,55,136,0.5)' }
+                    : { position: 'absolute', top: 0, bottom: 0, left: g.pos, width: 1, backgroundColor: 'rgba(255, 55, 136, 0.85)', boxShadow: '0 0 3px rgba(255,55,136,0.5)' }
+                  }
+                />
+              ))}
+            </div>
+          )}
 
           {/* Template resize handles (8 handles) + rotation handle */}
           {onTemplateResize && (
@@ -1132,6 +1219,14 @@ export function InfiniteCanvas({
                 <HelpCircle className="w-3.5 h-3.5" />
               </Button>
 
+              {/* Live data badge — shown when row 1 values are applied to the canvas */}
+              {livePreviewValues && Object.keys(livePreviewValues).length > 0 && (
+                <div className="flex items-center gap-1 text-[10px] px-2 h-7 rounded-lg font-medium bg-primary/8 text-primary border border-primary/20" title="Canvas is showing values from row 1 of your imported data">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                  Row 1 preview
+                </div>
+              )}
+
               {/* Preview */}
               {onPreviewToggle && (
                 <button
@@ -1144,20 +1239,40 @@ export function InfiniteCanvas({
                 </button>
               )}
 
-              {/* Autosave indicator */}
-              {saveStatus !== 'idle' && (
-                <div className={`flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium ${
-                  saveStatus === 'saving' ? 'text-muted-foreground' :
-                  saveStatus === 'saved'  ? 'text-primary' :
-                  'text-destructive'
-                }`}>
-                  {saveStatus === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {saveStatus === 'saved'  && <CheckCircle2 className="w-3 h-3" />}
-                  {saveStatus === 'error'  && <AlertCircle className="w-3 h-3" />}
-                  <span>
-                    {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Save failed'}
-                  </span>
+              {/* Save button + status indicator */}
+              {saveStatus === 'saving' && (
+                <div className="flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Saving…</span>
                 </div>
+              )}
+              {saveStatus === 'saved' && lastSavedAt && (
+                <div className="flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium text-primary">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Saved {formatSavedAgo(lastSavedAt)}</span>
+                </div>
+              )}
+              {saveStatus === 'error' && (
+                <div className="flex items-center gap-1.5 text-[10px] px-2 rounded-lg h-7 font-medium text-destructive">
+                  <AlertCircle className="w-3 h-3" />
+                  <span>Save failed</span>
+                  {onSaveNow && (
+                    <button
+                      onClick={onSaveNow}
+                      className="underline underline-offset-2 hover:no-underline"
+                    >Retry</button>
+                  )}
+                </div>
+              )}
+              {(saveStatus === 'idle' || (saveStatus === 'saved' && !lastSavedAt)) && onSaveNow && fields.length > 0 && (
+                <button
+                  onClick={onSaveNow}
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  title="Save design now (⌘S)"
+                >
+                  <Save className="w-3.5 h-3.5 shrink-0" />
+                  <span>Save</span>
+                </button>
               )}
             </div>
           </div>

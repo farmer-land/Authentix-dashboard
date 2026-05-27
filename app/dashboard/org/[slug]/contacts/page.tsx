@@ -92,6 +92,31 @@ function computeFileHash(headers: string[], rows: Record<string, string>[]): str
   return `${headerSig}::${rowSig}`.slice(0, 300);
 }
 
+// ── Partial import recovery ────────────────────────────────────────────────────
+// Written before batches fire so a crash leaves a breadcrumb; cleared on success.
+
+interface PendingImport {
+  source_ref: string;
+  file_name: string;
+  file_hash: string;
+  total_rows: number;
+  batch_count: number;
+  started_at: string;
+}
+
+const pendingImportKey = (slug: string) => `contact_import_pending:${slug}`;
+
+function readPendingImport(slug: string): PendingImport | null {
+  try { return JSON.parse(localStorage.getItem(pendingImportKey(slug)) ?? "null"); }
+  catch { return null; }
+}
+function writePendingImport(slug: string, p: PendingImport) {
+  localStorage.setItem(pendingImportKey(slug), JSON.stringify(p));
+}
+function clearPendingImport(slug: string) {
+  localStorage.removeItem(pendingImportKey(slug));
+}
+
 // ── Saved mapping profiles ─────────────────────────────────────────────────────
 
 interface MappingProfile {
@@ -599,6 +624,12 @@ export default function ContactsPage() {
     setImportLog(readImportLog(orgSlug));
   }, [orgSlug]);
 
+  // Stale pending import from a previous session (set before batches fire, cleared on success)
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
+  useEffect(() => {
+    setPendingImport(readPendingImport(orgSlug));
+  }, [orgSlug]);
+
   // The most recently imported file — shown as the "what's next?" green card
   // until the user takes an action or dismisses it. Resets on page load.
   const [recentCard, setRecentCard] = useState<ImportSession | null>(null);
@@ -694,6 +725,16 @@ export default function ContactsPage() {
 
       setIsImporting(true);
       try {
+        // Write recovery breadcrumb before any network calls so a crash mid-import
+        // leaves enough state for the user to safely resume with the same source_ref.
+        const pending: PendingImport = {
+          source_ref, file_name: fileName, file_hash: fileHash,
+          total_rows: normalizedRows.length, batch_count: batches.length,
+          started_at: new Date().toISOString(),
+        };
+        writePendingImport(orgSlug, pending);
+        setPendingImport(pending);
+
         // Parallel batches — BATCH_CONCURRENCY at a time, much faster for large files
         const tasks = batches.map((batch) => () =>
           api.delivery.importContactsBatch(batch, source_ref)
@@ -747,9 +788,13 @@ export default function ContactsPage() {
         writeImportLog(orgSlug, updated);
         setImportLog(updated);
         setRecentCard(session);
+        // All batches completed — clear the recovery breadcrumb
+        clearPendingImport(orgSlug);
+        setPendingImport(null);
         queryClient.invalidateQueries({ queryKey: ["org", orgSlug, "delivery"] });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Import failed", { id: toastId });
+        // Leave pendingImport in place so the recovery banner appears on next load
       } finally {
         setIsImporting(false);
       }
@@ -817,7 +862,12 @@ export default function ContactsPage() {
       return out;
     });
 
-    const source_ref = nanoid();
+    // Reuse the source_ref from an interrupted import of the same file so the
+    // backend upserts already-uploaded rows (no duplicates) instead of inserting them again.
+    const existingPending = readPendingImport(orgSlug);
+    const source_ref = (existingPending && existingPending.file_hash === parsedFile.fileHash)
+      ? existingPending.source_ref
+      : nanoid();
     const { fileName, fileHash, headers } = parsedFile;
     const mappingToSave = { headers, mapping };
     const willExceed = contactCap > 0 && total + normalizedRows.length > contactCap;
@@ -927,6 +977,29 @@ export default function ContactsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Partial import recovery banner — shown when a previous import was interrupted */}
+      {pendingImport && !isImporting && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+              Import interrupted — <span className="font-normal">{pendingImport.file_name}</span>
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Started {formatDistanceToNow(new Date(pendingImport.started_at), { addSuffix: true })}.
+              {" "}Some rows may have been partially imported.
+              Re-upload <strong>{pendingImport.file_name}</strong> to safely resume — already-uploaded rows are skipped automatically.
+            </p>
+          </div>
+          <button
+            className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 shrink-0 mt-0.5 transition-colors"
+            onClick={() => { clearPendingImport(orgSlug); setPendingImport(null); }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Recent import card — shown right after a fresh import, dismissed on action */}
       {recentCard && (

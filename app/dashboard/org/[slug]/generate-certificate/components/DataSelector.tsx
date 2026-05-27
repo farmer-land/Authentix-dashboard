@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import { CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import type { SavedImport } from '../schema/types';
-import { Upload, FileSpreadsheet, Download, CheckCircle2, Plus, Database, ArrowRight, Edit2, Keyboard, AlertCircle, Link2, ChevronDown, Loader2, Info } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, CheckCircle2, Plus, Database, ArrowRight, Edit2, Keyboard, AlertCircle, AlertTriangle, Link2, ChevronDown, Loader2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 import { getXlsx } from '@/lib/utils/dynamic-imports';
@@ -89,6 +89,11 @@ export function DataSelector({
   const [loadImportError, setLoadImportError] = useState<string | null>(null);
   const [showAdditionalRows, setShowAdditionalRows] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('Uploading…');
+  const [pendingMapping, setPendingMapping] = useState<{
+    fieldId: string;
+    columnName: string;
+    otherFields: { id: string; label: string }[];
+  } | null>(null);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
@@ -184,6 +189,18 @@ export function DataSelector({
       const fileName = results.length === 1
         ? results[0]!.file.name
         : `${results.length} files (${results.map(r => r.file.name).join(', ')})`;
+
+      if (totalRowCount === 0) {
+        const names = results.map(r => `"${r.file.name}"`).join(', ');
+        setUploadError(
+          `0 rows imported from ${names}. The file may only have a header row, ` +
+          `all rows may have failed to parse, or an unsupported format was used. ` +
+          `Open the file in a spreadsheet app to verify it has data rows, ` +
+          `or download the sample CSV above to see the expected format.`
+        );
+        setIsProcessing(false);
+        return;
+      }
 
       const data: ImportedData = {
         fileName,
@@ -312,12 +329,11 @@ export function DataSelector({
     URL.revokeObjectURL(url);
   };
 
-  const handleMappingChange = (fieldId: string, columnName: string) => {
+  const applyMappingNow = (fieldId: string, columnName: string, allOfType: boolean) => {
     const mappedField = fields.find((f) => f.id === fieldId);
-    const fieldsToMap = mappedField && SEMANTIC_TYPES.has(mappedField.type)
+    const fieldsToMap = allOfType && mappedField && SEMANTIC_TYPES.has(mappedField.type)
       ? fields.filter((f) => f.type === mappedField.type)
       : fields.filter((f) => f.id === fieldId);
-
     const updated = [...fieldMappings];
     fieldsToMap.forEach((f) => {
       const idx = updated.findIndex((m) => m.fieldId === f.id);
@@ -325,6 +341,19 @@ export function DataSelector({
       else updated.push({ fieldId: f.id, columnName });
     });
     onMappingChange(updated);
+    setPendingMapping(null);
+  };
+
+  const handleMappingChange = (fieldId: string, columnName: string) => {
+    const mappedField = fields.find((f) => f.id === fieldId);
+    if (mappedField && SEMANTIC_TYPES.has(mappedField.type)) {
+      const otherSameType = fields.filter((f) => f.type === mappedField.type && f.id !== fieldId);
+      if (otherSameType.length > 0) {
+        setPendingMapping({ fieldId, columnName, otherFields: otherSameType.map((f) => ({ id: f.id, label: f.label })) });
+        return;
+      }
+    }
+    applyMappingNow(fieldId, columnName, false);
   };
 
   const getMappedColumn = (fieldId: string) => {
@@ -615,6 +644,26 @@ export function DataSelector({
 
               <DataPreview data={importedData} maxHeight="350px" />
 
+              {importedData.rowCount === 0 && (
+                <div className="flex items-start gap-3 px-4 py-3.5 rounded-lg bg-destructive/8 border border-destructive/20">
+                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-destructive">0 rows found — cannot generate certificates</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      The file was accepted but no data rows were extracted. Common causes:
+                    </p>
+                    <ul className="text-xs text-muted-foreground mt-1.5 space-y-0.5 list-disc list-inside">
+                      <li>File only contains a header row with no data beneath it</li>
+                      <li>Wrong delimiter (e.g. semicolons in a comma-separated file)</li>
+                      <li>All rows had parse errors (mismatched quotes, encoding issues)</li>
+                    </ul>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Open the file in a spreadsheet app to verify it has data rows, then re-upload.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {importedData.rowCount >= WARN_ROWS && (
                 <div className={`flex items-start gap-2 px-1 py-2 rounded-lg ${importedData.rowCount >= MAX_ROWS ? 'bg-orange-50 dark:bg-orange-950/20' : 'bg-blue-50 dark:bg-blue-950/20'}`}>
                   <Info className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${importedData.rowCount >= MAX_ROWS ? 'text-orange-500' : 'text-blue-500'}`} />
@@ -677,8 +726,10 @@ export function DataSelector({
                           const isDuplicate = !!mappedColumn && duplicatedColumns.has(mappedColumn);
                           const isNumericMismatch = !!mappedColumn && numericColumnsMappedToText.has(mappedColumn);
                           const isSynced = SEMANTIC_TYPES.has(field.type) && (typeCountMap[field.type] ?? 0) > 1;
+                          const isPending = pendingMapping?.fieldId === field.id;
                           return (
-                            <div key={field.id} className={`flex items-center gap-4 p-3 rounded-lg ${isDuplicate ? 'bg-orange-50 dark:bg-orange-950/20' : isNumericMismatch ? 'bg-yellow-50 dark:bg-yellow-950/20' : 'bg-muted/30'}`}>
+                            <div key={field.id}>
+                              <div className={`flex items-center gap-4 p-3 rounded-lg ${isDuplicate ? 'bg-orange-50 dark:bg-orange-950/20' : isNumericMismatch ? 'bg-yellow-50 dark:bg-yellow-950/20' : 'bg-muted/30'}`}>
                               <div className="flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <Label className="text-sm font-medium">{field.label}</Label>
@@ -738,6 +789,37 @@ export function DataSelector({
                                   </span>
                                 </span>
                               )}
+                              </div>
+                              {isPending && (
+                                <div className="flex items-start gap-2 mt-1 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/40">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                                      This will also map <strong>{pendingMapping!.otherFields.map(f => `"${f.label}"`).join(', ')}</strong> to the same column.
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                      <button
+                                        className="text-[11px] font-semibold text-amber-900 dark:text-amber-100 bg-amber-200 dark:bg-amber-700/60 hover:bg-amber-300 dark:hover:bg-amber-600/60 px-2.5 py-1 rounded-md transition-colors"
+                                        onClick={() => applyMappingNow(pendingMapping!.fieldId, pendingMapping!.columnName, true)}
+                                      >
+                                        Update all {pendingMapping!.otherFields.length + 1} fields
+                                      </button>
+                                      <button
+                                        className="text-[11px] text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 px-1.5 py-1"
+                                        onClick={() => applyMappingNow(pendingMapping!.fieldId, pendingMapping!.columnName, false)}
+                                      >
+                                        This field only
+                                      </button>
+                                      <button
+                                        className="text-[11px] text-amber-600 dark:text-amber-500 hover:text-amber-800 dark:hover:text-amber-300 ml-auto px-1.5 py-1"
+                                        onClick={() => setPendingMapping(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -754,57 +836,90 @@ export function DataSelector({
                   const isDuplicate = !!mappedColumn && duplicatedColumns.has(mappedColumn);
                   const isNumericMismatch = !!mappedColumn && numericColumnsMappedToText.has(mappedColumn);
                   const hasWarning = isDuplicate || isNumericMismatch;
+                  const isPending = pendingMapping?.fieldId === field.id;
                   return (
-                    <div key={field.id} className={`flex items-center gap-4 p-3 rounded-lg ${isDuplicate ? 'bg-orange-50 dark:bg-orange-950/20' : isNumericMismatch ? 'bg-yellow-50 dark:bg-yellow-950/20' : 'bg-muted/30'}`}>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <Label className="text-sm font-medium">{field.label}</Label>
-                          {isDuplicate && (
-                            <span className="relative group cursor-help">
-                              <AlertCircle className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                              <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
-                                {getDuplicateTooltip(mappedColumn!)}
+                    <div key={field.id}>
+                      <div className={`flex items-center gap-4 p-3 rounded-lg ${isDuplicate ? 'bg-orange-50 dark:bg-orange-950/20' : isNumericMismatch ? 'bg-yellow-50 dark:bg-yellow-950/20' : 'bg-muted/30'}`}>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <Label className="text-sm font-medium">{field.label}</Label>
+                            {isDuplicate && (
+                              <span className="relative group cursor-help">
+                                <AlertCircle className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                                <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
+                                  {getDuplicateTooltip(mappedColumn!)}
+                                </span>
                               </span>
-                            </span>
-                          )}
-                          {isNumericMismatch && !isDuplicate && (
-                            <span className="relative group cursor-help">
-                              <AlertCircle className="w-3.5 h-3.5 text-yellow-600 shrink-0" />
-                              <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
-                                This column contains only numbers, but &quot;{field.label}&quot; expects text (like a name or course title). Please check your column mapping.
+                            )}
+                            {isNumericMismatch && !isDuplicate && (
+                              <span className="relative group cursor-help">
+                                <AlertCircle className="w-3.5 h-3.5 text-yellow-600 shrink-0" />
+                                <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
+                                  This column contains only numbers, but &quot;{field.label}&quot; expects text (like a name or course title). Please check your column mapping.
+                                </span>
                               </span>
-                            </span>
+                            )}
+                          </div>
+                          {mappedColumn && (
+                            <p className={`text-xs mt-0.5 ${isDuplicate ? 'text-orange-600 dark:text-orange-400' : isNumericMismatch ? 'text-yellow-700 dark:text-yellow-400' : 'text-muted-foreground'}`}>
+                              ← {mappedColumn}{isDuplicate ? ' — same column used twice' : isNumericMismatch ? ' — contains numbers, expected text' : ''}
+                            </p>
                           )}
                         </div>
-                        {mappedColumn && (
-                          <p className={`text-xs mt-0.5 ${isDuplicate ? 'text-orange-600 dark:text-orange-400' : isNumericMismatch ? 'text-yellow-700 dark:text-yellow-400' : 'text-muted-foreground'}`}>
-                            ← {mappedColumn}{isDuplicate ? ' — same column used twice' : isNumericMismatch ? ' — contains numbers, expected text' : ''}
-                          </p>
+                        <div className="flex-1">
+                          <Select
+                            value={mappedColumn || ''}
+                            onValueChange={(value: string) => handleMappingChange(field.id, value)}
+                          >
+                            <SelectTrigger className={isDuplicate ? 'border-orange-400' : isNumericMismatch ? 'border-yellow-500' : isMapped ? 'border-green-500' : ''}>
+                              <SelectValue placeholder="Select column…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {importedData?.headers.map((header) => (
+                                <SelectItem key={header} value={header}>{header}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {isMapped && !hasWarning && <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0" />}
+                        {isDuplicate && (
+                          <span className="relative group cursor-help">
+                            <AlertCircle className="w-5 h-5 text-orange-500 shrink-0" />
+                            <span className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
+                              {getDuplicateTooltip(mappedColumn!)}
+                            </span>
+                          </span>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <Select
-                          value={mappedColumn || ''}
-                          onValueChange={(value: string) => handleMappingChange(field.id, value)}
-                        >
-                          <SelectTrigger className={isDuplicate ? 'border-orange-400' : isNumericMismatch ? 'border-yellow-500' : isMapped ? 'border-green-500' : ''}>
-                            <SelectValue placeholder="Select column…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {importedData?.headers.map((header) => (
-                              <SelectItem key={header} value={header}>{header}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {isMapped && !hasWarning && <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0" />}
-                      {isDuplicate && (
-                        <span className="relative group cursor-help">
-                          <AlertCircle className="w-5 h-5 text-orange-500 shrink-0" />
-                          <span className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
-                            {getDuplicateTooltip(mappedColumn!)}
-                          </span>
-                        </span>
+                      {isPending && (
+                        <div className="flex items-start gap-2 mt-1 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/40">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-amber-800 dark:text-amber-300">
+                              This will also map <strong>{pendingMapping!.otherFields.map(f => `"${f.label}"`).join(', ')}</strong> to the same column.
+                            </p>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              <button
+                                className="text-[11px] font-semibold text-amber-900 dark:text-amber-100 bg-amber-200 dark:bg-amber-700/60 hover:bg-amber-300 dark:hover:bg-amber-600/60 px-2.5 py-1 rounded-md transition-colors"
+                                onClick={() => applyMappingNow(pendingMapping!.fieldId, pendingMapping!.columnName, true)}
+                              >
+                                Update all {pendingMapping!.otherFields.length + 1} fields
+                              </button>
+                              <button
+                                className="text-[11px] text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 px-1.5 py-1"
+                                onClick={() => applyMappingNow(pendingMapping!.fieldId, pendingMapping!.columnName, false)}
+                              >
+                                This field only
+                              </button>
+                              <button
+                                className="text-[11px] text-amber-600 dark:text-amber-500 hover:text-amber-800 dark:hover:text-amber-300 ml-auto px-1.5 py-1"
+                                onClick={() => setPendingMapping(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   );
@@ -882,8 +997,16 @@ export function DataSelector({
 
           {/* Continue to Generate Button */}
           {onContinueToGenerate && !!importedData && (
-            <div className="flex justify-end">
-              <Button size="lg" onClick={onContinueToGenerate} className="gap-2">
+            <div className="flex items-center justify-end gap-3">
+              {importedData.rowCount === 0 && (
+                <p className="text-xs text-destructive">Fix the 0-row error above before continuing.</p>
+              )}
+              <Button
+                size="lg"
+                onClick={onContinueToGenerate}
+                className="gap-2"
+                disabled={importedData.rowCount === 0}
+              >
                 Continue to Generate
                 <ArrowRight className="w-4 h-4" />
               </Button>
