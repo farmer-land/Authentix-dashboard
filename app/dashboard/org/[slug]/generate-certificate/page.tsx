@@ -15,7 +15,7 @@ import {
   CheckCircle2, Layers, Palette, Database, Wand2,
   ChevronDown, ChevronUp, X, Eye, ChevronRight,
   SlidersHorizontal, Maximize2,
-  User, BookOpen, Calendar, Type, QrCode,
+  User, BookOpen, Calendar, Type, QrCode, AlertTriangle,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -100,6 +100,14 @@ export default function GenerateCertificatePage() {
 
   // Tracks previous field IDs so we can detect when field composition changes
   const prevFieldIdsRef = useRef<string>('');
+
+  // Set to true when a resumed session's templateVersionId differs from the current DB version,
+  // meaning the template image may have changed and field positions could be off.
+  const [versionChangedWarning, setVersionChangedWarning] = useState(false);
+
+  // Written by handleTemplateSelect after fetching editor data so handleResumeSession
+  // can compare session version vs current version without an extra API call.
+  const lastLoadedVersionIdRef = useRef<string | null>(null);
 
   // Cancellation ref for parallel multi-select loads
   const multiSelectRequestRef = useRef(0);
@@ -596,9 +604,12 @@ export default function GenerateCertificatePage() {
 
     const fileType = 'image';
 
-    // Store version ID for autosave
+    // Store version ID for autosave; expose via ref for session restore comparison
     if (editorData?.version?.id) {
       setTemplateVersionId(editorData.version.id);
+      lastLoadedVersionIdRef.current = editorData.version.id;
+    } else {
+      lastLoadedVersionIdRef.current = null;
     }
 
     // Map backend fields to frontend format if needed
@@ -701,7 +712,24 @@ export default function GenerateCertificatePage() {
     const templateObj = savedTemplates.find((t: any) => t.id === session.templateId);
     if (!templateObj) return;
 
+    lastLoadedVersionIdRef.current = null;
     await handleTemplateSelectSafe(templateObj);
+    const currentVersionId = lastLoadedVersionIdRef.current;
+
+    // Detect template image change: if both versions are known and differ, warn the user.
+    // Field positions are pixel-absolute, so a different image (possibly different dimensions)
+    // means every field could be misaligned.
+    const versionMismatch =
+      session.templateVersionId !== null &&
+      currentVersionId !== null &&
+      session.templateVersionId !== currentVersionId;
+    if (versionMismatch) setVersionChangedWarning(true);
+
+    // Do NOT restore the stale session version — handleTemplateSelect already set the correct
+    // current version from the DB. Fall back to session version only if the DB fetch failed.
+    if (!currentVersionId && session.templateVersionId) {
+      setTemplateVersionId(session.templateVersionId);
+    }
 
     if (session.fields.length > 0) {
       const sanitized = session.fields.map((f: any) => ({
@@ -712,7 +740,6 @@ export default function GenerateCertificatePage() {
       setFields(sanitized);
     }
     if (session.canvasScale) setCanvasScale(session.canvasScale);
-    if (session.templateVersionId) setTemplateVersionId(session.templateVersionId);
     if (session.fieldMappings.length > 0) setFieldMappings(session.fieldMappings);
 
     const meta = session.importedDataMeta;
@@ -1755,6 +1782,26 @@ export default function GenerateCertificatePage() {
       {/* ── Full-screen design overlay ── */}
       {currentStep === 'design' && template && (
         <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-background flex flex-col">
+
+          {/* ── Version-change warning banner ── */}
+          {versionChangedWarning && (
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 text-amber-700 dark:text-amber-400 text-sm shrink-0 z-10">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span className="flex-1">
+                <strong className="font-semibold">Template updated</strong>
+                {' — the image changed since you last edited this design. '}
+                Field positions are in pixel coordinates relative to the original image, so they may no longer align. Review each field.
+              </span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setVersionChangedWarning(false)}
+                className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100 hover:bg-amber-500/10 transition-opacity"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Canvas area + panels + optional preview — flex row, fills all space */}
           <div className="flex-1 flex overflow-hidden">
