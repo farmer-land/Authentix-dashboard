@@ -40,6 +40,8 @@ import {
   Sparkles,
   Loader2,
   ImageIcon,
+  Clock,
+  XCircle,
 } from "lucide-react";
 import { type ImportJob } from "@/lib/api/client";
 import { useImports, useImportData } from "@/lib/hooks/queries/imports";
@@ -61,7 +63,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { formatDistanceToNow, format, subDays } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -500,8 +502,6 @@ function UseForGenerationModal({ importId, importJob, orgSlug, onClose }: UseFor
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const STALE_THRESHOLD_DAYS = 7;
-
 export default function ImportsPage() {
   const params = useParams();
   const orgSlug = params.slug as string;
@@ -548,19 +548,43 @@ export default function ImportsPage() {
     setPickerImportJob(importItem);
   };
 
-  const getStatusBadge = (status: ImportJob["status"]) => {
-    const variants: Record<
-      ImportJob["status"],
-      { variant: "default" | "secondary" | "destructive" | "outline"; label: string }
-    > = {
-      completed: { variant: "default", label: "Completed" },
-      queued: { variant: "secondary", label: "Queued" },
-      pending: { variant: "secondary", label: "Pending" },
-      processing: { variant: "outline", label: "Processing" },
-      failed: { variant: "destructive", label: "Failed" },
-    };
-    const config = variants[status] ?? variants.queued;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+  const getStatusBadge = (item: ImportJob) => {
+    const ageMin = (Date.now() - new Date(item.created_at).getTime()) / 60000;
+    const isStuck = ["queued", "pending", "processing"].includes(item.status) && ageMin > 30;
+
+    if (isStuck) {
+      return (
+        <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-1 shrink-0">
+          <AlertCircle className="h-3 w-3" /> Stuck
+        </Badge>
+      );
+    }
+    switch (item.status) {
+      case "completed":
+        return (
+          <Badge className="bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800 gap-1 shrink-0">
+            <CheckCircle2 className="h-3 w-3" /> Completed
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive" className="gap-1 shrink-0">
+            <XCircle className="h-3 w-3" /> Failed
+          </Badge>
+        );
+      case "processing":
+        return (
+          <Badge className="bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800 gap-1 shrink-0">
+            <Loader2 className="h-3 w-3 animate-spin" /> Processing
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary" className="gap-1 shrink-0">
+            <Clock className="h-3 w-3" /> Queued
+          </Badge>
+        );
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -569,14 +593,17 @@ export default function ImportsPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // Filter out stale stuck imports (queued/pending/processing older than 7 days)
-  const staleThreshold = subDays(new Date(), STALE_THRESHOLD_DAYS);
-  const visibleImports = (imports as ImportJob[]).filter((item) => {
-    const isStuck = ["queued", "pending", "processing"].includes(item.status);
-    if (isStuck && new Date(item.created_at) < staleThreshold) return false;
-    return true;
-  });
-  const staleCount = (imports as ImportJob[]).length - visibleImports.length;
+  const visibleImports = imports as ImportJob[];
+
+  // Auto-refresh every 8 s while any import is in a non-terminal state
+  const hasActiveImports = visibleImports.some((i) =>
+    ["queued", "pending", "processing"].includes(i.status)
+  );
+  useEffect(() => {
+    if (!hasActiveImports) return;
+    const id = setInterval(() => void refetch(), 8000);
+    return () => clearInterval(id);
+  }, [hasActiveImports, refetch]);
 
   if (loading) {
     return (
@@ -609,15 +636,6 @@ export default function ImportsPage() {
           Refresh
         </Button>
       </div>
-
-      {/* Stale notice */}
-      {staleCount > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-muted/50 text-sm text-muted-foreground border">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {staleCount} stuck import{staleCount !== 1 ? "s" : ""} older than {STALE_THRESHOLD_DAYS} days{" "}
-          {staleCount !== 1 ? "are" : "is"} hidden (queued but never processed).
-        </div>
-      )}
 
       {/* Import Cards */}
       {visibleImports.length === 0 ? (
@@ -674,6 +692,14 @@ export default function ImportsPage() {
                           </span>
                         </div>
 
+                        {/* Inline error for failed / stuck imports */}
+                        {importItem.status === "failed" && importItem.error_message && (
+                          <p className="text-xs text-destructive mt-1 flex items-start gap-1">
+                            <XCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                            {importItem.error_message}
+                          </p>
+                        )}
+
                         {/* Category / subcategory tags */}
                         {(importItem.certificate_category || importItem.certificate_subcategory) && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -692,7 +718,7 @@ export default function ImportsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {getStatusBadge(importItem.status)}
+                        {getStatusBadge(importItem)}
 
                         {/* Use for Generation — primary action */}
                         {importItem.status === "completed" && (
