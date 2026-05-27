@@ -200,152 +200,154 @@ export function FieldMappingModal({
     onConfirm(outputMapping);
   }
 
+  function handleReDetect() {
+    const autoResult = autoMapHeaders(headers, platformFields);
+    const detected: Record<string, string> = {};
+    const detectedHeaders = new Set<string>();
+    for (const [pk, ch] of Object.entries(autoResult)) {
+      detected[ch] = pk;
+      detectedHeaders.add(ch);
+    }
+    for (const h of headers) {
+      if (!detected[h]) detected[h] = CUSTOM;
+    }
+    setColumnMapping(detected);
+    setAutoDetected(detectedHeaders);
+    setUsedSavedProfile(false);
+  }
+
   const hasCustomCols = Object.values(columnMapping).some((v) => v === CUSTOM);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-3">
         <DialogHeader className="shrink-0">
           <DialogTitle>Review columns from &ldquo;{fileName}&rdquo;</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            {headers.length} column{headers.length !== 1 ? "s" : ""} detected.
+            {headers.length} column{headers.length !== 1 ? "s" : ""} detected.{" "}
             {usedSavedProfile
-              ? " Mapping restored from your last import with these columns."
-              : " We've auto-matched where possible — adjust anything that looks wrong."}
+              ? "Mapping restored from your last import with these columns."
+              : "We've auto-matched where possible — adjust anything that looks wrong."}
           </p>
           {usedSavedProfile && (
-            <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-primary font-medium">
-              <Sparkles className="h-3 w-3" />
-              Using saved mapping from a previous import
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-primary font-medium">
+                <Sparkles className="h-3 w-3" />
+                Using saved mapping from a previous import
+              </span>
+              <button
+                type="button"
+                onClick={handleReDetect}
+                className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+              >
+                Re-detect
+              </button>
             </div>
           )}
         </DialogHeader>
 
-        {/* Column header */}
-        <div className="grid grid-cols-[1fr_16px_200px_24px] gap-3 px-1 pb-1 shrink-0">
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Your column
-          </span>
+        {/* Column header row */}
+        <div className="grid grid-cols-[1fr_16px_190px_20px] gap-3 px-1 shrink-0">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Your column</span>
           <span />
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Stored as
-          </span>
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Stored as</span>
           <span />
         </div>
 
-        {/* Column rows */}
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 pr-1">
-          {headers.map((h) => {
-            const target = columnMapping[h] ?? CUSTOM;
-            const isMapped = target !== CUSTOM;
-            const isAutoDetected = autoDetected.has(h);
-            const preview = previewValues[h] ?? [];
-            const mappedField = isMapped ? fieldByKey.get(target) : undefined;
-            const isRequiredField = mappedField ? requiredFieldKeys.has(mappedField.key) : false;
+        {/* Scrollable column rows with bottom fade */}
+        <div className="relative flex-1 min-h-0">
+          <div className="h-full overflow-y-auto space-y-1.5 pr-1 pb-4">
+            {headers.map((h) => {
+              const target = columnMapping[h] ?? CUSTOM;
+              const isMapped = target !== CUSTOM;
+              const isAutoDetected = autoDetected.has(h);
+              const preview = previewValues[h] ?? [];
+              const mappedField = isMapped ? fieldByKey.get(target) : undefined;
+              const isRequiredField = mappedField ? requiredFieldKeys.has(mappedField.key) : false;
 
-            return (
-              <div
-                key={h}
-                className={`grid grid-cols-[1fr_16px_200px_24px] items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
-                  isMapped
-                    ? "bg-primary/5 border-primary/20"
-                    : "bg-card border-border"
-                }`}
-              >
-                {/* Column name + preview values */}
-                <div className="min-w-0 pt-0.5">
-                  <p className="text-sm font-medium truncate">{h}</p>
-                  {preview.length > 0 ? (
-                    <div className="mt-0.5 space-y-0.5">
-                      {preview.map((v, vi) => (
-                        <p
-                          key={vi}
-                          className="text-[11px] text-muted-foreground font-mono truncate leading-tight"
-                        >
-                          {v}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground/40 italic mt-0.5">empty column</p>
-                  )}
-                </div>
+              return (
+                <div
+                  key={h}
+                  className={`grid grid-cols-[1fr_16px_190px_20px] items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                    isMapped ? "bg-primary/5 border-primary/20" : "bg-card border-border"
+                  }`}
+                >
+                  {/* Column name + sample values */}
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-medium truncate">{h}</p>
+                    {preview.length > 0 ? (
+                      <div className="mt-0.5 space-y-0.5">
+                        {preview.map((v, vi) => (
+                          <p key={vi} className="text-[11px] text-muted-foreground font-mono truncate leading-tight">
+                            {v}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground/40 italic mt-0.5">empty column</p>
+                    )}
+                  </div>
 
-                <ArrowRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-2" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-1.5" />
 
-                {/* Target picker + meta */}
-                <div className="space-y-1">
-                  <Select value={target} onValueChange={(v) => handleChange(h, v)}>
-                    <SelectTrigger
-                      className={
-                        isMapped
-                          ? "border-primary/40 bg-primary/5 text-sm h-8"
-                          : "text-sm h-8 text-muted-foreground"
-                      }
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" className="z-200">
-                      {platformFields.map((f) => (
-                        <SelectItem key={f.key} value={f.key} className="text-sm">
-                          <div className="flex items-center gap-1.5">
-                            <span>{f.label}</span>
+                  {/* Target picker + metadata */}
+                  <div className="space-y-1 min-w-0">
+                    <Select value={target} onValueChange={(v) => handleChange(h, v)}>
+                      <SelectTrigger
+                        className={`h-8 text-sm truncate ${
+                          isMapped ? "border-primary/40 bg-primary/5" : "text-muted-foreground"
+                        }`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper" className="z-200">
+                        {platformFields.map((f) => (
+                          <SelectItem key={f.key} value={f.key} className="text-sm">
+                            {f.label}
                             {requiredFieldKeys.has(f.key) && (
-                              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                required
-                              </span>
+                              <span className="ml-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">required</span>
                             )}
-                          </div>
-                          {f.typeHint && (
-                            <span className="text-[11px] text-muted-foreground block leading-none mt-0.5">
-                              {f.typeHint}
-                            </span>
-                          )}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={CUSTOM} className="text-sm text-muted-foreground">
+                          Custom property
                         </SelectItem>
-                      ))}
-                      <SelectItem value={CUSTOM} className="text-sm">
-                        <span className="text-muted-foreground">Custom property</span>
-                        <span className="text-[11px] text-muted-foreground/60 block leading-none mt-0.5">
-                          stored as {"{{variable}}"}
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                      </SelectContent>
+                    </Select>
 
-                  {/* Auto-detected badge + type hint */}
-                  {isMapped && (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {isAutoDetected && (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-primary/70 font-medium">
-                          <Sparkles className="h-2.5 w-2.5" />
-                          Auto-detected
-                        </span>
-                      )}
-                      {mappedField?.typeHint && (
-                        <span className="text-[10px] text-muted-foreground/60 font-mono">
-                          {mappedField.typeHint}
-                        </span>
-                      )}
-                      {isRequiredField && (
-                        <Badge variant="outline" className="h-4 text-[10px] px-1 border-amber-300 text-amber-600 dark:text-amber-400">
-                          required
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    {isMapped && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isAutoDetected && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-primary/70 font-medium">
+                            <Sparkles className="h-2.5 w-2.5" />
+                            Auto-detected
+                          </span>
+                        )}
+                        {mappedField?.typeHint && (
+                          <span className="text-[10px] text-muted-foreground/60 font-mono">{mappedField.typeHint}</span>
+                        )}
+                        {isRequiredField && (
+                          <Badge variant="outline" className="h-4 text-[10px] px-1 border-amber-300 text-amber-600 dark:text-amber-400">
+                            required
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                {/* Status icon */}
-                <div className="mt-2">
-                  {isMapped ? (
-                    <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                  ) : (
-                    <div className="h-4 w-4 shrink-0" />
-                  )}
+                  <div className="mt-1.5">
+                    {isMapped ? (
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 shrink-0" />
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          {/* Fade hint — indicates scrollable content below */}
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-linear-to-t from-background to-transparent" />
         </div>
 
         {/* Validation warning */}
@@ -367,16 +369,12 @@ export function FieldMappingModal({
           </p>
         )}
 
-        <DialogFooter className="shrink-0 pt-2">
+        <DialogFooter className="shrink-0">
           <p className="text-xs text-muted-foreground mr-auto self-center">
             {matchedCount} field{matchedCount !== 1 ? "s" : ""} matched
           </p>
-          <Button variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={!canConfirm}>
-            Import
-          </Button>
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button onClick={handleConfirm} disabled={!canConfirm}>Import</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
