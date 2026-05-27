@@ -105,6 +105,10 @@ export default function GenerateCertificatePage() {
   // meaning the template image may have changed and field positions could be off.
   const [versionChangedWarning, setVersionChangedWarning] = useState(false);
 
+  // Labels of image/QR-logo fields whose blob URLs were stripped on session restore.
+  // Blob URLs are ephemeral and die when the page unloads — these images need re-uploading.
+  const [imageLostFields, setImageLostFields] = useState<string[]>([]);
+
   // Written by handleTemplateSelect after fetching editor data so handleResumeSession
   // can compare session version vs current version without an extra API call.
   const lastLoadedVersionIdRef = useRef<string | null>(null);
@@ -732,12 +736,19 @@ export default function GenerateCertificatePage() {
     }
 
     if (session.fields.length > 0) {
-      const sanitized = session.fields.map((f: any) => ({
-        ...f,
-        imageUrl: f.imageUrl?.startsWith('blob:') ? undefined : f.imageUrl,
-        qrLogoUrl: f.qrLogoUrl?.startsWith('blob:') ? undefined : f.qrLogoUrl,
-      }));
+      const lostLabels: string[] = [];
+      const sanitized = session.fields.map((f: any) => {
+        const imageLost = f.imageUrl?.startsWith('blob:');
+        const qrLogoLost = f.qrLogoUrl?.startsWith('blob:');
+        if (imageLost || qrLogoLost) lostLabels.push(f.label || 'Unnamed field');
+        return {
+          ...f,
+          imageUrl: imageLost ? undefined : f.imageUrl,
+          qrLogoUrl: qrLogoLost ? undefined : f.qrLogoUrl,
+        };
+      });
       setFields(sanitized);
+      if (lostLabels.length > 0) setImageLostFields(lostLabels);
     }
     if (session.canvasScale) setCanvasScale(session.canvasScale);
     if (session.fieldMappings.length > 0) setFieldMappings(session.fieldMappings);
@@ -1291,11 +1302,13 @@ export default function GenerateCertificatePage() {
           if (field.type === 'qr_code') {
             if (field.qrStyle) style.qrStyle = field.qrStyle;
             if (field.qrTransparentBg !== undefined) style.qrTransparentBg = field.qrTransparentBg;
-            if (field.qrLogoUrl) style.qrLogoUrl = field.qrLogoUrl;
+            // blob: URLs are ephemeral — never persist them; they become dead after page unload
+            if (field.qrLogoUrl && !field.qrLogoUrl.startsWith('blob:')) style.qrLogoUrl = field.qrLogoUrl;
           }
           if (field.type === 'image') {
             if (field.cornerRadius !== undefined) style.cornerRadius = field.cornerRadius;
-            if (field.imageUrl) style.imageUrl = field.imageUrl;
+            // blob: URLs are ephemeral — never persist them; they become dead after page unload
+            if (field.imageUrl && !field.imageUrl.startsWith('blob:')) style.imageUrl = field.imageUrl;
           }
 
           // Calculate width and height - ensure they're positive numbers
@@ -1796,6 +1809,30 @@ export default function GenerateCertificatePage() {
                 type="button"
                 aria-label="Dismiss"
                 onClick={() => setVersionChangedWarning(false)}
+                className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100 hover:bg-amber-500/10 transition-opacity"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ── Image-lost warning banner ── */}
+          {imageLostFields.length > 0 && (
+            <div className="flex items-start gap-3 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 text-amber-700 dark:text-amber-400 text-sm shrink-0 z-10">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="flex-1">
+                <strong className="font-semibold">
+                  {imageLostFields.length === 1 ? '1 image' : `${imageLostFields.length} images`} need re-uploading:
+                </strong>
+                {' '}
+                <span className="italic">{imageLostFields.join(', ')}</span>
+                {'. '}
+                Images are stored in your browser and lost when the tab closes. Select each field and re-upload in the panel.
+              </span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setImageLostFields([])}
                 className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100 hover:bg-amber-500/10 transition-opacity"
               >
                 <X className="w-4 h-4" />

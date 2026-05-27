@@ -347,12 +347,19 @@ export function DraggableField({
           {field.imageUrl ? (
             <img src={field.imageUrl} alt={field.label} className="w-full h-full object-contain" draggable={false} />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-muted/30 text-muted-foreground/40">
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <div
+              className="w-full h-full flex flex-col items-center justify-center gap-1"
+              style={{ background: 'rgba(245,158,11,0.06)', border: '1.5px dashed rgba(245,158,11,0.45)', borderRadius: 'inherit' }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
+                style={{ width: 22, height: 22, color: 'rgba(245,158,11,0.65)' }}>
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <path d="m21 15-5-5L5 21" />
               </svg>
+              <span style={{ fontSize: 8, color: 'rgba(245,158,11,0.7)', textAlign: 'center', lineHeight: 1.3, paddingInline: 4 }}>
+                Re-upload image
+              </span>
             </div>
           )}
         </div>
