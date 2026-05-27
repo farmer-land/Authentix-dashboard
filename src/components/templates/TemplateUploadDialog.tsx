@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select";
-import { FileImage, AlertCircle, X, ImageIcon } from "lucide-react";
+import { FileImage, AlertCircle, X, ImageIcon, AlertTriangle, Info } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -118,6 +118,83 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// ── Dimension analysis ────────────────────────────────────────────────────────
+
+interface SizeInfo {
+  width: number;
+  height: number;
+  matchedStandard: string | null;
+  warning: { type: 'warn' | 'info'; message: string; suggestion: string } | null;
+}
+
+const STANDARD_SIZES = [
+  { name: 'A4 Portrait @ 300 DPI',        w: 2480, h: 3508 },
+  { name: 'A4 Portrait @ 150 DPI',        w: 1240, h: 1754 },
+  { name: 'A4 Portrait @ 72 DPI',         w: 595,  h: 842  },
+  { name: 'A4 Landscape @ 300 DPI',       w: 3508, h: 2480 },
+  { name: 'A4 Landscape @ 150 DPI',       w: 1754, h: 1240 },
+  { name: 'US Letter Portrait @ 300 DPI', w: 2550, h: 3300 },
+  { name: 'US Letter Portrait @ 150 DPI', w: 1275, h: 1650 },
+  { name: 'US Letter Landscape @ 300 DPI',w: 3300, h: 2550 },
+  { name: 'A5 Portrait @ 300 DPI',        w: 1748, h: 2480 },
+  { name: 'A5 Landscape @ 300 DPI',       w: 2480, h: 1748 },
+] as const;
+
+// Common certificate aspect ratios (portrait A4, letter, landscape versions, square)
+const GOOD_RATIOS = [
+  0.707,  // A4 portrait  (1/√2)
+  0.773,  // Letter portrait
+  1.0,    // Square
+  1.294,  // Letter landscape
+  1.414,  // A4 landscape (√2)
+];
+const RATIO_TOLERANCE = 0.06;
+
+function analyzeDimensions(w: number, h: number): SizeInfo {
+  const ratio = w / h;
+
+  // Exact / near match to a known standard (within 3%)
+  const matchedStandard =
+    STANDARD_SIZES.find(s => Math.abs(w - s.w) / s.w < 0.03 && Math.abs(h - s.h) / s.h < 0.03)?.name ??
+    (Math.abs(ratio - 1) < 0.04 ? 'Square (1:1)' : null);
+
+  const knownGoodRatio = GOOD_RATIOS.some(r => Math.abs(ratio - r) < RATIO_TOLERANCE);
+
+  let warning: SizeInfo['warning'] = null;
+
+  if (ratio > 1.65) {
+    // Widescreen (16:9 = 1.78, 16:10 = 1.6, etc.)
+    warning = {
+      type: 'warn',
+      message: `Widescreen dimensions (${w} × ${h} px). Fields placed for portrait templates will render incorrectly on this layout.`,
+      suggestion: 'For digital or wide-format: A4 Landscape 3508×2480 · Letter Landscape 3300×2550',
+    };
+  } else if (ratio < 0.52) {
+    // Very tall / phone-like
+    warning = {
+      type: 'warn',
+      message: `Very tall narrow dimensions (${w} × ${h} px) — unusual for a certificate template.`,
+      suggestion: 'For portrait certificates: A4 Portrait 2480×3508 · Letter Portrait 2550×3300',
+    };
+  } else if (!knownGoodRatio && !matchedStandard) {
+    // Non-standard but not extreme
+    warning = {
+      type: 'info',
+      message: `Non-standard aspect ratio (${w} × ${h} px). Make sure field positions match this template's exact dimensions.`,
+      suggestion: 'Common sizes: A4 Portrait 2480×3508 · A4 Landscape 3508×2480 · Letter Portrait 2550×3300 (all @ 300 DPI)',
+    };
+  } else if (Math.max(w, h) < 800) {
+    // Low resolution
+    warning = {
+      type: 'warn',
+      message: `Low resolution (${w} × ${h} px). Certificates may appear blurry when printed or zoomed.`,
+      suggestion: 'Recommended minimum: A4 @ 150 DPI (1240×1754) or A4 @ 300 DPI (2480×3508)',
+    };
+  }
+
+  return { width: w, height: h, matchedStandard, warning };
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface TemplateUploadDialogProps {
@@ -140,6 +217,8 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadPhase, setUploadPhase] = useState<'uploading' | 'processing' | 'success'>('uploading');
+  const [sizeInfo, setSizeInfo] = useState<SizeInfo | null>(null);
+  const [sizeWarningDismissed, setSizeWarningDismissed] = useState(false);
   const [error, setError] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
   const [showIndustryModal, setShowIndustryModal] = useState(false);
@@ -166,6 +245,8 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
     // Revoke previous blob URL
     setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
     setPreviewFailed(false);
+    setSizeInfo(null);
+    setSizeWarningDismissed(false);
     setFile(selectedFile);
     setError("");
 
@@ -177,6 +258,18 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
     if (!title.trim()) {
       setTitle(selectedFile.name.replace(/\.[^/.]+$/, ""));
     }
+
+    // Async dimension detection — SVG browser defaults (300×150) are unreliable, skip them
+    const isSvg = selectedFile.type === 'image/svg+xml';
+    const img = new window.Image();
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (isSvg && w <= 300 && h <= 150) return; // browser default viewport — no real data
+      setSizeInfo(analyzeDimensions(w, h));
+    };
+    img.onerror = () => { /* HEIC / exotic format — skip */ };
+    img.src = objectUrl;
   }, [title]);
 
   // Revoke blob URL on unmount / file clear
@@ -191,6 +284,8 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
     setFile(null);
     setPreviewUrl(null);
     setPreviewFailed(false);
+    setSizeInfo(null);
+    setSizeWarningDismissed(false);
   }, [previewUrl]);
 
   // ── Initial file from page-level drop ────────────────────────────────────
@@ -211,6 +306,8 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
       setError("");
       setTitleError(null);
       setUploadProgress(0);
+      setSizeInfo(null);
+      setSizeWarningDismissed(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, uploading]);
@@ -457,7 +554,19 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
                   <FileImage className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium truncate">{file.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{formatBytes(file.size)}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {formatBytes(file.size)}
+                      {sizeInfo && (
+                        <>
+                          {' · '}{sizeInfo.width} × {sizeInfo.height} px
+                          {sizeInfo.matchedStandard && (
+                            <span className="ml-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                              {sizeInfo.matchedStandard}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </p>
                   </div>
                   <Button
                     type="button" variant="ghost" size="sm"
@@ -500,6 +609,35 @@ export function TemplateUploadDialog({ open, onOpenChange, onSuccess, initialFil
                 <p className="text-[11px] text-muted-foreground/70">
                   PNG, JPG, WebP, SVG, AVIF, HEIC/HEIF &middot; Max 50 MB
                 </p>
+              </div>
+            )}
+
+            {/* ── Size warning ───────────────────────────────────────────── */}
+            {!uploading && file && sizeInfo?.warning && !sizeWarningDismissed && (
+              <div
+                className={cn(
+                  "flex gap-3 rounded-lg border px-3.5 py-3 text-sm",
+                  sizeInfo.warning.type === 'warn'
+                    ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+                    : "border-blue-500/30 bg-blue-500/5 text-blue-700 dark:text-blue-400",
+                )}
+              >
+                {sizeInfo.warning.type === 'warn'
+                  ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  : <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                }
+                <div className="flex-1 space-y-1">
+                  <p className="font-medium leading-snug">{sizeInfo.warning.message}</p>
+                  <p className="text-[11px] opacity-80">{sizeInfo.warning.suggestion}</p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Dismiss size warning"
+                  onClick={() => setSizeWarningDismissed(true)}
+                  className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
