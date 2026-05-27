@@ -681,7 +681,7 @@ export default function ContactsPage() {
   }, [orgSlug]);
 
   const runImport = useCallback(
-    async (normalizedRows: Record<string, string>[], fileName: string, fileHash: string, source_ref: string) => {
+    async (normalizedRows: Record<string, string>[], fileName: string, fileHash: string, source_ref: string, mappingToSave?: { headers: string[]; mapping: Record<string, string> }) => {
       const batches: Record<string, string>[][] = [];
       for (let i = 0; i < normalizedRows.length; i += BATCH_SIZE) {
         batches.push(normalizedRows.slice(i, i + BATCH_SIZE));
@@ -734,6 +734,10 @@ export default function ContactsPage() {
           }
         } else {
           toast.success(parts.join(", "), { id: toastId, description: skipDescription });
+        }
+
+        if (totalImported > 0 && mappingToSave) {
+          saveMappingProfile(orgSlug, mappingToSave.headers, mappingToSave.mapping);
         }
 
         const session: ImportSession = {
@@ -794,18 +798,20 @@ export default function ContactsPage() {
   const handleMappingConfirm = useCallback((mapping: Record<string, string>) => {
     if (!parsedFile) return;
 
-    saveMappingProfile(orgSlug, parsedFile.headers, mapping);
-
-    // Normalize each row: csvHeader → platformKey (or keep under original key for __custom__)
+    // mapping is {platformKey: csvHeader} from FieldMappingModal
+    const mappedCsvHeaders = new Set(Object.values(mapping));
     const normalizedRows = parsedFile.rows.map((row) => {
       const out: Record<string, string> = {};
-      for (const [csvHeader, platformKey] of Object.entries(mapping)) {
+      // Map platform fields: look up values by their CSV column header
+      for (const [platformKey, csvHeader] of Object.entries(mapping)) {
         const val = row[csvHeader];
-        if (val === undefined) continue;
-        if (platformKey === "__custom__") {
-          out[csvHeader] = val;
-        } else {
-          out[platformKey] = val;
+        if (val !== undefined) out[platformKey] = val;
+      }
+      // Include unmapped columns under original header (stored as custom properties by backend)
+      for (const h of parsedFile.headers) {
+        if (!mappedCsvHeaders.has(h)) {
+          const val = row[h];
+          if (val !== undefined) out[h] = val;
         }
       }
       // Split recipient_name into first_name / last_name when separate fields are absent
@@ -818,7 +824,8 @@ export default function ContactsPage() {
     });
 
     const source_ref = nanoid();
-    const { fileName, fileHash } = parsedFile;
+    const { fileName, fileHash, headers } = parsedFile;
+    const mappingToSave = { headers, mapping };
     setParsedFile(null);
 
     const pref = getQuotaPref(orgSlug);
@@ -835,13 +842,13 @@ export default function ContactsPage() {
           if (mode === "limit_only") {
             setQuotaPref(orgSlug, "limit_only");
             const remaining = Math.max(0, contactCap - total);
-            runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref);
+            runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref, mappingToSave);
           } else if (mode === "acknowledged") {
             setQuotaPref(orgSlug, "acknowledged");
-            runImport(normalizedRows, fileName, fileHash, source_ref);
+            runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
           } else {
             setQuotaPref(orgSlug, "auto_bill");
-            runImport(normalizedRows, fileName, fileHash, source_ref);
+            runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
           }
         },
       });
@@ -849,9 +856,9 @@ export default function ContactsPage() {
       // Pref already set — respect it silently
       if (pref === "limit_only" && willExceed) {
         const remaining = Math.max(0, contactCap - total);
-        runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref);
+        runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref, mappingToSave);
       } else {
-        runImport(normalizedRows, fileName, fileHash, source_ref);
+        runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
       }
     }
   }, [parsedFile, orgSlug, contactCap, total, runImport]);
@@ -943,46 +950,56 @@ export default function ContactsPage() {
               {recentCard.imported.toLocaleString()} contact{recentCard.imported !== 1 ? "s" : ""} imported
               {recentCard.skipped > 0 && ` · ${recentCard.skipped.toLocaleString()} skipped`}
             </p>
-            {recentCard.skipped > 0 && (
+            {recentCard.skipped > 0 && recentCard.imported === 0 && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                Rows are skipped when the email address is missing or invalid (no @).
+                No contacts were saved. Check that each row has a valid email address and try importing again.
               </p>
             )}
-            <p className="text-xs text-muted-foreground mt-0.5">
-              What would you like to do with <span className="font-medium">{recentCard.file_name}</span>?
-            </p>
+            {recentCard.imported > 0 && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                What would you like to do with <span className="font-medium">{recentCard.file_name}</span>?
+              </p>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                const ref = recentCard.source_ref;
-                setRecentCard(null);
-                setCertModal({ open: true, source_ref: ref });
-              }}
-            >
-              <Award className="h-3.5 w-3.5 mr-1.5" /> Generate Certificates
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const ref = recentCard.source_ref;
-                setRecentCard(null);
-                handleBroadcast(ref);
-              }}
-            >
-              <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Broadcast
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-auto text-muted-foreground"
-              onClick={() => setRecentCard(null)}
-            >
-              Use Later
-            </Button>
-          </div>
+          {recentCard.imported > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  const ref = recentCard.source_ref;
+                  setRecentCard(null);
+                  setCertModal({ open: true, source_ref: ref });
+                }}
+              >
+                <Award className="h-3.5 w-3.5 mr-1.5" /> Generate Certificates
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const ref = recentCard.source_ref;
+                  setRecentCard(null);
+                  handleBroadcast(ref);
+                }}
+              >
+                <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Broadcast
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto text-muted-foreground"
+                onClick={() => setRecentCard(null)}
+              >
+                Use Later
+              </Button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setRecentCard(null)}>
+                Dismiss
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

@@ -285,7 +285,7 @@ export function FieldMappingModal({
                     >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" className="z-200">
                       {platformFields.map((f) => (
                         <SelectItem key={f.key} value={f.key} className="text-sm">
                           <div className="flex items-center gap-1.5">

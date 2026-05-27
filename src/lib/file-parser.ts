@@ -8,7 +8,7 @@ export interface ParsedFile {
 }
 
 function normalizeKey(s: string): string {
-  return s.toLowerCase().replace(/[\s-]+/g, "_");
+  return s.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 /** Attempt to parse a Markdown pipe-table. Returns null if content doesn't look like one. */
@@ -98,9 +98,10 @@ export async function parseFile(file: File): Promise<ParsedFile> {
     const sheet = wb.Sheets[sheetName]!;
     const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
     if (!json.length) throw new Error("The spreadsheet is empty");
-    const headers = Object.keys(json[0]!);
+    const rawHeaders = Object.keys(json[0]!);
+    const headers = rawHeaders.map((h) => h.trim());
     const rows = json.map((r) =>
-      Object.fromEntries(headers.map((h) => [h, String(r[h] ?? "")]))
+      Object.fromEntries(rawHeaders.map((rh, i) => [headers[i]!, String(r[rh] ?? "")]))
     );
     return { fileName: file.name, headers, rows, rowCount: rows.length };
   }
