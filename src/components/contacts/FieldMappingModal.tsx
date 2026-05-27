@@ -36,15 +36,36 @@ export interface FieldMappingModalProps {
 
 export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
   {
+    key: "email",
+    label: "Email",
+    required: false,
+    description: "Needed to send emails — rows without email are skipped by email campaigns",
+    typeHint: "valid email address",
+    aliases: [
+      "email", "e_mail", "e-mail", "email_address", "emailaddress", "mail",
+      "email address", "email id", "email_id",
+      "student email", "student_email",
+      "participant email", "participant_email",
+      "attendee email", "attendee_email",
+      "user email", "user_email",
+    ],
+  },
+  {
     key: "recipient_name",
     label: "Recipient Name",
-    required: true,
-    requiresOneOf: ["recipient_name", "first_name"],
+    required: false,
     description: "Full name shown on certificates",
     typeHint: "text, max 200 chars",
     aliases: [
       "recipient_name", "recipient name", "full_name", "full name",
-      "name", "recipient",
+      "name", "recipient", "display name", "display_name",
+      "student name", "student_name", "student",
+      "participant name", "participant_name", "participant",
+      "attendee name", "attendee_name", "attendee",
+      "learner name", "learner_name", "learner",
+      "candidate name", "candidate_name", "candidate",
+      "member name", "member_name", "member",
+      "person name", "person_name", "person",
     ],
   },
   {
@@ -54,7 +75,7 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     typeHint: "text, max 200 chars",
     aliases: [
       "first_name", "first name", "firstname", "given_name", "given name",
-      "first", "fname",
+      "first", "fname", "given",
     ],
   },
   {
@@ -64,16 +85,8 @@ export const CONTACT_PLATFORM_FIELDS: PlatformField[] = [
     typeHint: "text, max 200 chars",
     aliases: [
       "last_name", "last name", "lastname", "surname", "family_name",
-      "family name", "last", "lname",
+      "family name", "last", "lname", "family",
     ],
-  },
-  {
-    key: "email",
-    label: "Email",
-    required: false,
-    description: "Required for email campaigns",
-    typeHint: "valid email address",
-    aliases: ["email", "e_mail", "email_address", "mail", "email address"],
   },
 ];
 
@@ -350,12 +363,12 @@ export function FieldMappingModal({
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-linear-to-t from-background to-transparent" />
         </div>
 
-        {/* Validation warning */}
-        {!canConfirm && (
-          <div className="shrink-0 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+        {/* Soft email warning — not a blocker, just a heads-up */}
+        {!Object.values(columnMapping).includes("email") && (
+          <div className="shrink-0 flex items-start gap-2 rounded-lg border border-muted px-3 py-2 text-xs text-muted-foreground">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
             <span>
-              Map at least one column to <strong>Recipient Name</strong> or <strong>First Name</strong> to continue.
+              No <strong>Email</strong> column mapped. Contacts without email are saved but won't receive email campaigns or certificates by email.
             </span>
           </div>
         )}

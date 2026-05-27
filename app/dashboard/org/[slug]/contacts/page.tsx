@@ -38,17 +38,6 @@ const BATCH_SIZE = 100;
 const BATCH_CONCURRENCY = 3;
 const ACCEPTED_TYPES = ".xlsx,.xls,.csv,.tsv,.tab,.md,.markdown";
 
-// LocalStorage key for the user's one-time quota preference
-const quotaPrefKey = (slug: string) => `contact_quota_pref:${slug}`;
-
-type QuotaPref = 'auto_bill' | 'limit_only' | 'acknowledged';
-
-function getQuotaPref(slug: string): QuotaPref | null {
-  try { return localStorage.getItem(quotaPrefKey(slug)) as QuotaPref | null; } catch { return null; }
-}
-function setQuotaPref(slug: string, pref: QuotaPref) {
-  try { localStorage.setItem(quotaPrefKey(slug), pref); } catch { /* noop */ }
-}
 
 /** Run an array of async tasks with limited concurrency. */
 async function parallelBatch<T>(
@@ -641,13 +630,13 @@ export default function ContactsPage() {
   );
   const contactCap = isProductOwner ? 0 : (billingCaps?.contact_cap ?? 0); // 0 = unlimited
 
-  // Quota modal — shown once when an import will exceed the contact cap
+  // Quota modal — shown when an import will exceed the contact cap
   const [quotaModal, setQuotaModal] = useState<{
     open: boolean;
     currentCount: number;
     newRows: number;
     cap: number;
-    onProceed: (mode: 'all' | 'limit_only' | 'acknowledged') => void;
+    onProceed: (mode: 'all' | 'limit_only' | 'upgrade') => void;
   } | null>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
@@ -831,12 +820,11 @@ export default function ContactsPage() {
     const source_ref = nanoid();
     const { fileName, fileHash, headers } = parsedFile;
     const mappingToSave = { headers, mapping };
-    setParsedFile(null);
-
-    const pref = getQuotaPref(orgSlug);
     const willExceed = contactCap > 0 && total + normalizedRows.length > contactCap;
 
-    if (willExceed && !pref) {
+    if (willExceed) {
+      // Save pending import state so user can retry after upgrading
+      setParsedFile(null);
       setQuotaModal({
         open: true,
         currentCount: total,
@@ -845,28 +833,21 @@ export default function ContactsPage() {
         onProceed: (mode) => {
           setQuotaModal(null);
           if (mode === "limit_only") {
-            setQuotaPref(orgSlug, "limit_only");
             const remaining = Math.max(0, contactCap - total);
             runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref, mappingToSave);
-          } else if (mode === "acknowledged") {
-            setQuotaPref(orgSlug, "acknowledged");
-            runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
+          } else if (mode === "upgrade") {
+            router.push(`/dashboard/org/${orgSlug}/billing`);
           } else {
-            setQuotaPref(orgSlug, "auto_bill");
+            // "all" — import everything, extra contacts billed as add-ons
             runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
           }
         },
       });
     } else {
-      // Pref already set — respect it silently
-      if (pref === "limit_only" && willExceed) {
-        const remaining = Math.max(0, contactCap - total);
-        runImport(normalizedRows.slice(0, remaining), fileName, fileHash, source_ref, mappingToSave);
-      } else {
-        runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
-      }
+      setParsedFile(null);
+      runImport(normalizedRows, fileName, fileHash, source_ref, mappingToSave);
     }
-  }, [parsedFile, orgSlug, contactCap, total, runImport]);
+  }, [parsedFile, orgSlug, contactCap, total, runImport, router]);
 
   return (
     <div
@@ -1122,46 +1103,78 @@ export default function ContactsPage() {
         onScratch={handleBroadcastScratch}
       />
 
-      {/* Quota modal — shown once when import would exceed the contact cap */}
-      {quotaModal && (
-        <Dialog open={quotaModal.open} onOpenChange={(open) => !open && setQuotaModal(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-500" /> Contact limit reached
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 text-sm">
-              <p>
-                You have <strong>{quotaModal.currentCount.toLocaleString()}</strong> contacts and your plan allows{" "}
-                <strong>{quotaModal.cap.toLocaleString()}</strong>. This import adds{" "}
-                <strong>{quotaModal.newRows.toLocaleString()}</strong> more, exceeding your limit by{" "}
-                <strong>{(quotaModal.currentCount + quotaModal.newRows - quotaModal.cap).toLocaleString()}</strong>.
-              </p>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                Extra contacts are billed as add-ons. Deleting contacts later does <strong>not</strong> reverse this charge.
+      {/* Quota modal — shown when import exceeds the contact cap */}
+      {quotaModal && (() => {
+        const overage = quotaModal.currentCount + quotaModal.newRows - quotaModal.cap;
+        const withinLimit = Math.max(0, quotaModal.cap - quotaModal.currentCount);
+        return (
+          <Dialog open={quotaModal.open} onOpenChange={(open) => !open && setQuotaModal(null)}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-500" /> You're over your contact limit
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Usage bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Current: <strong className="text-foreground">{quotaModal.currentCount.toLocaleString()}</strong></span>
+                  <span>Limit: <strong className="text-foreground">{quotaModal.cap.toLocaleString()}</strong></span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500"
+                    style={{ width: `${Math.min(100, ((quotaModal.currentCount + quotaModal.newRows) / quotaModal.cap) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This import adds <strong className="text-foreground">{quotaModal.newRows.toLocaleString()}</strong> contacts.{" "}
+                  <strong className="text-amber-600 dark:text-amber-400">{overage.toLocaleString()} will exceed your plan limit.</strong>
+                </p>
               </div>
-            </div>
-            <div className="space-y-2 pt-1">
-              <Button className="w-full" onClick={() => quotaModal.onProceed("all")}>
-                Import all &amp; auto-bill extras
-              </Button>
-              {quotaModal.currentCount < quotaModal.cap && (
-                <Button variant="outline" className="w-full" onClick={() => quotaModal.onProceed("limit_only")}>
-                  Import only {Math.max(0, quotaModal.cap - quotaModal.currentCount).toLocaleString()} (stay within limit)
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                className="w-full text-muted-foreground"
-                onClick={() => quotaModal.onProceed("acknowledged")}
-              >
-                I'll figure it out later
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
+              {/* Three options */}
+              <div className="space-y-2 pt-1">
+                {/* Option 1: Import all, bill overage */}
+                <button
+                  onClick={() => quotaModal.onProceed("all")}
+                  className="w-full text-left rounded-xl border-2 border-primary bg-primary/5 px-4 py-3 hover:bg-primary/10 transition-colors"
+                >
+                  <p className="text-sm font-semibold">Import all {quotaModal.newRows.toLocaleString()} contacts</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    The {overage.toLocaleString()} extra contacts will be billed as add-ons on your next invoice.
+                  </p>
+                </button>
+
+                {/* Option 2: Drop extras, stay within limit */}
+                {withinLimit > 0 && (
+                  <button
+                    onClick={() => quotaModal.onProceed("limit_only")}
+                    className="w-full text-left rounded-xl border border-border px-4 py-3 hover:bg-muted/50 transition-colors"
+                  >
+                    <p className="text-sm font-semibold">Import only {withinLimit.toLocaleString()} contacts</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      The last {overage.toLocaleString()} rows will be dropped to stay within your plan limit.
+                    </p>
+                  </button>
+                )}
+
+                {/* Option 3: Upgrade plan */}
+                <button
+                  onClick={() => quotaModal.onProceed("upgrade")}
+                  className="w-full text-left rounded-xl border border-border px-4 py-3 hover:bg-muted/50 transition-colors"
+                >
+                  <p className="text-sm font-semibold">Upgrade my plan first</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Go to billing and increase your contact limit, then come back to import.
+                  </p>
+                </button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Delete import confirmation — two modes: hide from list, or fully delete contacts */}
       <AlertDialog
