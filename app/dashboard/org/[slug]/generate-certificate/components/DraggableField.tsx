@@ -4,7 +4,7 @@ import QRCodeLib from 'qrcode';
 
 // ── Real QR code preview using qrcode package ────────────────────────────────
 
-type QRStyle = 'standard' | 'rounded' | 'dots' | 'classy' | 'logo';
+type QRStyle = 'standard' | 'rounded' | 'dots' | 'classy' | 'extra-rounded' | 'classy-rounded' | 'logo';
 
 // Determine if a module index is inside one of the three finder patterns
 function isFinderModule(row: number, col: number, size: number): boolean {

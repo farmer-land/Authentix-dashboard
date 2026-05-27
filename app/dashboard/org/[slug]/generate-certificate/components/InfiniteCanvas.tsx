@@ -727,20 +727,11 @@ export function InfiniteCanvas({
   const displayH = (visualDims?.h ?? pdfHeight) * scale;
   const visibleFields = fields.filter(f => !hiddenFields.has(f.id));
 
-  // ── Dot grid background ───────────────────────────────────────────────────
-  // We use a CSS radial-gradient trick for dots — infinitely tiling, no SVG overhead
-  const DOT_SPACING = 24;
-  const DOT_SIZE = 1.5;
-  const dotBg = {
-    backgroundImage: `radial-gradient(circle, var(--canvas-dot) ${DOT_SIZE}px, transparent ${DOT_SIZE}px)`,
-    backgroundSize: `${DOT_SPACING}px ${DOT_SPACING}px`,
-  };
-
   return (
     <div
       ref={containerRef}
       className="relative w-full h-full overflow-hidden select-none"
-      style={{ ...dotBg, backgroundColor: 'var(--canvas-bg)', cursor }}
+      style={{ backgroundColor: 'var(--canvas-bg)', cursor }}
       onMouseDown={handleMouseDown}
       onMouseUp={() => { setIsPanning(false); }}
       onMouseLeave={() => { setIsPanning(false); }}

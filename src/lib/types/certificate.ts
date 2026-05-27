@@ -1,5 +1,7 @@
 // Certificate Field Types
-export type FieldType = 'name' | 'course' | 'start_date' | 'end_date' | 'custom_text' | 'qr_code' | 'image' | 'email' | 'phone';
+export type FieldType =
+  | 'name' | 'course' | 'start_date' | 'end_date' | 'custom_text' | 'qr_code' | 'image'
+  | 'credential_id' | 'organization' | 'grade' | 'level' | 'duration' | 'issuer';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type FontWeight = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900' | 'normal' | 'bold';
@@ -54,10 +56,14 @@ export interface CertificateField {
   textShadow?: { offsetX: number; offsetY: number; blur: number; color: string } | null;
 
   // QR code options
-  qrStyle?: 'standard' | 'rounded' | 'dots' | 'classy' | 'logo'; // QR visual style (default 'standard')
-  qrTransparentBg?: boolean; // Remove white background (default false)
-  qrLogoUrl?: string; // Logo image URL to display in centre (used when qrStyle === 'logo')
-  qrErrorCorrection?: 'L' | 'M' | 'Q' | 'H'; // Error correction level (default 'M')
+  qrStyle?: 'standard' | 'rounded' | 'dots' | 'classy' | 'extra-rounded' | 'classy-rounded' | 'logo';
+  qrTransparentBg?: boolean;
+  qrLogoUrl?: string;
+  qrErrorCorrection?: 'L' | 'M' | 'Q' | 'H';
+  qrBackgroundColor?: string; // hex — custom bg color (overrides transparent flag when set)
+  qrMargin?: number;           // quiet-zone tiles, 0–10 (default 1)
+  qrEyeShape?: 'square' | 'rounded' | 'circle';  // finder-pattern shape
+  qrEyeColor?: string;         // hex — color for finder patterns (defaults to module color)
 
   // Image field
   imageUrl?: string; // For image-type fields
@@ -280,18 +286,46 @@ export const FIELD_TYPE_CONFIG = {
     defaultHeight: 120,
     sampleValue: '',
   },
-  email: {
-    label: 'Email Address',
-    icon: 'Mail',
-    defaultWidth: 250,
+  credential_id: {
+    label: 'Credential ID',
+    icon: 'Hash',
+    defaultWidth: 220,
     defaultHeight: 30,
-    sampleValue: 'john@example.com',
+    sampleValue: 'CERT-2026-00001',
   },
-  phone: {
-    label: 'Phone Number',
-    icon: 'Phone',
-    defaultWidth: 180,
+  organization: {
+    label: 'Organization',
+    icon: 'Building2',
+    defaultWidth: 280,
+    defaultHeight: 35,
+    sampleValue: 'Acme Academy',
+  },
+  grade: {
+    label: 'Grade / Score',
+    icon: 'Award',
+    defaultWidth: 120,
+    defaultHeight: 35,
+    sampleValue: 'A+ (96%)',
+  },
+  level: {
+    label: 'Achievement Level',
+    icon: 'TrendingUp',
+    defaultWidth: 160,
     defaultHeight: 30,
-    sampleValue: '+1-555-000-0001',
+    sampleValue: 'Advanced',
+  },
+  duration: {
+    label: 'Duration / Hours',
+    icon: 'Clock',
+    defaultWidth: 160,
+    defaultHeight: 30,
+    sampleValue: '40 Hours',
+  },
+  issuer: {
+    label: 'Issuer / Instructor',
+    icon: 'UserCheck',
+    defaultWidth: 220,
+    defaultHeight: 30,
+    sampleValue: 'Dr. Sarah Johnson',
   },
 } as const;

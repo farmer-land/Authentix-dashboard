@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import QRCodeLib from 'qrcode';
 
-export type QRStyle = 'standard' | 'rounded' | 'dots' | 'classy' | 'logo';
+export type QRStyle = 'standard' | 'rounded' | 'dots' | 'classy' | 'extra-rounded' | 'classy-rounded' | 'logo';
 
 function isFinderModule(row: number, col: number, size: number): boolean {
   if (row <= 6 && col <= 6) return true;

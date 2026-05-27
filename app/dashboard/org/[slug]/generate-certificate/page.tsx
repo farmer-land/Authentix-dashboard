@@ -15,7 +15,7 @@ import {
   CheckCircle2, Layers, Palette, Database, Wand2,
   ChevronDown, ChevronUp, X, Eye, ChevronRight,
   SlidersHorizontal, Maximize2,
-  User, BookOpen, Calendar, Type, QrCode, Mail, Phone,
+  User, BookOpen, Calendar, Type, QrCode,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -942,7 +942,7 @@ export default function GenerateCertificatePage() {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const FIELD_ICONS: Record<FieldType, any> = {
+  const FIELD_ICONS: Partial<Record<FieldType, any>> = {
     name: User,
     course: BookOpen,
     start_date: Calendar,
@@ -950,18 +950,20 @@ export default function GenerateCertificatePage() {
     custom_text: Type,
     qr_code: QrCode,
     image: ImageIcon,
-    email: Mail,
-    phone: Phone,
   };
 
   const headerToFieldType = (header: string): FieldType => {
     const h = header.toLowerCase().replace(/[\s-]+/g, '_');
     if (['recipient_name', 'full_name', 'name', 'first_name', 'last_name'].includes(h)) return 'name';
-    if (['email', 'email_address', 'e_mail', 'mail'].includes(h)) return 'email';
     if (['course', 'course_name', 'program', 'programme', 'subject'].includes(h)) return 'course';
     if (['start_date', 'issue_date', 'date', 'from_date', 'issued_on'].includes(h)) return 'start_date';
     if (['end_date', 'expiry', 'expiry_date', 'valid_until', 'to_date'].includes(h)) return 'end_date';
-    if (['phone', 'phone_number', 'mobile', 'contact_number'].includes(h)) return 'phone';
+    if (['credential_id', 'cert_id', 'certificate_id', 'cert_number'].includes(h)) return 'credential_id';
+    if (['organization', 'org', 'institution', 'company'].includes(h)) return 'organization';
+    if (['grade', 'score', 'marks', 'percentage'].includes(h)) return 'grade';
+    if (['level', 'achievement_level', 'tier'].includes(h)) return 'level';
+    if (['duration', 'hours', 'duration_hours', 'total_hours'].includes(h)) return 'duration';
+    if (['issuer', 'instructor', 'trainer', 'facilitator'].includes(h)) return 'issuer';
     return 'custom_text';
   };
 
@@ -1448,7 +1450,7 @@ export default function GenerateCertificatePage() {
   };
 
   const handleContinueToGenerate = () => {
-    if (importedData && fieldMappings.length > 0) {
+    if (importedData) {
       setCurrentStep('export');
     }
   };
@@ -2241,9 +2243,12 @@ export default function GenerateCertificatePage() {
 // Map a DB field record back to a frontend CertificateField, restoring all style properties
 function mapDbFieldToFrontend(field: any): CertificateField {
   const s = (field.style ?? {}) as Record<string, any>;
-  const VALID_FRONTEND_TYPES = new Set(['name', 'course', 'start_date', 'end_date', 'custom_text', 'qr_code', 'image']);
+  const VALID_FRONTEND_TYPES = new Set(['name', 'course', 'start_date', 'end_date', 'custom_text', 'qr_code', 'image', 'credential_id', 'organization', 'grade', 'level', 'duration', 'issuer']);
   return {
-    id: field.id || field.field_key,
+    // Prefer originalFieldId (frontend UUID stored at save time) so field IDs remain
+    // stable across DB round-trips. Falling back to field.id (DB UUID) or field_key
+    // would cause autosave to derive a new field_key, duplicating fields in the DB.
+    id: s.originalFieldId || field.id || field.field_key,
     type: (s.fieldType && VALID_FRONTEND_TYPES.has(s.fieldType) ? s.fieldType : mapBackendTypeToFrontend(field.type)) as CertificateField['type'],
     label: field.label,
     x: field.x,
@@ -2290,6 +2295,12 @@ function mapFrontendTypeToBackend(frontendType: CertificateField['type']): 'text
     case 'name':
     case 'course':
     case 'custom_text':
+    case 'credential_id':
+    case 'organization':
+    case 'grade':
+    case 'level':
+    case 'duration':
+    case 'issuer':
       return 'text';
     case 'start_date':
     case 'end_date':
@@ -2321,7 +2332,7 @@ function mapBackendTypeToFrontend(backendType: string): CertificateField['type']
 
 // Sort CSV headers to match semantic field order so data preview columns are predictable
 function sortHeadersByFieldOrder(headers: string[], fields: CertificateField[]): string[] {
-  const TYPE_ORDER: Record<string, number> = { name: 0, course: 1, start_date: 2, end_date: 3, email: 4, phone: 5 };
+  const TYPE_ORDER: Record<string, number> = { name: 0, course: 1, start_date: 2, end_date: 3, credential_id: 4, organization: 5, grade: 6, level: 7, duration: 8, issuer: 9 };
   const labelToOrder = new Map<string, number>();
   fields.forEach(f => { labelToOrder.set(f.label.toLowerCase().trim(), TYPE_ORDER[f.type] ?? 99); });
   return [...headers].sort((a, b) => {
@@ -2360,8 +2371,9 @@ function autoMapColumns(fields: CertificateField[], headers: string[]): FieldMap
       if (field.type === 'course' && (nh.includes('course') || nh.includes('program'))) return true;
       if (field.type === 'start_date' && (nh.includes('start') || nh.includes('issue'))) return true;
       if (field.type === 'end_date' && (nh.includes('end') || nh.includes('expir'))) return true;
-      if (field.type === 'email' && (nh.includes('email') || nh.includes('e-mail'))) return true;
-      if (field.type === 'phone' && (nh.includes('phone') || nh.includes('mobile') || nh.includes('contact'))) return true;
+      if (field.type === 'credential_id' && (nh.includes('credential') || nh.includes('cert_id') || nh.includes('certificate_id'))) return true;
+      if (field.type === 'organization' && (nh.includes('org') || nh.includes('institution') || nh.includes('company'))) return true;
+      if (field.type === 'issuer' && (nh.includes('issuer') || nh.includes('instructor') || nh.includes('trainer'))) return true;
       return false;
     });
     if (matchingHeader) {

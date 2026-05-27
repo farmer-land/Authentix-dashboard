@@ -124,8 +124,7 @@ export function autoMapForTemplate(
       if (field.type === 'course' && (nh.includes('course') || nh.includes('program'))) return true;
       if (field.type === 'start_date' && (nh.includes('start') || nh.includes('issue'))) return true;
       if (field.type === 'end_date' && (nh.includes('end') || nh.includes('expir'))) return true;
-      if (field.type === 'email' && (nh.includes('email') || nh.includes('e-mail'))) return true;
-      if (field.type === 'phone' && (nh.includes('phone') || nh.includes('mobile') || nh.includes('contact'))) return true;
+      if (field.label.toLowerCase().includes('email') && (nh.includes('email') || nh.includes('e-mail'))) return true;
       return false;
     });
     if (match) {
@@ -1737,8 +1736,6 @@ export function ExportSection({
         addJob(job_id, `${totalRows} certificate${totalRows !== 1 ? 's' : ''} — ${configsToRun[0]?.label ?? ''}`);
         return { firstJobId: job_id, restJobIds: [] as string[] };
       })();
-
-      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
 
       setGenerationJobId(firstJobId);
       if (restJobIds.length > 0) setExtraGenerationJobIds(restJobIds);

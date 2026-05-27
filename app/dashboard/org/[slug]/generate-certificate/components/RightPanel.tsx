@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { CertificateField, FontWeight, CERTIFICATE_FONTS, PRESET_COLORS, DATE_FORMATS } from '@/lib/types/certificate';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough, HelpCircle, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, BringToFront, SendToBack } from 'lucide-react';
 import { RgbaColorPicker } from 'react-colorful';
 import React, { useState, useRef, useEffect, useCallback, useMemo, startTransition, createContext, useContext } from 'react';
 import { api } from '@/lib/api/client';
@@ -151,13 +151,15 @@ function FontSizeBox({ value, onChange }: { value: number; onChange: (v: number)
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  name: 'Name', course: 'Course', start_date: 'Date',
-  end_date: 'Date', custom_text: 'Text', qr_code: 'QR Code', image: 'Image',
+  name: 'Name', course: 'Course', start_date: 'Start Date', end_date: 'End Date',
+  custom_text: 'Text', qr_code: 'QR Code', image: 'Image',
+  credential_id: 'Credential ID', organization: 'Organization',
+  grade: 'Grade', level: 'Level', duration: 'Duration', issuer: 'Issuer',
 };
 
 // ── Floating colour picker ─────────────────────────────────────────────────────
 
-type ColorTarget = 'main' | 'shadow' | 'stroke' | 'gradStart' | 'gradEnd' | 'bg';
+type ColorTarget = 'main' | 'shadow' | 'stroke' | 'gradStart' | 'gradEnd' | 'bg' | 'qrEye' | 'qrBg';
 
 function FloatingColorPicker({
   color, label, initialPos, onClose, onChange,
@@ -757,6 +759,10 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       onFieldUpdate({ gradientEndColor: rgbaToHex(c), gradientEndOpacity: Math.round(c.a * 100) });
     } else if (pickerTarget === 'bg') {
       onFieldUpdate({ backgroundColor: rgbaToHex(c) });
+    } else if (pickerTarget === 'qrEye') {
+      onFieldUpdate({ qrEyeColor: rgbaToHex(c) });
+    } else if (pickerTarget === 'qrBg') {
+      onFieldUpdate({ qrBackgroundColor: rgbaToHex(c) });
     } else {
       onFieldUpdate({ color: rgbaToHex(c), opacity: Math.round(c.a * 100) });
     }
@@ -781,6 +787,83 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         <span className="text-[9px] font-bold uppercase tracking-widest bg-[#3ECF8E]/10 text-[#3ECF8E]/80 px-2 py-0.5 rounded select-none shrink-0">
           {typeLabel}
         </span>
+        {/* Help popover — explains panel icons and sections */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors" title="Panel guide">
+              <HelpCircle className="w-3.5 h-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="left" align="start" className="w-72 p-0 bg-zinc-900 border-zinc-700/60 text-zinc-200 shadow-2xl">
+            <div className="px-4 py-3 border-b border-zinc-800">
+              <p className="text-xs font-semibold text-zinc-100">Field Properties Guide</p>
+              <p className="text-[10px] text-zinc-400 mt-0.5">Quick reference for icons and controls in this panel.</p>
+            </div>
+            <div className="px-4 py-3 space-y-3 max-h-[480px] overflow-y-auto text-[11px]">
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">Align to Canvas</p>
+                <div className="space-y-1 text-zinc-400">
+                  <div className="flex items-start gap-2"><AlignHorizontalJustifyStart className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap left edge of field to canvas left</span></div>
+                  <div className="flex items-start gap-2"><AlignHorizontalJustifyCenter className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Center field horizontally on canvas</span></div>
+                  <div className="flex items-start gap-2"><AlignHorizontalJustifyEnd className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap right edge of field to canvas right</span></div>
+                  <div className="flex items-start gap-2"><AlignVerticalJustifyStart className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap top edge of field to canvas top</span></div>
+                  <div className="flex items-start gap-2"><AlignVerticalJustifyCenter className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Center field vertically on canvas</span></div>
+                  <div className="flex items-start gap-2"><AlignVerticalJustifyEnd className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap bottom edge of field to canvas bottom</span></div>
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">Arrange</p>
+                <div className="space-y-1 text-zinc-400">
+                  <div className="flex items-start gap-2"><BringToFront className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Bring Forward — move one layer up</span></div>
+                  <div className="flex items-start gap-2"><SendToBack className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Send Backward — move one layer down</span></div>
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">Text Alignment</p>
+                <div className="space-y-1 text-zinc-400">
+                  <div className="flex items-start gap-2"><AlignLeft className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Align text to the left</span></div>
+                  <div className="flex items-start gap-2"><AlignCenter className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Center text horizontally</span></div>
+                  <div className="flex items-start gap-2"><AlignRight className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Align text to the right</span></div>
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">Typography</p>
+                <div className="space-y-1 text-zinc-400">
+                  <div className="flex items-start gap-2"><span className="text-[10px] font-bold text-zinc-300 shrink-0 mt-0.5">B</span><span>Bold — increases font weight</span></div>
+                  <div className="flex items-start gap-2"><Italic className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Italic — slants text</span></div>
+                  <div className="flex items-start gap-2"><Underline className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Underline — adds line below text</span></div>
+                  <div className="flex items-start gap-2"><Strikethrough className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Strikethrough — draws line through text</span></div>
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">QR Code Styles</p>
+                <div className="space-y-1 text-zinc-400">
+                  <p><span className="text-zinc-300">Module style</span> — shape of each QR dot (square, rounded, dots, etc.)</p>
+                  <p><span className="text-zinc-300">Finder / Eye</span> — the three corner squares that scanners use to locate the code</p>
+                  <p><span className="text-zinc-300">Error correction</span> — L (7%) / M (15%) / Q (25%) / H (30%) — higher = more resilient but denser</p>
+                  <p><span className="text-zinc-300">Quiet zone</span> — white border around the QR code (0–10 tiles)</p>
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">Color Modes</p>
+                <div className="space-y-1 text-zinc-400">
+                  <p><span className="text-zinc-300">Solid</span> — flat single color</p>
+                  <p><span className="text-zinc-300">Linear gradient</span> — color transitions in a straight line at a set angle</p>
+                  <p><span className="text-zinc-300">Radial gradient</span> — color radiates outward from center</p>
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-300 mb-1">Canvas Icons (toolbar)</p>
+                <div className="space-y-1 text-zinc-400">
+                  <div className="flex items-start gap-2"><Magnet className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap to grid — fields snap to grid lines while dragging</span></div>
+                  <div className="flex items-start gap-2"><Maximize2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Fit to screen — zoom to show full template</span></div>
+                  <div className="flex items-start gap-2"><Lock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Lock field — prevents accidental drag or resize</span></div>
+                  <div className="flex items-start gap-2"><RefreshCw className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Reset rotation to 0°</span></div>
+                </div>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
         <input
           ref={labelInputRef}
           value={labelDraft}
@@ -839,15 +922,27 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           <div className="space-y-2">
             <p className="text-[9px] text-muted-foreground/50 select-none">Horizontal</p>
             <div className="grid grid-cols-3 gap-1.5">
-              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('left')}>Left</button>
-              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('center-h')}>Center H</button>
-              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('right')}>Right</button>
+              {([
+                { alignment: 'left' as const, Icon: AlignHorizontalJustifyStart, title: 'Align left edge to canvas' },
+                { alignment: 'center-h' as const, Icon: AlignHorizontalJustifyCenter, title: 'Center horizontally' },
+                { alignment: 'right' as const, Icon: AlignHorizontalJustifyEnd, title: 'Align right edge to canvas' },
+              ]).map(({ alignment, Icon, title }) => (
+                <button key={alignment} title={title} className={`${btn(false)} h-9`} onClick={() => onAlignField?.(alignment)}>
+                  <Icon className="w-4 h-4" />
+                </button>
+              ))}
             </div>
             <p className="text-[9px] text-muted-foreground/50 select-none">Vertical</p>
             <div className="grid grid-cols-3 gap-1.5">
-              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('top')}>Top</button>
-              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('center-v')}>Center V</button>
-              <button className={`${btn(false)} text-[10px]`} onClick={() => onAlignField?.('bottom')}>Bottom</button>
+              {([
+                { alignment: 'top' as const, Icon: AlignVerticalJustifyStart, title: 'Align top edge to canvas' },
+                { alignment: 'center-v' as const, Icon: AlignVerticalJustifyCenter, title: 'Center vertically' },
+                { alignment: 'bottom' as const, Icon: AlignVerticalJustifyEnd, title: 'Align bottom edge to canvas' },
+              ]).map(({ alignment, Icon, title }) => (
+                <button key={alignment} title={title} className={`${btn(false)} h-9`} onClick={() => onAlignField?.(alignment)}>
+                  <Icon className="w-4 h-4" />
+                </button>
+              ))}
             </div>
           </div>
         </Section>
@@ -857,11 +952,15 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       {selectedField && (
         <Section label="Arrange" defaultOpen={false}>
           <div className="flex items-center gap-2">
-            <button className={`${btn(false)} flex-1 text-xs gap-1.5 flex items-center justify-center`} onClick={onBringForward}>
-              <span>▲</span> Bring Forward
+            <button title="Bring forward (one layer up)"
+              className={`${btn(false)} flex-1 gap-1.5 flex items-center justify-center text-xs`}
+              onClick={onBringForward}>
+              <BringToFront className="w-3.5 h-3.5" /> Forward
             </button>
-            <button className={`${btn(false)} flex-1 text-xs gap-1.5 flex items-center justify-center`} onClick={onSendBackward}>
-              <span>▼</span> Send Backward
+            <button title="Send backward (one layer down)"
+              className={`${btn(false)} flex-1 gap-1.5 flex items-center justify-center text-xs`}
+              onClick={onSendBackward}>
+              <SendToBack className="w-3.5 h-3.5" /> Backward
             </button>
           </div>
         </Section>
@@ -1074,25 +1173,66 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
               onChange={(v) => onFieldUpdate({ cornerRadius: v })} />
           </div>
         ) : isQRCode ? (
-          <div className="space-y-2.5">
-            {/* QR style dropdown */}
+          <div className="space-y-3">
+
+            {/* Module style */}
             <div>
-              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Design Style</p>
-              <div className={`flex items-center ${INP} overflow-hidden`} style={{ height: '28px' }}>
-                <select
-                  value={selectedField.qrStyle ?? 'standard'}
-                  onChange={(e) => onFieldUpdate({ qrStyle: e.target.value as CertificateField['qrStyle'] })}
-                  className="flex-1 min-w-0 bg-transparent text-xs outline-none text-foreground px-2"
-                >
-                  <option value="standard">Standard (Square)</option>
-                  <option value="rounded">Rounded</option>
-                  <option value="dots">Dots</option>
-                  <option value="classy">Classy</option>
-                  <option value="logo">With Logo</option>
-                </select>
+              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Module Style</p>
+              <div className="grid grid-cols-3 gap-1">
+                {([
+                  { value: 'standard', label: '■ Square' },
+                  { value: 'rounded', label: '▣ Rounded' },
+                  { value: 'dots', label: '● Dots' },
+                  { value: 'classy', label: '◆ Classy' },
+                  { value: 'extra-rounded', label: '⬟ Soft' },
+                  { value: 'classy-rounded', label: '◈ Mixed' },
+                ] as const).map(({ value, label }) => (
+                  <button key={value}
+                    className={`${btn((selectedField.qrStyle ?? 'standard') === value)} text-[9px] px-1 py-1.5 h-auto`}
+                    onClick={() => onFieldUpdate({ qrStyle: value })}>
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-            {/* QR color */}
+
+            {/* Logo mode toggle */}
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] text-muted-foreground/50 select-none">Logo in centre</p>
+              <button
+                className="relative rounded-full transition-colors shrink-0"
+                style={{ width: '28px', height: '14px', backgroundColor: selectedField.qrStyle === 'logo' ? 'var(--primary)' : 'var(--border)' }}
+                onClick={() => onFieldUpdate({ qrStyle: selectedField.qrStyle === 'logo' ? 'standard' : 'logo' })}>
+                <span className="absolute bg-white rounded-full shadow-sm transition-all"
+                  style={{ width: '10px', height: '10px', top: '2px', left: selectedField.qrStyle === 'logo' ? 'calc(100% - 12px)' : '2px' }} />
+              </button>
+            </div>
+            {selectedField.qrStyle === 'logo' && (
+              <QRLogoUploader
+                logoUrl={selectedField.qrLogoUrl ?? null}
+                onLogoChange={(url) => onFieldUpdate({ qrLogoUrl: url ?? undefined })}
+              />
+            )}
+
+            {/* Finder / eye shape */}
+            <div>
+              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Finder Pattern</p>
+              <div className="flex items-center gap-1.5">
+                {([
+                  { value: 'square', label: '▪ Square' },
+                  { value: 'rounded', label: '▸ Rounded' },
+                  { value: 'circle', label: '● Circle' },
+                ] as const).map(({ value, label }) => (
+                  <button key={value}
+                    className={`${btn((selectedField.qrEyeShape ?? 'square') === value)} flex-1 text-[9px]`}
+                    onClick={() => onFieldUpdate({ qrEyeShape: value })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Module color */}
             <div>
               <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Module Color</p>
               <div className={`flex items-stretch ${INP} overflow-hidden`} style={{ height: '30px' }}>
@@ -1113,39 +1253,92 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                   maxLength={6} spellCheck={false} placeholder="000000" />
               </div>
             </div>
-            {/* Transparent background */}
-            <div className="flex items-center justify-between">
-              <p className="text-[9px] text-muted-foreground/50 select-none">Transparent Background</p>
-              <button
-                className="relative rounded-full transition-colors shrink-0"
-                style={{ width: '28px', height: '14px', backgroundColor: selectedField.qrTransparentBg ? 'var(--primary)' : 'var(--border)' }}
-                onClick={() => onFieldUpdate({ qrTransparentBg: !selectedField.qrTransparentBg })}
-              >
-                <span className="absolute bg-white rounded-full shadow-sm transition-all"
-                  style={{ width: '10px', height: '10px', top: '2px', left: selectedField.qrTransparentBg ? 'calc(100% - 12px)' : '2px' }} />
-              </button>
-            </div>
-            {/* Error correction level */}
+
+            {/* Eye / finder color */}
             <div>
-              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Error Correction</p>
-              <div className="flex items-center gap-1">
-                {(['L', 'M', 'Q', 'H'] as const).map((lvl) => (
-                  <button key={lvl}
-                    className={`${btn((selectedField.qrErrorCorrection ?? 'M') === lvl)} flex-1 text-[10px] font-mono`}
-                    title={{ L: 'Low (7%)', M: 'Medium (15%)', Q: 'Quartile (25%)', H: 'High (30%)' }[lvl]}
-                    onClick={() => onFieldUpdate({ qrErrorCorrection: lvl })}>
-                    {lvl}
-                  </button>
-                ))}
+              <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Finder Color <span className="text-muted-foreground/30">(defaults to module color)</span></p>
+              <div className={`flex items-stretch ${INP} overflow-hidden`} style={{ height: '30px' }}>
+                <button title="Pick finder colour"
+                  className="w-9 shrink-0 flex items-center justify-center border-r border-border/50 hover:opacity-80 transition-opacity"
+                  onClick={(e) => openPicker('qrEye', e.currentTarget)}>
+                  <span className="relative w-5 h-5 rounded-[4px] overflow-hidden" style={{ background: CHECKER }}>
+                    <span className="absolute inset-0" style={{ backgroundColor: selectedField.qrEyeColor ?? selectedField.color }} />
+                  </span>
+                </button>
+                <span className="text-[10px] text-muted-foreground/50 flex items-center px-1 shrink-0">#</span>
+                <input
+                  value={(selectedField.qrEyeColor ?? '').replace('#', '')}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9a-fA-F]/g, '');
+                    if (v.length === 6) onFieldUpdate({ qrEyeColor: '#' + v });
+                    else if (v === '') onFieldUpdate({ qrEyeColor: undefined });
+                  }}
+                  className="flex-1 min-w-0 bg-transparent text-xs font-mono uppercase outline-none"
+                  maxLength={6} spellCheck={false} placeholder={displayHex} />
+                {selectedField.qrEyeColor && (
+                  <button className="px-2 text-muted-foreground/40 hover:text-muted-foreground text-[10px]"
+                    onClick={() => onFieldUpdate({ qrEyeColor: undefined })}>✕</button>
+                )}
               </div>
             </div>
-            {/* Logo upload (logo style only) */}
-            {selectedField.qrStyle === 'logo' && (
-              <QRLogoUploader
-                logoUrl={selectedField.qrLogoUrl ?? null}
-                onLogoChange={(url) => onFieldUpdate({ qrLogoUrl: url ?? undefined })}
-              />
-            )}
+
+            {/* Background */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[9px] text-muted-foreground/50 select-none">Background</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] text-muted-foreground/40 select-none">Transparent</span>
+                  <button
+                    className="relative rounded-full transition-colors shrink-0"
+                    style={{ width: '28px', height: '14px', backgroundColor: selectedField.qrTransparentBg ? 'var(--primary)' : 'var(--border)' }}
+                    onClick={() => onFieldUpdate({ qrTransparentBg: !selectedField.qrTransparentBg, qrBackgroundColor: undefined })}>
+                    <span className="absolute bg-white rounded-full shadow-sm transition-all"
+                      style={{ width: '10px', height: '10px', top: '2px', left: selectedField.qrTransparentBg ? 'calc(100% - 12px)' : '2px' }} />
+                  </button>
+                </div>
+              </div>
+              {!selectedField.qrTransparentBg && (
+                <div className={`flex items-stretch ${INP} overflow-hidden`} style={{ height: '30px' }}>
+                  <button title="Pick background colour"
+                    className="w-9 shrink-0 flex items-center justify-center border-r border-border/50 hover:opacity-80 transition-opacity"
+                    onClick={(e) => openPicker('qrBg', e.currentTarget)}>
+                    <span className="relative w-5 h-5 rounded-[4px] overflow-hidden" style={{ background: CHECKER }}>
+                      <span className="absolute inset-0" style={{ backgroundColor: selectedField.qrBackgroundColor ?? '#FFFFFF' }} />
+                    </span>
+                  </button>
+                  <span className="text-[10px] text-muted-foreground/50 flex items-center px-1 shrink-0">#</span>
+                  <input
+                    value={(selectedField.qrBackgroundColor ?? 'FFFFFF').replace('#', '')}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9a-fA-F]/g, '');
+                      if (v.length === 6) onFieldUpdate({ qrBackgroundColor: '#' + v });
+                      else if (v === '') onFieldUpdate({ qrBackgroundColor: undefined });
+                    }}
+                    className="flex-1 min-w-0 bg-transparent text-xs font-mono uppercase outline-none"
+                    maxLength={6} spellCheck={false} placeholder="FFFFFF" />
+                </div>
+              )}
+            </div>
+
+            {/* Error correction + quiet zone */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Error Correction</p>
+                <div className="flex items-center gap-1">
+                  {(['L', 'M', 'Q', 'H'] as const).map((lvl) => (
+                    <button key={lvl}
+                      className={`${btn((selectedField.qrErrorCorrection ?? 'M') === lvl)} flex-1 text-[10px] font-mono`}
+                      title={{ L: 'Low (7% recovery)', M: 'Medium (15%)', Q: 'Quartile (25%)', H: 'High (30% — best with logo)' }[lvl]}
+                      onClick={() => onFieldUpdate({ qrErrorCorrection: lvl })}>
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <NumBox label="Quiet Zone" value={selectedField.qrMargin ?? 1} min={0} max={10}
+                onChange={(v) => onFieldUpdate({ qrMargin: Math.max(0, Math.min(10, Math.round(v))) })} />
+            </div>
+
             {/* Opacity */}
             <NumBox label="Opacity" value={opacity} min={0} max={100} unit="%" onChange={(v) => onFieldUpdate({ opacity: v })} />
           </div>
@@ -1534,6 +1727,10 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
               ? hexToRgba(selectedField.gradientEndColor ?? '#ffffff', selectedField.gradientEndOpacity ?? 100)
               : pickerTarget === 'bg'
               ? hexToRgba(selectedField.backgroundColor ?? '#ffffff', 100)
+              : pickerTarget === 'qrEye'
+              ? hexToRgba(selectedField.qrEyeColor ?? selectedField.color, 100)
+              : pickerTarget === 'qrBg'
+              ? hexToRgba(selectedField.qrBackgroundColor ?? '#ffffff', 100)
               : hexToRgba(selectedField.color, opacity)
           }
           label={
@@ -1542,6 +1739,8 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             : pickerTarget === 'gradStart' ? 'Start Color'
             : pickerTarget === 'gradEnd' ? 'End Color'
             : pickerTarget === 'bg' ? 'Background'
+            : pickerTarget === 'qrEye' ? 'Finder Color'
+            : pickerTarget === 'qrBg' ? 'QR Background'
             : 'Color'
           }
           initialPos={pickerInitialPos}

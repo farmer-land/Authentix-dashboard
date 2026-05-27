@@ -209,7 +209,7 @@ describe('autoMapForTemplate — Course Name / Recipient Name conflict regressio
     const fields = [
       makeField('f1', 'name', 'Recipient Name'),
       makeField('f2', 'course', 'Course Name'),
-      makeField('f3', 'email', 'Email Address'),
+      makeField('f3', 'custom_text', 'Email Address'),
     ];
     const headers = ['Course Name', 'Email'];
     const result = autoMapForTemplate(fields, headers);

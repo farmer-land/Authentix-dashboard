@@ -17,7 +17,7 @@ import { DataPreview } from './DataPreview';
 import { ManualDataEntry } from './ManualDataEntry';
 
 // Semantic field types that are logically unique per person across templates
-const SEMANTIC_TYPES = new Set(['name', 'course', 'start_date', 'end_date', 'email', 'phone']);
+const SEMANTIC_TYPES = new Set(['name', 'course', 'start_date', 'end_date']);
 
 // Stable display order for field types — keeps mapping UI predictable regardless
 // of the order fields were placed on the canvas.
@@ -26,8 +26,12 @@ const FIELD_TYPE_ORDER: Record<string, number> = {
   course: 1,
   start_date: 2,
   end_date: 3,
-  email: 4,
-  phone: 5,
+  credential_id: 4,
+  organization: 5,
+  grade: 6,
+  level: 7,
+  duration: 8,
+  issuer: 9,
 };
 
 function sortFields(fields: CertificateField[]): CertificateField[] {
@@ -220,8 +224,7 @@ export function DataSelector({
       if (t === 'course') return 'Web Development Fundamentals';
       if (t === 'start_date') return '01/15/2026';
       if (t === 'end_date') return '03/15/2026';
-      if (t === 'email') return `student${i}@example.com`;
-      if (t === 'phone') return `+1-555-000-${String(i).padStart(4, '0')}`;
+
       const lower = field.label.toLowerCase();
       if (lower.includes('email')) return `student${i}@example.com`;
       if (lower.includes('grade') || lower.includes('score')) return `${85 + i}%`;
@@ -244,7 +247,7 @@ export function DataSelector({
       return true;
     }));
 
-    const hasEmailCol = mappableFields.some(f => f.type === 'email' || f.label.toLowerCase().includes('email'));
+    const hasEmailCol = mappableFields.some(f => f.label.toLowerCase().includes('email'));
     const sampleData = [];
     for (let i = 1; i <= 5; i++) {
       const row: Record<string, unknown> = {};
@@ -266,8 +269,7 @@ export function DataSelector({
       if (t === 'course') return 'Web Development Fundamentals';
       if (t === 'start_date') return '01/15/2026';
       if (t === 'end_date') return '03/15/2026';
-      if (t === 'email') return `student${i}@example.com`;
-      if (t === 'phone') return `+1-555-000-${String(i).padStart(4, '0')}`;
+
       const lower = field.label.toLowerCase();
       if (lower.includes('email')) return `student${i}@example.com`;
       if (lower.includes('grade') || lower.includes('score')) return `${85 + i}%`;
@@ -290,7 +292,7 @@ export function DataSelector({
       return true;
     }));
 
-    const hasEmailCol = mappableFields.some(f => f.type === 'email' || f.label.toLowerCase().includes('email'));
+    const hasEmailCol = mappableFields.some(f => f.label.toLowerCase().includes('email'));
     const headers = [...mappableFields.map(f => f.label), ...(hasEmailCol ? [] : ['Email'])];
     const rows: string[][] = [];
     for (let i = 1; i <= 5; i++) {

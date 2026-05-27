@@ -12,20 +12,22 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { User, BookOpen, Calendar, Type, QrCode, Image as ImageIcon, Mail, Phone } from 'lucide-react';
+import {
+  User, BookOpen, Calendar, Type, QrCode, Image as ImageIcon,
+  Hash, Building2, Award, TrendingUp, Clock, UserCheck,
+} from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FieldTypeSelectorProps {
   onAddField: (field: CertificateField) => void;
   onAddImageField?: (url: string, name: string) => void;
-  /** Preferred over onAddImageField — parent handles upload + blob-swap */
   onAddImageFile?: (file: File) => void;
   pdfWidth: number;
   pdfHeight: number;
-  currentPage?: number; // For multi-page PDF support
+  currentPage?: number;
 }
 
-const FIELD_ICONS = {
+const FIELD_ICONS: Record<FieldType, React.ComponentType<{ className?: string }>> = {
   name: User,
   course: BookOpen,
   start_date: Calendar,
@@ -33,11 +35,33 @@ const FIELD_ICONS = {
   custom_text: Type,
   qr_code: QrCode,
   image: ImageIcon,
-  email: Mail,
-  phone: Phone,
+  credential_id: Hash,
+  organization: Building2,
+  grade: Award,
+  level: TrendingUp,
+  duration: Clock,
+  issuer: UserCheck,
 };
 
-// Reference dimensions the FIELD_TYPE_CONFIG defaults were designed for (A4 portrait at 72 DPI)
+const FIELD_GROUPS: { label: string; types: FieldType[] }[] = [
+  {
+    label: 'Recipient',
+    types: ['name', 'grade', 'level'],
+  },
+  {
+    label: 'Course',
+    types: ['course', 'duration', 'start_date', 'end_date'],
+  },
+  {
+    label: 'Certificate',
+    types: ['credential_id', 'organization', 'issuer', 'custom_text'],
+  },
+  {
+    label: 'Media',
+    types: ['qr_code', 'image'],
+  },
+];
+
 const REF_WIDTH = 595;
 const REF_HEIGHT = 842;
 
@@ -48,19 +72,12 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
 
   const createField = (type: FieldType, customLabel?: string) => {
     const config = FIELD_TYPE_CONFIG[type];
-
-    // Scale field dimensions proportionally to the actual template size so fields
-    // look visually similar regardless of orientation (portrait vs landscape).
     const wScale = pdfWidth > 0 ? pdfWidth / REF_WIDTH : 1;
     const hScale = pdfHeight > 0 ? pdfHeight / REF_HEIGHT : 1;
-
     const scaledWidth = Math.round(config.defaultWidth * wScale);
     const scaledHeight = Math.round(config.defaultHeight * hScale);
-
-    // Center the field in the PDF
     const x = (pdfWidth - scaledWidth) / 2;
     const y = (pdfHeight - scaledHeight) / 2;
-
     const label = customLabel || config.label;
 
     const field: CertificateField = {
@@ -71,8 +88,7 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       y,
       width: scaledWidth,
       height: scaledHeight,
-      pageNumber: currentPage, // Assign to current page
-      // Font size scales with template height; clamped to a readable minimum
+      pageNumber: currentPage,
       fontSize: type === 'qr_code' ? 0 : Math.max(12, Math.round(24 * hScale)),
       fontFamily: 'DM Sans',
       color: '#000000',
@@ -82,7 +98,6 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       sampleValue: customLabel || config.sampleValue,
     };
 
-    // Set date format for date fields
     if (type === 'start_date' || type === 'end_date') {
       field.dateFormat = 'MMMM dd, yyyy';
     }
@@ -105,14 +120,11 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
     const file = e.target.files?.[0];
     if (!file) return;
     if (onAddImageFile) {
-      // Parent handles upload + blob-swap (permanent URL persistence)
       onAddImageFile(file);
     } else {
-      // Fallback: blob URL only (no server upload)
       const url = URL.createObjectURL(file);
       onAddImageField?.(url, file.name);
     }
-    // Reset input so same file can be re-picked
     e.target.value = '';
   };
 
@@ -132,58 +144,58 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
         className="hidden"
         onChange={handleImageFileSelected}
       />
-      <div className="grid grid-cols-2 gap-2">
-        {(Object.keys(FIELD_TYPE_CONFIG) as FieldType[]).map((type) => {
-          const Icon = FIELD_ICONS[type];
-          const config = FIELD_TYPE_CONFIG[type];
 
-          return (
-            <Button
-              key={type}
-              variant="outline"
-              className="h-auto flex-col gap-2 py-3"
-              onClick={() => handleFieldClick(type)}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-xs">{config.label}</span>
-            </Button>
-          );
-        })}
+      <div className="space-y-3">
+        {FIELD_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40 mb-1.5 px-0.5 select-none">
+              {group.label}
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {group.types.map((type) => {
+                const Icon = FIELD_ICONS[type];
+                const config = FIELD_TYPE_CONFIG[type];
+                return (
+                  <Button
+                    key={type}
+                    variant="outline"
+                    className="h-auto flex-col gap-1.5 py-2.5 text-left items-start px-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                    onClick={() => handleFieldClick(type)}
+                  >
+                    <Icon className="w-4 h-4 text-muted-foreground/70 shrink-0" />
+                    <span className="text-[10px] leading-tight text-left">{config.label}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Custom Field Name Dialog */}
       <Dialog open={showCustomNameDialog} onOpenChange={setShowCustomNameDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Custom Field</DialogTitle>
+            <DialogTitle>Add Custom Text Field</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="fieldName">Field Name</Label>
+              <Label htmlFor="fieldName">Field Label</Label>
               <Input
                 id="fieldName"
                 value={customFieldName}
                 onChange={(e) => setCustomFieldName(e.target.value)}
-                placeholder="e.g., Address, Company Name, ID Number"
+                placeholder="e.g., Certificate Number, Department, Batch ID"
                 autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleCreateCustomField();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCustomField(); }}
               />
               <p className="text-xs text-muted-foreground">
-                This name will appear in the sample file and field mapping
+                This label appears in field mapping and on the canvas.
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCustomNameDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateCustomField}>
-              Add Field
-            </Button>
+            <Button variant="outline" onClick={() => setShowCustomNameDialog(false)}>Cancel</Button>
+            <Button onClick={handleCreateCustomField}>Add Field</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -828,7 +828,7 @@ export default function EmailTemplateEditorPage() {
             </div>
           )}
 
-          {/* Canvas scroll area — dot grid background, Figma-style */}
+          {/* Canvas scroll area */}
           <div
             ref={canvasScrollRef}
             id="block-canvas"
@@ -837,8 +837,6 @@ export default function EmailTemplateEditorPage() {
               paddingLeft: leftPanelVisible ? leftPanelWidth + 16 : 0,
               paddingRight: rightPanelVisible ? rightPanelWidth + 16 : 0,
               backgroundColor: "#0d0d0d",
-              backgroundImage: "radial-gradient(circle, #2a2a2a 1.5px, transparent 1.5px)",
-              backgroundSize: "22px 22px",
             }}
             onClick={e => { if (e.target === e.currentTarget) setSelectedId(null); }}
           >
