@@ -1891,7 +1891,7 @@ export function ExportSection({
               {/* Text with count-up */}
               <div className="text-center space-y-3" style={{ animation: 'genFadeUp 0.5s ease-out 0.3s both' }}>
                 <p className="font-black tracking-tight" style={{ fontSize: 40, lineHeight: 1, animation: 'genCountPop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s both' }}>
-                  🎉 All done!
+                  <CheckCircle2 className="inline-block mr-2 mb-0.5" style={{ width: 34, height: 34, color: '#3ECF8E', verticalAlign: 'middle' }} />All done!
                 </p>
                 <p className="text-muted-foreground" style={{ fontSize: 17 }}>
                   <span style={{ color: '#3ECF8E', fontWeight: 800, fontSize: 22 }}>{displayCount}</span>

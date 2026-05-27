@@ -205,6 +205,7 @@ export const templatesApi = {
   create: async (
     file: File,
     params: { title: string; category_id?: string; subcategory_id?: string },
+    onProgress?: (pct: number) => void,
   ): Promise<{
     id: string;
     title: string;
@@ -224,25 +225,42 @@ export const templatesApi = {
     if (params.category_id) formData.append("category_id", params.category_id);
     if (params.subcategory_id) formData.append("subcategory_id", params.subcategory_id);
 
-    const uploadController = new AbortController();
-    const uploadTimeoutId = setTimeout(() => {
-      logger.warn("Upload request timeout, aborting", { fileName: file.name, fileSize: file.size });
-      uploadController.abort();
-    }, 120000);
-
-    let response: Response;
+    // Use XHR instead of fetch — only XHR exposes upload progress events.
+    let xhrStatus: number;
+    let xhrText: string;
+    let xhrContentType: string | null;
     try {
-      response = await fetch(`${API_BASE_URL}/templates`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-        signal: uploadController.signal,
-      });
-      clearTimeout(uploadTimeoutId);
-    } catch (error) {
-      clearTimeout(uploadTimeoutId);
-      if (error instanceof Error && error.name === "AbortError") {
-        logger.error("Upload timed out", { fileName: file.name, fileSize: file.size });
+      ({ status: xhrStatus, responseText: xhrText, contentType: xhrContentType } =
+        await new Promise<{ status: number; responseText: string; contentType: string | null }>(
+          (resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.withCredentials = true;
+            xhr.timeout = 120_000;
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable && onProgress)
+                onProgress(Math.round((e.loaded / e.total) * 100));
+            });
+            xhr.addEventListener('load', () =>
+              resolve({
+                status: xhr.status,
+                responseText: xhr.responseText,
+                contentType: xhr.getResponseHeader('content-type'),
+              }),
+            );
+            xhr.addEventListener('error', () =>
+              reject(Object.assign(new Error('Network error'), { _kind: 'network' })),
+            );
+            xhr.addEventListener('timeout', () =>
+              reject(Object.assign(new Error('timeout'), { _kind: 'timeout' })),
+            );
+            xhr.open('POST', `${API_BASE_URL}/templates`);
+            xhr.send(formData);
+          },
+        ));
+    } catch (error: unknown) {
+      const e = error as { _kind?: string; message?: string };
+      if (e._kind === 'timeout') {
+        logger.warn("Upload request timeout", { fileName: file.name, fileSize: file.size });
         throw new ApiError(
           "TIMEOUT",
           "Upload is taking too long. The file might be too large or the server is slow. Please try again with a smaller file.",
@@ -251,14 +269,8 @@ export const templatesApi = {
       }
       const errorMessage = error instanceof Error ? error.message : "Network error";
       logger.error("Network error during upload", { fileName: file.name, errorMessage });
-      throw new ApiError(
-        "NETWORK_ERROR",
-        `Failed to upload file: ${errorMessage}`,
-        { fileName: file.name },
-      );
+      throw new ApiError("NETWORK_ERROR", `Failed to upload file: ${errorMessage}`, { fileName: file.name });
     }
-
-    const responseContentType = response.headers.get("content-type");
 
     type CreateTemplateData = {
       id: string;
@@ -271,49 +283,36 @@ export const templatesApi = {
     };
 
     let data: ApiResponse<CreateTemplateData>;
-
     try {
-      if (responseContentType?.includes("application/json")) {
-        data = (await response.json()) as ApiResponse<CreateTemplateData>;
+      if (xhrContentType?.includes("application/json")) {
+        data = JSON.parse(xhrText) as ApiResponse<CreateTemplateData>;
       } else {
-        const text = await response.text();
         logger.error("Template upload: non-JSON response", {
-          status: response.status,
-          contentType: responseContentType,
-          responseText: text.substring(0, 500),
+          status: xhrStatus,
+          contentType: xhrContentType,
+          responseText: xhrText.substring(0, 500),
         });
-        throw new ApiError(
-          "INVALID_RESPONSE",
-          `Backend returned non-JSON response: ${responseContentType}`,
-          { status: response.status },
-        );
+        throw new ApiError("INVALID_RESPONSE", `Backend returned non-JSON response: ${xhrContentType}`, { status: xhrStatus });
       }
     } catch (parseError) {
       if (parseError instanceof ApiError) throw parseError;
       logger.error("Template upload: failed to parse response", {
         parseError: parseError instanceof Error ? parseError.message : String(parseError),
-        status: response.status,
-        contentType: responseContentType,
+        status: xhrStatus, contentType: xhrContentType,
       });
       throw new ApiError(
         "PARSE_ERROR",
         `Failed to parse backend response: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
-        { status: response.status },
+        { status: xhrStatus },
       );
     }
 
-    if (!response.ok || !data.success) {
-      const { code: errorCode, message: errorMsg } = extractApiError(
-        data.error,
-        "Failed to create template",
-      );
+    const httpOk = xhrStatus >= 200 && xhrStatus < 300;
+    if (!httpOk || !data.success) {
+      const { code: errorCode, message: errorMsg } = extractApiError(data.error, "Failed to create template");
       logger.error("Template creation failed", {
-        status: response.status,
-        errorMsg,
-        errorCode,
-        title: params.title.trim(),
-        fileName: file.name,
-        fileSize: file.size,
+        status: xhrStatus, errorMsg, errorCode,
+        title: params.title.trim(), fileName: file.name, fileSize: file.size,
       });
       throw new ApiError(errorCode, errorMsg);
     }
