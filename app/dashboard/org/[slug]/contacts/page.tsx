@@ -626,7 +626,7 @@ export default function ContactsPage() {
   });
   const { profile } = useUserProfile();
   const isProductOwner = ['xencus.com', 'yhills.com'].some(
-    (d) => profile?.email?.endsWith(`@${d}`)
+    (d) => profile?.profile?.email?.endsWith(`@${d}`)
   );
   const contactCap = isProductOwner ? 0 : (billingCaps?.contact_cap ?? 0); // 0 = unlimited
 
