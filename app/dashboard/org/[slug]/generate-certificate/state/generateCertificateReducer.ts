@@ -75,8 +75,6 @@ export type GenerateCertificateAction =
   | { type: "SET_CANVAS_SCALE"; scale: number }
   | { type: "SET_ACTIVE_TAB"; tab: string }
   | { type: "TOGGLE_INFINITE_CANVAS" }
-  | { type: "SET_CURRENT_PAGE"; page: number }
-  | { type: "SET_TOTAL_PAGES"; total: number }
   | { type: "SET_SNAP_TO_GRID"; enabled: boolean }
   | { type: "TRIGGER_FIT" }
 
@@ -186,10 +184,6 @@ export function generateCertificateReducer(
       return { ...state, activeTab: action.tab };
     case "TOGGLE_INFINITE_CANVAS":
       return { ...state, useInfiniteCanvas: !state.useInfiniteCanvas };
-    case "SET_CURRENT_PAGE":
-      return { ...state, currentPage: action.page };
-    case "SET_TOTAL_PAGES":
-      return { ...state, totalPages: action.total };
     case "SET_SNAP_TO_GRID":
       return { ...state, snapToGrid: action.enabled };
     case "TRIGGER_FIT":
@@ -236,8 +230,6 @@ export function generateCertificateReducer(
         canUndo: false,
         canRedo: false,
         saveStatus: "idle",
-        currentPage: 0,
-        totalPages: 1,
         panelReady: false,
         currentStep: "template",
       };

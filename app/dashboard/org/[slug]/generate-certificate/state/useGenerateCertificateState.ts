@@ -180,14 +180,6 @@ export function useGenerateCertificateState(templateIdFromUrl: string | null) {
     dispatch({ type: "TOGGLE_INFINITE_CANVAS" });
   }, []);
 
-  const setCurrentPage = useCallback((page: number) => {
-    dispatch({ type: "SET_CURRENT_PAGE", page });
-  }, []);
-
-  const setTotalPages = useCallback((total: number) => {
-    dispatch({ type: "SET_TOTAL_PAGES", total });
-  }, []);
-
   const setSnapToGrid = useCallback(
     (updater: boolean | ((prev: boolean) => boolean)) => {
       const next = typeof updater === "function"
@@ -309,8 +301,6 @@ export function useGenerateCertificateState(templateIdFromUrl: string | null) {
     setCanvasScale,
     setActiveTab,
     setUseInfiniteCanvas,
-    setCurrentPage,
-    setTotalPages,
     setSnapToGrid,
     setFitTrigger,
     setLeftPanelVisible,

@@ -24,7 +24,6 @@ interface FieldTypeSelectorProps {
   onAddImageFile?: (file: File) => void;
   pdfWidth: number;
   pdfHeight: number;
-  currentPage?: number;
 }
 
 const FIELD_ICONS: Record<FieldType, React.ComponentType<{ className?: string }>> = {
@@ -65,7 +64,7 @@ const FIELD_GROUPS: { label: string; types: FieldType[] }[] = [
 const REF_WIDTH = 595;
 const REF_HEIGHT = 842;
 
-export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile, pdfWidth, pdfHeight, currentPage = 0 }: FieldTypeSelectorProps) {
+export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile, pdfWidth, pdfHeight }: FieldTypeSelectorProps) {
   const [showCustomNameDialog, setShowCustomNameDialog] = useState(false);
   const [customFieldName, setCustomFieldName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +87,6 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       y,
       width: scaledWidth,
       height: scaledHeight,
-      pageNumber: currentPage,
       fontSize: type === 'qr_code' ? 0 : Math.max(12, Math.round(24 * hScale)),
       fontFamily: 'DM Sans',
       color: '#000000',

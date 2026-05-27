@@ -76,14 +76,12 @@ export async function loadRecentUsage(limit = 10): Promise<
 export async function loadTemplateEditorData(templateId: string): Promise<ApiResult<{
   fields: unknown[];
   versionId: string | null;
-  pageCount: number;
 }>> {
   try {
     const data = await api.templates.getEditorData(templateId);
     return ok({
       fields: data.fields ?? [],
       versionId: data.version?.id ?? null,
-      pageCount: data.version?.version_number ?? 1,
     });
   } catch (e) {
     return fromThrown(e, "Failed to load template editor data");

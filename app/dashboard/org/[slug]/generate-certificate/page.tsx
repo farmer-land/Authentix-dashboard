@@ -58,7 +58,7 @@ export default function GenerateCertificatePage() {
     templateMode, templateConfigs, activeTemplateIndex,
     recentGenerated, inProgressTemplates, recentLoading,
     canvasScale, currentStep, isTemplateLoading, activeTab, useInfiniteCanvas, libraryAssets,
-    snapToGrid, fitTrigger, currentPage, totalPages,
+    snapToGrid, fitTrigger,
     leftPanelVisible, leftPanelPos, rightPanelVisible,
     previewOpen, templateMeta,
     stepperExpanded, panelPos, panelReady,
@@ -70,7 +70,7 @@ export default function GenerateCertificatePage() {
     setImportedData, setSavedImports, setFieldMappings, setAdditionalCertConfigs,
     setRecentGenerated, setInProgressTemplates, setRecentLoading,
     setCanUndo, setCanRedo, setSaveStatus,
-    setCanvasScale, setActiveTab, setUseInfiniteCanvas, setCurrentPage, setTotalPages,
+    setCanvasScale, setActiveTab, setUseInfiniteCanvas,
     setSnapToGrid, setFitTrigger,
     setLeftPanelVisible, setLeftPanelPos, setRightPanelVisible, setStepperExpanded,
     setPanelPos, setPanelReady, setPreviewOpen, setLibraryAssets, setShowNavGuard,
@@ -90,7 +90,6 @@ export default function GenerateCertificatePage() {
     templateId: string;
     templateName: string;
     fields: CertificateField[];
-    currentPage?: number;
     canvasScale?: number;
     templateVersionId: string | null;
     currentStep: string | null;
@@ -171,7 +170,6 @@ export default function GenerateCertificatePage() {
         sessionStorage.setItem(`gencert_session:${orgSlug}`, JSON.stringify({
           templateId: template.id,
           fields,
-          currentPage,
           canvasScale,
           templateVersionId,
           currentStep,
@@ -188,7 +186,7 @@ export default function GenerateCertificatePage() {
       // not on the initial mount where currentStep starts as 'template'.
       sessionStorage.removeItem(`gencert_session:${orgSlug}`);
     }
-  }, [currentStep, template?.id, fields, currentPage, canvasScale, templateVersionId, importedData, fieldMappings]);
+  }, [currentStep, template?.id, fields, canvasScale, templateVersionId, importedData, fieldMappings]);
 
   // Re-run auto-mapping whenever the field composition changes (IDs added/removed)
   // so stale mappings referencing deleted fields are cleaned up automatically.
@@ -400,7 +398,6 @@ export default function GenerateCertificatePage() {
       if (!new URLSearchParams(window.location.search).get('template')) {
         let templateIdToRestore: string | null = null;
         let sessionFields: any[] | null = null;
-        let sessionPage: number | undefined;
         let sessionScale: number | undefined;
         let sessionVersionId: string | null = null;
         let sessionStep: string | null = null;
@@ -413,7 +410,6 @@ export default function GenerateCertificatePage() {
             const parsed = JSON.parse(saved);
             templateIdToRestore = parsed.templateId ?? null;
             sessionFields = parsed.fields ?? null;
-            sessionPage = parsed.currentPage;
             sessionScale = parsed.canvasScale;
             sessionVersionId = parsed.templateVersionId ?? null;
             sessionStep = parsed.currentStep ?? null;
@@ -441,7 +437,6 @@ export default function GenerateCertificatePage() {
               templateId: templateIdToRestore!,
               templateName: templateObj.title || templateObj.name || 'Previous session',
               fields: sessionFields ?? [],
-              currentPage: sessionPage,
               canvasScale: sessionScale,
               templateVersionId: sessionVersionId,
               currentStep: sessionStep,
@@ -524,8 +519,6 @@ export default function GenerateCertificatePage() {
 
     // Reset state for new template to prevent stale data
     setTemplate(null);
-    setTotalPages(1);
-    setCurrentPage(0);
     setFields([]);
     setSelectedFieldId(null);
     setTemplateVersionId(null);
@@ -568,7 +561,6 @@ export default function GenerateCertificatePage() {
 
     let pdfWidth = selectedTemplate.width;
     let pdfHeight = selectedTemplate.height;
-    let pageCount = 1; // Default to 1 page
 
     // If dimensions are missing, calculate them
     if (!pdfWidth || !pdfHeight) {
@@ -582,10 +574,6 @@ export default function GenerateCertificatePage() {
             const response = await fetch(fileUrl);
             const blob = await response.blob();
 
-            // Determine file type from editor data or template data
-            // Reset to single page for image templates
-            setTotalPages(1);
-            setCurrentPage(0);
             const img = new Image();
             const objectUrl = URL.createObjectURL(blob);
             await new Promise((resolve, reject) => {
@@ -626,7 +614,6 @@ export default function GenerateCertificatePage() {
       fileType,
       pdfWidth: pdfWidth || 800,
       pdfHeight: pdfHeight || 600,
-      pageCount,
       fields: mappedFields,
     });
     setTemplateMeta({
@@ -660,7 +647,6 @@ export default function GenerateCertificatePage() {
 
       let pdfWidth: number = t.width || 0;
       let pdfHeight: number = t.height || 0;
-      const pageCount = 1;
 
       if ((!pdfWidth || !pdfHeight) && fileUrl) {
         try {
@@ -686,7 +672,6 @@ export default function GenerateCertificatePage() {
         fileType,
         pdfWidth: pdfWidth || 794,
         pdfHeight: pdfHeight || 1123,
-        pageCount,
         fields: mappedFields,
       };
       return { template: tmpl, fields: mappedFields, versionId: editorData?.version?.id || null };
@@ -699,7 +684,6 @@ export default function GenerateCertificatePage() {
           fileType: 'image' as const,
           pdfWidth: t.width || 794,
           pdfHeight: t.height || 1123,
-          pageCount: 1,
           fields: [],
         },
         fields: [],
@@ -727,7 +711,6 @@ export default function GenerateCertificatePage() {
       }));
       setFields(sanitized);
     }
-    if (session.currentPage !== undefined) setCurrentPage(session.currentPage);
     if (session.canvasScale) setCanvasScale(session.canvasScale);
     if (session.templateVersionId) setTemplateVersionId(session.templateVersionId);
     if (session.fieldMappings.length > 0) setFieldMappings(session.fieldMappings);
@@ -821,7 +804,6 @@ export default function GenerateCertificatePage() {
     setActiveTemplateIndex(index);
     setSelectedFieldId(null);
     setRightPanelVisible(false);
-    setCurrentPage(0);
     // Fit the new template to screen (different dimensions = wrong scale otherwise)
     setFitTrigger(t => t + 1);
     // Restore this template's own undo/redo history
@@ -991,7 +973,6 @@ export default function GenerateCertificatePage() {
         y: nextY,
         width: scaledWidth,
         height: scaledHeight,
-        pageNumber: currentPage,
         fontSize: fieldType === 'qr_code' ? 0 : Math.max(12, Math.round(24 * hScale)),
         fontFamily: 'DM Sans',
         color: '#000000',
@@ -1150,7 +1131,6 @@ export default function GenerateCertificatePage() {
       y: y !== undefined ? y - defaultSize / 2 : (template ? (template.pdfHeight - defaultSize) / 2 : 100),
       width: defaultSize,
       height: defaultSize,
-      pageNumber: currentPage,
       fontSize: 0,
       fontFamily: 'Arial',
       color: '#000000',
@@ -1311,7 +1291,7 @@ export default function GenerateCertificatePage() {
             field_key: fieldKey,
             label: label,
             type: backendType,
-            page_number: (field.pageNumber ?? 0) + 1, // Convert 0-indexed to 1-indexed
+            page_number: 1,
             x: Math.max(0, field.x || 0),
             y: Math.max(0, field.y || 0),
             width: width,
@@ -1915,7 +1895,6 @@ export default function GenerateCertificatePage() {
                                   onAddImageFile={handleAddImageFile}
                                   pdfWidth={template.pdfWidth}
                                   pdfHeight={template.pdfHeight}
-                                  currentPage={currentPage}
                                 />
                               </div>
                             )}
@@ -1929,7 +1908,6 @@ export default function GenerateCertificatePage() {
                               onAddImageFile={handleAddImageFile}
                               pdfWidth={template.pdfWidth}
                               pdfHeight={template.pdfHeight}
-                              currentPage={currentPage}
                             />
                           </div>
                         )}
@@ -1985,7 +1963,7 @@ export default function GenerateCertificatePage() {
                       <p className="text-[9px] text-muted-foreground/50 tabular-nums">
                         {Math.round(template.pdfWidth)} × {Math.round(template.pdfHeight)} px
                         {' · '}
-                        {fields.filter(f => (f.pageNumber ?? 0) === currentPage).length} field{fields.filter(f => (f.pageNumber ?? 0) === currentPage).length !== 1 ? 's' : ''}
+                        {fields.length} field{fields.length !== 1 ? 's' : ''}
                       </p>
                     </div>
                   )}
@@ -2007,19 +1985,16 @@ export default function GenerateCertificatePage() {
                 fileUrl={template.fileUrl}
                 pdfWidth={template.pdfWidth}
                 pdfHeight={template.pdfHeight}
-                fields={fields.filter(f => (f.pageNumber ?? 0) === currentPage)}
+                fields={fields}
                 selectedFieldId={selectedFieldId}
                 hiddenFields={hiddenFields}
                 scale={canvasScale}
-                currentPage={currentPage + 1}
-                totalPages={totalPages}
                 onFieldUpdate={handleUpdateField}
                 onFieldSelect={handleFieldSelect}
                 onScaleChange={setCanvasScale}
                 onFieldDelete={handleDeleteField}
                 onTemplateResize={handleTemplateResize}
                 onTemplateResizeStart={handleTemplateResizeStart}
-                onPageChange={(page) => setCurrentPage(page - 1)}
                 onAssetDrop={(url, name, x, y, replaceBlobUrl) => handleAddAssetField(url, name, x, y, replaceBlobUrl)}
                 onFieldDuplicate={handleFieldDuplicate}
                 onPreviewToggle={() => {
@@ -2184,7 +2159,6 @@ export default function GenerateCertificatePage() {
                 <CertificatePreview
                   template={template}
                   fields={fields}
-                  currentPage={currentPage}
                 />
               </div>
             </div>
@@ -2255,8 +2229,6 @@ function mapDbFieldToFrontend(field: any): CertificateField {
     y: field.y,
     width: field.width || 200,
     height: field.height || 30,
-    // Multi-page: page_number is 1-indexed in DB, pageNumber is 0-indexed in frontend
-    pageNumber: field.page_number != null ? field.page_number - 1 : 0,
     // Core text style
     fontSize: s.fontSize ?? 16,
     fontFamily: s.fontFamily ?? 'DM Sans',

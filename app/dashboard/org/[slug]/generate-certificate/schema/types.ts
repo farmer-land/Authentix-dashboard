@@ -94,8 +94,6 @@ export interface GenerateCertificateState {
   canvasScale: number;
   activeTab: string;
   useInfiniteCanvas: boolean;
-  currentPage: number;
-  totalPages: number;
 
   // Panel visibility
   leftPanelVisible: boolean;
@@ -151,8 +149,6 @@ export function createInitialState(templateIdFromUrl: string | null): GenerateCe
     canvasScale: 0.5,
     activeTab: "fields",
     useInfiniteCanvas: true,
-    currentPage: 0,
-    totalPages: 1,
     leftPanelVisible: false,
     leftPanelPos: { x: 16, y: 24 },
     rightPanelVisible: false,

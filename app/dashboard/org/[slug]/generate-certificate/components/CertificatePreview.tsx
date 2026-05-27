@@ -7,10 +7,9 @@ import { QRPreview } from './QRPreview';
 interface CertificatePreviewProps {
   template: CertificateTemplate;
   fields: CertificateField[];
-  currentPage: number; // 0-indexed (matches page.tsx state)
 }
 
-export function CertificatePreview({ template, fields, currentPage }: CertificatePreviewProps) {
+export function CertificatePreview({ template, fields }: CertificatePreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Load Google Fonts for all unique font families used in fields
@@ -48,7 +47,6 @@ export function CertificatePreview({ template, fields, currentPage }: Certificat
 
   const canvasW = template.pdfWidth * scale;
   const canvasH = template.pdfHeight * scale;
-  const pageFields = fields.filter(f => (f.pageNumber ?? 0) === currentPage);
 
   return (
     <div
@@ -80,7 +78,7 @@ export function CertificatePreview({ template, fields, currentPage }: Certificat
         />
 
         {/* Fields rendered cleanly — no borders, no handles */}
-        {pageFields.map(field => {
+        {fields.map(field => {
           const sx = field.x * scale;
           const sy = field.y * scale;
           const sw = field.width * scale;

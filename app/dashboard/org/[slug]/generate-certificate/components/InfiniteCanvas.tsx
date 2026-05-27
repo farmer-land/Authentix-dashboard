@@ -45,15 +45,12 @@ interface InfiniteCanvasProps {
   selectedFieldId: string | null;
   hiddenFields: Set<string>;
   scale: number;
-  currentPage?: number;
-  totalPages?: number;
   onFieldUpdate: (fieldId: string, updates: Partial<CertificateField>) => void;
   onFieldSelect: (fieldId: string) => void;
   onScaleChange: (scale: number) => void;
   onFieldDelete: (fieldId: string) => void;
   onTemplateResize?: (width: number, height: number) => void;
   onTemplateResizeStart?: (width: number, height: number) => void;
-  onPageChange?: (page: number) => void;
   onAssetDrop?: (url: string, name: string, x: number, y: number, replaceBlobUrl?: string) => void;
   onPreviewToggle?: () => void;
   previewOpen?: boolean;
@@ -146,15 +143,12 @@ export function InfiniteCanvas({
   selectedFieldId,
   hiddenFields,
   scale,
-  currentPage = 1,
-  totalPages = 1,
   onFieldUpdate,
   onFieldSelect,
   onScaleChange,
   onFieldDelete,
   onTemplateResize,
   onTemplateResizeStart,
-  onPageChange,
   onAssetDrop,
   onPreviewToggle,
   previewOpen,
@@ -799,29 +793,6 @@ export function InfiniteCanvas({
             <p className="text-sm font-medium text-primary">Drop image to add as field</p>
             <p className="text-xs text-primary/60">PNG, JPG, SVG, WebP</p>
           </div>
-        </div>
-      )}
-
-      {/* ── Page Navigation (multi-page PDF) ── */}
-      {totalPages > 1 && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 bg-card/90 backdrop-blur-sm border border-border/50 px-2 py-1 rounded-lg shadow-lg">
-          <Button
-            variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
-            onClick={() => onPageChange?.(Math.max(1, currentPage - 1))}
-            disabled={currentPage <= 1}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </Button>
-          <span className="text-xs font-medium text-foreground/80 px-1 min-w-[72px] text-center">
-            Page {currentPage} / {totalPages}
-          </span>
-          <Button
-            variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
-            onClick={() => onPageChange?.(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage >= totalPages}
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
         </div>
       )}
 
