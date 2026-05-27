@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Maximize2, Trash2, FileImage, FileType, Sparkles, RefreshCw, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, FileText, Maximize2, Trash2, FileImage, FileType, Sparkles, RefreshCw, Loader2, Search, X as XIcon } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { Badge } from "@/components/ui/badge";
 import { TemplateUploadDialog } from "@/components/templates/TemplateUploadDialog";
@@ -24,8 +25,17 @@ interface TemplatePreviewState {
   };
 }
 
+function templateMatchesQuery(template: any, q: string): boolean {
+  const lower = q.toLowerCase();
+  const title = (template.title || template.name || '').toLowerCase();
+  const cat = (template.category_name || template.category?.name || '').toLowerCase();
+  const sub = (template.subcategory_name || template.subcategory?.name || '').toLowerCase();
+  return title.includes(lower) || cat.includes(lower) || sub.includes(lower);
+}
+
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -349,6 +359,10 @@ export default function TemplatesPage() {
     }
   };
 
+  const filteredTemplates = searchQuery.trim()
+    ? templates.filter(t => templateMatchesQuery(t, searchQuery.trim()))
+    : templates;
+
   if (loading) {
     return (
       <div className="space-y-8">
@@ -410,6 +424,35 @@ export default function TemplatesPage() {
           )}
         </div>
 
+        {/* ── Search bar (shown when templates exist) ── */}
+        {templates.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by name, category…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 pr-8"
+              />
+              {searchQuery && (
+                <button
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {searchQuery && (
+              <span className="text-sm text-muted-foreground shrink-0">
+                {filteredTemplates.length} of {templates.length}
+              </span>
+            )}
+          </div>
+        )}
+
         {templates.length === 0 ? (
           <Card className="border-2 border-dashed border-border bg-card/40 relative overflow-hidden">
             <CardContent className="relative flex flex-col items-center justify-center py-16">
@@ -431,9 +474,21 @@ export default function TemplatesPage() {
               </Button>
             </CardContent>
           </Card>
+        ) : filteredTemplates.length === 0 ? (
+          /* No results for current search query */
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mb-4">
+              <Search className="h-7 w-7 text-muted-foreground/50" />
+            </div>
+            <h3 className="font-semibold text-lg mb-1">No templates match &ldquo;{searchQuery}&rdquo;</h3>
+            <p className="text-muted-foreground text-sm mb-5">Try a different name or category</p>
+            <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+              Clear search
+            </Button>
+          </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {templates.map((template) => {
+            {filteredTemplates.map((template) => {
             // Normalize template ID for key and operations
             const templateId = template.id || template.template_id;
             if (!templateId) {

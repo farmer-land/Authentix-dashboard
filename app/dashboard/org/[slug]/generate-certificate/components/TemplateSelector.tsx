@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSe
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useDropzone } from 'react-dropzone';
-import { FileText, Image as ImageIcon, Upload, Plus, Check, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle, Loader2, Layers, X, Trash2 } from 'lucide-react';
+import { FileText, Image as ImageIcon, Upload, Plus, Check, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle, Loader2, Layers, X, Trash2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCatalogCategories } from '@/lib/hooks/use-catalog-categories';
 import { useCatalogSubcategories } from '@/lib/hooks/use-catalog-subcategories';
@@ -71,6 +71,7 @@ export function TemplateSelector({
   const [multiSelected, setMultiSelected] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
 
   const toggleMultiSelect = (template: any) => {
     setMultiSelected(prev => {
@@ -255,6 +256,17 @@ export function TemplateSelector({
     }
   };
 
+  const filteredSavedTemplates = templateSearch.trim()
+    ? savedTemplates.filter(t => {
+        const q = templateSearch.toLowerCase();
+        return (
+          (t.title || t.name || '').toLowerCase().includes(q) ||
+          (t.category_name || t.category?.name || '').toLowerCase().includes(q) ||
+          (t.subcategory_name || t.subcategory?.name || '').toLowerCase().includes(q)
+        );
+      })
+    : savedTemplates;
+
   const hasRecentTemplates = recentGenerated.length > 0 || inProgress.length > 0 || recentLoading;
 
   return (
@@ -348,17 +360,37 @@ export function TemplateSelector({
       <div className="flex-1 flex flex-col overflow-hidden px-8 pb-4">
         {/* Section header */}
         <div className="flex items-center gap-2 mb-2 shrink-0">
-          <FileText className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">Your Templates</span>
+          <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium text-muted-foreground shrink-0">Your Templates</span>
           {savedTemplates.length > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {savedTemplates.length}
+            <Badge variant="secondary" className="text-xs shrink-0">
+              {templateSearch ? `${filteredSavedTemplates.length} / ${savedTemplates.length}` : savedTemplates.length}
             </Badge>
           )}
           {templateMode === 'multi' && multiSelected.length > 0 && (
-            <Badge className="text-xs ml-auto">
+            <Badge className="text-xs shrink-0">
               {multiSelected.length} selected
             </Badge>
+          )}
+          {savedTemplates.length > 0 && (
+            <div className="relative ml-auto shrink-0">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search templates…"
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                className="h-7 pl-6 pr-6 text-xs w-40"
+              />
+              {templateSearch && (
+                <button
+                  aria-label="Clear search"
+                  onClick={() => setTemplateSearch('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -569,7 +601,7 @@ export function TemplateSelector({
               </DialogContent>
             </Dialog>
 
-            {/* Empty state (no saved templates) */}
+            {/* Empty state (no saved templates at all) */}
             {savedTemplates.length === 0 && (
               <div className="flex flex-col items-center justify-center text-center px-8 py-12 gap-2">
                 <p className="text-muted-foreground text-sm font-medium">No saved templates yet</p>
@@ -581,8 +613,22 @@ export function TemplateSelector({
               </div>
             )}
 
+            {/* No search results */}
+            {savedTemplates.length > 0 && filteredSavedTemplates.length === 0 && (
+              <div className="flex flex-col items-center justify-center text-center px-8 py-10 gap-2 shrink-0">
+                <Search className="w-7 h-7 text-muted-foreground/40 mb-1" />
+                <p className="text-muted-foreground text-sm font-medium">No templates match &ldquo;{templateSearch}&rdquo;</p>
+                <button
+                  onClick={() => setTemplateSearch('')}
+                  className="text-xs text-primary hover:underline mt-0.5"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
+
             {/* Saved template cards */}
-            {savedTemplates.map((template, index) => {
+            {filteredSavedTemplates.map((template, index) => {
               const isMultiSelected = multiSelected.some(t => t.id === template.id);
               return (
                 <Card
@@ -694,7 +740,9 @@ export function TemplateSelector({
             <p className="text-sm text-center text-muted-foreground py-1">
               {savedTemplates.length === 0
                 ? 'Click "Upload Template" above to add your first template — it will auto-select here'
-                : 'Click templates above to select them · Upload new ones to add to the selection'}
+                : filteredSavedTemplates.length === 0
+                  ? `No templates match your search — clear it to see all ${savedTemplates.length}`
+                  : 'Click templates above to select them · Upload new ones to add to the selection'}
             </p>
           ) : (
             <div className="flex items-center gap-3">
