@@ -59,7 +59,6 @@ import {
 import {
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
@@ -173,7 +172,7 @@ function filterCertificatesDailyByInterval(
 
 // ── Heatmap ──────────────────────────────────────────────────────────────────
 
-const GRID_STROKE = "rgba(128,128,128,0.12)"
+const _GRID_STROKE = "rgba(128,128,128,0.12)"
 
 const HEAT_LEVELS = [
   { min: 0, max: 0, bg: "bg-[#ebedf0] dark:bg-[#161b22]", label: "No activity" },
@@ -400,7 +399,7 @@ const NEON = {
 }
 const NEON_GRID = "rgba(148,163,184,0.07)"
 
-const CHART_COLORS = {
+const _CHART_COLORS = {
   issued: NEON.green,
   verificationScans: NEON.blue,
 }
@@ -662,7 +661,7 @@ function CategoryAreaViz({
         ].join(" ")
         return (
           <path
-            key={d.name}
+            key={`${d.name}-${i}`}
             d={path}
             fill={`url(#${gradId})`}
             stroke={d.color}
@@ -690,10 +689,10 @@ function CategoryDonut({ mix }: { mix: CertificateCategoryMixRow[] }) {
 
   const LegendList = ({ compact = true }: { compact?: boolean }) => (
     <div className={compact ? "space-y-1.5" : "grid grid-cols-2 gap-x-8 gap-y-2"}>
-      {data.map((d) => {
+      {data.map((d, i) => {
         const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
         return (
-          <div key={d.name} className="flex items-center gap-2">
+          <div key={`${d.name}-${i}`} className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
             <span className={cn("flex-1 truncate text-foreground/80", compact ? "text-[10px]" : "text-xs")}>
               {d.name}

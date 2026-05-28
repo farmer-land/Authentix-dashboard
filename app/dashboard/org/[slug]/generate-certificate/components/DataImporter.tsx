@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Upload, FileSpreadsheet, CheckCircle2, Database,
-  ChevronDown, ChevronUp, Search, Loader2,
+  Search, Loader2,
 } from 'lucide-react';
 import { parseFile } from '@/lib/file-parser';
 import { useImports } from '@/lib/hooks/queries/imports';
@@ -70,7 +70,6 @@ export function DataImporter({
 }: DataImporterProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sourceTab, setSourceTab] = useState<SourceTab>('upload');
-  const [savedExpanded, setSavedExpanded] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
 
   const { imports, loading: importsLoading } = useImports({ limit: 20, sort_by: 'created_at', sort_order: 'desc' });
@@ -192,6 +191,7 @@ export function DataImporter({
                 </p>
               </div>
             </div>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             <Button variant="ghost" size="sm" onClick={() => onDataImport(null as any)}>
               Change
             </Button>
@@ -347,6 +347,7 @@ export function DataImporter({
               No saved imports yet. Upload a file to get started.
             </div>
           ) : (
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             imports.map((imp: any) => {
               // An import is "stuck" if it's been queued/processing for more than 3 minutes —
               // this means the upload request was likely interrupted (browser closed mid-upload).
@@ -371,6 +372,7 @@ export function DataImporter({
                     try {
                       const { api } = await import('@/lib/api/client');
                       const data = await api.imports.getData(imp.id, { page: 1, limit: 2000 });
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       const rawRows = (data.items ?? []).map((r: any) => r.data ?? r) as Record<string, unknown>[];
                       if (!rawRows.length) { alert('No data in this import'); return; }
                       const headers = Object.keys(rawRows[0]!);

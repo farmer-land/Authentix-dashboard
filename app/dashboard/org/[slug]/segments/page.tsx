@@ -17,13 +17,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Filter, Plus, Trash2, Loader2, Users, Edit2, AlertCircle,
+  Filter, Plus, Trash2, Loader2, Users, Edit2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailSegments, useCreateSegment, useUpdateSegment, useDeleteSegment } from "@/lib/hooks/queries/delivery";
 import type { EmailSegment, FilterRule, FilterOperator, SegmentFilters, CreateSegmentDto } from "@/lib/api/client";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 
 // ── Filter config ──────────────────────────────────────────────────────────────
@@ -142,7 +141,7 @@ function SegmentForm({
         </div>
 
         <div className="space-y-2">
-          {filters.rules.map((rule, idx) => (
+          {filters.rules.map((rule, _idx) => (
             <div key={rule.id} className="flex items-center gap-2">
               {/* Field */}
               <Select

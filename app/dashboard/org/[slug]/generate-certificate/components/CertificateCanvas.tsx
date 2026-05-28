@@ -35,14 +35,12 @@ export function CertificateCanvas({
   onFieldUpdate,
   onFieldSelect,
   onScaleChange,
-  onFieldDelete,
   onTemplateResize,
 }: CertificateCanvasProps) {
   /* State for Infinite Canvas */
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
-  const [isDragging, setIsDragging] = useState(false); 
   
   /* Draggable Toolbar State */
   const [toolbarPos, setToolbarPos] = useState({ x: 0, y: 0 });

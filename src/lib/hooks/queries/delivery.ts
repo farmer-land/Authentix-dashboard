@@ -7,11 +7,9 @@
  * Mutations invalidate relevant query keys automatically.
  */
 
-import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useOrgSlug } from '@/lib/org';
-import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import type { CreateDeliveryTemplateDto, CreateIntegrationDto, SendEmailDto, TestSendDto, UpdatePlatformDefaultSettingsDto, CreateSegmentDto, CreateBroadcastDto, CreateCampaignDto, UpdateCampaignDto, CampaignStatus, CreateApiKeyDto, CreateWebhookEndpointDto, WebhookEventType } from '@/lib/api/client';
 
 export const deliveryKeys = {

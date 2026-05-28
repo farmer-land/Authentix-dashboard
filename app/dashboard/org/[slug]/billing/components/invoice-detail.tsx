@@ -168,6 +168,7 @@ function RazorpayOrderButton({ invoice }: { invoice: InvoiceEntity }) {
     try {
       const order = await api.billing.createOrder(invoice.id);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const Razorpay = (window as any).Razorpay;
       if (!Razorpay) {
         alert('Razorpay SDK not loaded. Please refresh and try again.');

@@ -13,7 +13,7 @@ export default function AcceptInvitePage() {
   const router = useRouter();
   const [state, setState] = useState<State>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [redirectTo, setRedirectTo] = useState<string>("/dashboard");
+  const [_redirectTo, setRedirectTo] = useState<string>("/dashboard");
 
   useEffect(() => {
     let cancelled = false;

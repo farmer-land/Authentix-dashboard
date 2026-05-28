@@ -178,10 +178,10 @@ export function FieldLayersList({
               onDragEnd={handleDragEnd}
               onContextMenu={(e) => handleContextMenu(e, field.id)}
               className={`
-                px-2 py-1.5 cursor-pointer transition-all
+                px-2 py-1.5 cursor-pointer transition-all bg-[#0A0A0A] border-white/6
                 ${isSelected ? 'ring-1 ring-primary/70' : ''}
                 ${isHidden ? 'opacity-40' : ''}
-                ${isDragOver ? 'bg-neutral-200/60 dark:bg-neutral-700/40' : ''}
+                ${isDragOver ? 'bg-white/10!' : ''}
               `}
               onClick={() => !isRenaming && onFieldSelect(field.id)}
             >

@@ -233,14 +233,20 @@ function IntegrationForm({ initial, onSave, onCancel, saving }: IntegrationFormP
   const [resendApiKey, setResendApiKey] = useState("");
 
   // SMTP / Google Workspace / Microsoft 365
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [smtpHost, setSmtpHost] = useState((initial as any)?.config?.smtp_host ?? "");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [smtpPort, setSmtpPort] = useState<number>((initial as any)?.config?.smtp_port ?? 587);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [smtpSecure, setSmtpSecure] = useState<boolean>((initial as any)?.config?.smtp_secure ?? false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [smtpUser, setSmtpUser] = useState((initial as any)?.config?.smtp_user ?? "");
   const [smtpPassword, setSmtpPassword] = useState("");
 
   // AWS SES
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [awsAccessKeyId, setAwsAccessKeyId] = useState((initial as any)?.config?.aws_access_key_id ?? "");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [awsRegion, setAwsRegion] = useState((initial as any)?.config?.aws_region ?? "us-east-1");
   const [awsSecretKey, setAwsSecretKey] = useState("");
 
@@ -533,12 +539,14 @@ export default function EmailDeliverySettingsPage() {
     updateIntegrationActive,
   } = useDeliverySettingsState();
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
       const list = await api.delivery.listIntegrations();
       onLoadSuccess(list);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       onLoadError(err.message ?? "Failed to load integrations");
     }
@@ -574,6 +582,7 @@ export default function EmailDeliverySettingsPage() {
       setShowAddForm(false);
       toast.success("Integration saved");
       await load();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message ?? "Failed to save integration");
     } finally {
@@ -608,6 +617,7 @@ export default function EmailDeliverySettingsPage() {
       setEditingId(null);
       toast.success("Integration updated");
       await load();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message ?? "Failed to update integration");
     } finally {
@@ -621,6 +631,7 @@ export default function EmailDeliverySettingsPage() {
       await api.delivery.updateIntegration(id, { is_active: !currentActive });
       updateIntegrationActive(id, !currentActive);
       toast.success(currentActive ? "Integration disabled" : "Integration enabled");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       toast.error(err.message ?? "Failed to update");
     } finally {
@@ -634,6 +645,7 @@ export default function EmailDeliverySettingsPage() {
       await api.delivery.deleteIntegration(id);
       toast.success("Integration removed");
       await load();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message ?? "Failed to delete integration");
     } finally {

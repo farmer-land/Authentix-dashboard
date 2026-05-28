@@ -62,6 +62,7 @@ export default function OrganizationPage() {
   // Seed form fields once org data arrives
   useEffect(() => {
     if (!organization) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const org = organization as Record<string, any>;
     setOrganizationData({
       name: org.name || "",
@@ -94,6 +95,7 @@ export default function OrganizationPage() {
   // Backend returns { profile: { id, email, full_name, avatar_url }, organization, membership }
   useEffect(() => {
     if (!userProfile) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p = (userProfile as any)?.profile ?? (userProfile as any);
     setUserData({ full_name: p?.full_name || "", email: p?.email || "" });
     if (p?.avatar_url) setUserAvatarPreview(p.avatar_url);
@@ -161,6 +163,7 @@ export default function OrganizationPage() {
       setTimeout(() => setSuccess(false), 3000);
       setLogo(null);
       setUserAvatar(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message || "Failed to save organization profile");
     } finally {

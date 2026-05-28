@@ -202,6 +202,7 @@ export const certificatesApi = {
       started_at: string | null;
       completed_at: string | null;
     }>(`/jobs/${jobId}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return response.data! as any;
   },
 

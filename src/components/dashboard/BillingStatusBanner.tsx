@@ -13,7 +13,7 @@ function daysUntil(isoDate: string): number {
   return Math.ceil((new Date(isoDate).getTime() - Date.now()) / 86_400_000);
 }
 
-function daysAgo(isoDate: string): number {
+function _daysAgo(isoDate: string): number {
   return Math.ceil((Date.now() - new Date(isoDate).getTime()) / 86_400_000);
 }
 

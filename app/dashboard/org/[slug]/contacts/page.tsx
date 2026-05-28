@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Users, Upload, Loader2,
-  Award, Mail, ChevronDown, FileText, Trash2, Search, PenLine,
+  Award, ChevronDown, FileText, Trash2, Search, PenLine,
   Megaphone, CheckCircle2, Download, AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";

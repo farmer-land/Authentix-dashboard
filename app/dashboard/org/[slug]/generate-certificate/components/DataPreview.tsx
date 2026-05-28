@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Search,
   FileSpreadsheet,
-  CheckCircle2,
   Edit2,
   Trash2,
   AlertCircle,

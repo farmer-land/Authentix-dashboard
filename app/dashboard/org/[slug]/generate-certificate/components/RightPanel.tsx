@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { CertificateField, FontWeight, CERTIFICATE_FONTS, PRESET_COLORS, DATE_FORMATS } from '@/lib/types/certificate';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough, HelpCircle, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, BringToFront, SendToBack } from 'lucide-react';
 import { RgbaColorPicker } from 'react-colorful';
@@ -34,7 +34,7 @@ function normalizeFontWeight(w: string): FontWeight {
 }
 
 const CHECKER = 'repeating-conic-gradient(#c0c0c0 0% 25%, #fff 0% 50%) 0 0 / 8px 8px';
-const INP = 'bg-zinc-800/80 border border-zinc-700/50 rounded text-sm text-zinc-200';
+const INP = 'bg-[#0A0A0A] border border-white/8 rounded text-xs text-zinc-200';
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 
@@ -70,10 +70,10 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
         onClick={toggle}
         className="w-full flex items-center justify-between px-5 py-2.5 text-left hover:bg-zinc-800/30 transition-colors"
       >
-        <p className="text-sm font-bold text-white select-none">{label}</p>
+        <p className="text-xs font-semibold text-zinc-300 select-none">{label}</p>
         <ChevronRight className={`w-3.5 h-3.5 text-zinc-600 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
       </button>
-      {open && <div className="px-5 pb-5 space-y-3">{children}</div>}
+      {open && <div className="px-5 pt-2 pb-6 space-y-4">{children}</div>}
     </div>
   );
 }
@@ -86,16 +86,16 @@ function NumBox({
   icon?: React.ReactNode; className?: string;
 }) {
   return (
-    <div className={`flex items-center bg-zinc-800/80 rounded px-3 gap-2 h-8 ${className}`}>
+    <div className={`flex items-center bg-[#0A0A0A] border border-white/8 rounded px-3 gap-2 h-9 ${className}`}>
       {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}
       <span className="text-xs text-zinc-500 shrink-0 select-none">{label}</span>
       <input
         type="number" value={Math.round(value * 100) / 100}
         min={min} max={max} step={step}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="flex-1 min-w-0 bg-transparent text-sm text-zinc-200 outline-none"
+        className="flex-1 min-w-0 bg-transparent text-xs text-zinc-200 outline-none"
       />
-      {unit && <span className="text-sm text-zinc-500 shrink-0 select-none">{unit}</span>}
+      {unit && <span className="text-xs text-zinc-500 shrink-0 select-none">{unit}</span>}
     </div>
   );
 }
@@ -116,7 +116,7 @@ function FontSizeBox({ value, onChange }: { value: number; onChange: (v: number)
 
   return (
     <div ref={ref} className="relative">
-      <div className={`flex items-center ${INP} h-8 overflow-hidden`}>
+      <div className={`flex items-center ${INP} h-9 overflow-hidden`}>
         <span className="text-[10px] text-muted-foreground/60 shrink-0 select-none px-2.5">Size</span>
         <input
           type="number" value={Math.round(value)}
@@ -643,14 +643,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
   const canvasControls = (
     <>
       <div className="px-5 py-3.5 border-t border-zinc-800">
-        <p className="text-sm font-bold text-white mb-3 select-none">Canvas</p>
+        <p className="text-xs font-semibold text-zinc-300 mb-3 select-none">Canvas</p>
         <div className="space-y-3">
           {/* Zoom controls */}
           <div>
             <p className="text-xs text-zinc-500 mb-2 select-none">Zoom</p>
             <div className="flex items-center gap-2">
               <button
-                className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) - 0.1))}
                 title="Zoom out"
               >
@@ -660,7 +660,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 <select
                   value={ZOOM_STEPS.includes(scale ?? 1) ? (scale ?? 1) : ''}
                   onChange={(e) => e.target.value && onScaleChange?.(parseFloat(e.target.value))}
-                  className="w-full h-8 bg-zinc-800/80 border border-zinc-700/50 rounded text-sm text-zinc-200 text-center outline-none cursor-pointer appearance-none"
+                  className="w-full h-9 bg-[#0A0A0A] border border-white/8 rounded text-xs text-zinc-200 text-center outline-none cursor-pointer appearance-none"
                   title="Zoom presets"
                 >
                   {!ZOOM_STEPS.includes(scale ?? 1) && (
@@ -675,14 +675,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </span>
               </div>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) + 0.1))}
                 title="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
                 onClick={onFitToScreen}
                 title="Fit to screen"
               >
@@ -695,7 +695,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Magnet className="w-3.5 h-3.5 text-muted-foreground/50" />
-              <p className="text-sm text-zinc-400 select-none">Snap to Grid</p>
+              <p className="text-xs text-zinc-400 select-none">Snap to Grid</p>
             </div>
             <button
               className="relative rounded-full transition-colors shrink-0"
@@ -712,14 +712,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       {/* Template dimensions */}
       {(pdfWidth || pdfHeight) && (
         <div className="px-5 py-3.5 border-t border-zinc-800">
-          <p className="text-sm font-bold text-white mb-2 select-none">Template</p>
+          <p className="text-xs font-semibold text-zinc-300 mb-2 select-none">Template</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded h-8 px-3 gap-2">
+            <div className="flex items-center bg-[#0A0A0A] border border-white/8 rounded h-9 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">W</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfWidth ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
-            <div className="flex items-center bg-zinc-800/80 border border-zinc-700/50 rounded h-8 px-3 gap-2">
+            <div className="flex items-center bg-[#0A0A0A] border border-white/8 rounded h-9 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">H</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfHeight ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
@@ -787,10 +787,10 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
     if (clean.length === 6) onFieldUpdate({ color: `#${clean}` });
   };
 
-  const selCls = `h-8 ${INP}`;
+  const selCls = `h-9 ${INP}`;
   const activeBtn = 'bg-[#3ECF8E] text-white border-transparent';
-  const inactiveBtn = `bg-zinc-800/80 border-zinc-700/50 text-zinc-400 hover:text-zinc-200`;
-  const btn = (active: boolean) => `h-8 flex items-center justify-center rounded border transition-colors ${active ? activeBtn : inactiveBtn}`;
+  const inactiveBtn = `bg-[#0A0A0A] border-white/8 text-zinc-400 hover:text-zinc-200`;
+  const btn = (active: boolean) => `h-9 flex items-center justify-center rounded border transition-colors ${active ? activeBtn : inactiveBtn}`;
 
   return (
     <SectionOpenCtx.Provider value={{ open: openSection, setOpen: setOpenSection }}>
@@ -896,7 +896,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             onFieldUpdate({ label: final });
           }}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          className={`flex-1 bg-transparent text-sm font-medium outline-none min-w-0 ${
+          className={`flex-1 bg-transparent text-xs font-medium outline-none min-w-0 ${
             (allFieldLabels ?? []).some(l => l.toLowerCase() === labelDraft.trim().toLowerCase())
               ? 'text-red-400'
               : 'text-zinc-200'
@@ -919,11 +919,11 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         <div className="flex items-center gap-2">
           <NumBox label="Rotation" value={selectedField.rotation ?? 0} min={-360} max={360} unit="°"
             onChange={(v) => onFieldUpdate({ rotation: ((v % 360) + 360) % 360 })} className="flex-1" />
-          <button title="Rotate -90°" className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors text-xs font-mono"
+          <button title="Rotate -90°" className="h-9 px-2.5 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors text-xs font-mono shrink-0"
             onClick={() => onFieldUpdate({ rotation: (((selectedField.rotation ?? 0) - 90) % 360 + 360) % 360 })}>-90°</button>
-          <button title="Rotate +90°" className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors text-xs font-mono"
+          <button title="Rotate +90°" className="h-9 px-2.5 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors text-xs font-mono shrink-0"
             onClick={() => onFieldUpdate({ rotation: ((selectedField.rotation ?? 0) + 90) % 360 })}>+90°</button>
-          <button title="Reset rotation" className="w-8 h-8 flex items-center justify-center rounded border border-zinc-700/50 bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+          <button title="Reset rotation" className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
             onClick={() => onFieldUpdate({ rotation: 0 })}>
             <RefreshCw className="w-3 h-3" />
           </button>
@@ -1032,7 +1032,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             {/* Font family — searchable combobox backed by full Google Fonts library */}
             <Popover open={fontPickerOpen} onOpenChange={(open) => startTransition(() => setFontPickerOpen(open))}>
               <PopoverTrigger asChild>
-                <button className={`${selCls} w-full flex items-center justify-between px-3 h-8 text-xs`}>
+                <button className={`${selCls} w-full flex items-center justify-between px-3 h-9 text-xs`}>
                   <span style={{ fontFamily: selectedField.fontFamily, fontSize: '13px' }}>
                     {selectedField.fontFamily}
                   </span>
@@ -1095,7 +1095,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                   ))}
                 </SelectContent>
               </Select>
-              <button title="Italic" className={`${btn(selectedField.fontStyle === 'italic')} w-8 h-8 shrink-0`}
+              <button title="Italic" className={`${btn(selectedField.fontStyle === 'italic')} w-9 h-9 shrink-0`}
                 onClick={() => onFieldUpdate({ fontStyle: selectedField.fontStyle === 'italic' ? 'normal' : 'italic' })}>
                 <Italic className="w-3.5 h-3.5" />
               </button>

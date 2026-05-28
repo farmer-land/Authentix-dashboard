@@ -38,6 +38,7 @@ import { KeyboardShortcuts } from './KeyboardShortcuts';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+
 interface InfiniteCanvasProps {
   fileUrl: string;
   pdfWidth: number;
@@ -179,7 +180,6 @@ export function InfiniteCanvas({
   onFieldLock,
   onFieldDragStart,
   snapToGrid: snapToGridProp,
-  onSnapToggle,
   fitTrigger,
   leftPanelWidth,
   rightPanelWidth,
@@ -196,7 +196,7 @@ export function InfiniteCanvas({
   const [isPanning, setIsPanning] = useState(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   // Snap: controlled by parent if snapToGridProp provided, else internal
-  const [snapToGridInternal, setSnapToGridInternal] = useState(false);
+  const [snapToGridInternal] = useState(false);
   const snapToGrid = snapToGridProp ?? snapToGridInternal;
 
   // Image drag-over state
@@ -251,7 +251,7 @@ export function InfiniteCanvas({
   });
   const dismissAddFieldsTip = useCallback(() => {
     setAddFieldsTipSeen(true);
-    try { sessionStorage.setItem('cert_add_fields_tip_seen', '1'); } catch (_) { /* ignore storage errors */ }
+    try { sessionStorage.setItem('cert_add_fields_tip_seen', '1'); } catch { /* ignore storage errors */ }
   }, []);
   useEffect(() => {
     if (addFieldsTipSeen) return;
@@ -292,6 +292,14 @@ export function InfiniteCanvas({
 
   // Sync panRef so wheel handler (non-React closure) can read latest pan
   useEffect(() => { panRef.current = pan; }, [pan]);
+
+  // ── Log pan + scale changes (debounced 600ms, for position calibration) ───
+  useEffect(() => {
+    const t = setTimeout(() => {
+      console.log('[Canvas] Template position — pan:', { x: Math.round(pan.x), y: Math.round(pan.y) }, '| zoom:', `${Math.round(scale * 100)}%`);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [pan, scale]);
 
   // Reset rotation when a new template is loaded
   useEffect(() => { setRotation(0); }, [fileUrl]);
@@ -667,6 +675,7 @@ export function InfiniteCanvas({
       origX,
       origY,
     };
+    console.log('[Canvas Layout] Toolbar drag START:', { x: Math.round(origX), y: Math.round(origY), minimized: toolbarMinimized });
 
     const onMove = (ev: MouseEvent) => {
       if (!toolbarDragRef.current.dragging) return;
@@ -684,7 +693,19 @@ export function InfiniteCanvas({
         setToolbarPos({ x: rawX, y: rawY });
       }
     };
-    const onUp = () => { toolbarDragRef.current.dragging = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    const onUp = () => {
+      toolbarDragRef.current.dragging = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      // Log final position after drag (setToolbarPos is async, read from DOM)
+      if (toolbarRef.current && containerRef.current) {
+        const tb = toolbarRef.current.getBoundingClientRect();
+        const ct = containerRef.current.getBoundingClientRect();
+        const finalX = Math.round(tb.left - ct.left);
+        const finalY = Math.round(tb.top - ct.top);
+        console.log('[Canvas Layout] Toolbar drag END:', { x: finalX, y: finalY, minimized: toolbarMinimized });
+      }
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
@@ -765,6 +786,7 @@ export function InfiniteCanvas({
       const ratio = newW / initialCanvasWidth;
       updates.fontSize = Math.max(6, Math.round(initialFontSize * ratio));
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onFieldUpdate(id, updates as any);
   }, [fields, scale, snapToGrid, onFieldUpdate]);
 
@@ -796,7 +818,7 @@ export function InfiniteCanvas({
     <div
       ref={containerRef}
       className="relative w-full h-full overflow-hidden select-none"
-      style={{ backgroundColor: 'var(--canvas-bg)', cursor }}
+      style={{ backgroundColor: 'var(--canvas-bg)', cursor, overscrollBehavior: 'none' }}
       onMouseDown={handleMouseDown}
       onMouseUp={() => { setIsPanning(false); }}
       onMouseLeave={() => { setIsPanning(false); }}
@@ -1105,7 +1127,18 @@ export function InfiniteCanvas({
               <Button
                 variant="ghost" size="icon"
                 className="h-7 w-7 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted rounded-lg"
-                onClick={() => setToolbarMinimized(v => !v)}
+                onClick={() => {
+                  setToolbarMinimized(v => {
+                    const next = !v;
+                    // Log position in new state so you can capture both expanded and collapsed coords
+                    if (toolbarRef.current && containerRef.current) {
+                      const tb = toolbarRef.current.getBoundingClientRect();
+                      const ct = containerRef.current.getBoundingClientRect();
+                      console.log(`[Canvas] Toolbar ${next ? 'COLLAPSED' : 'EXPANDED'} — pos:`, { x: Math.round(tb.left - ct.left), y: Math.round(tb.top - ct.top) });
+                    }
+                    return next;
+                  });
+                }}
                 title={toolbarMinimized ? 'Expand toolbar' : 'Minimize toolbar'}
               >
                 {toolbarMinimized

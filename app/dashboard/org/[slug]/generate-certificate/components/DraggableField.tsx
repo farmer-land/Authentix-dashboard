@@ -30,6 +30,7 @@ function QRCodePreview({
   useEffect(() => {
     try {
       // `create` is a public export not reflected in @types/qrcode
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const qr = (QRCodeLib as any).create('https://authentix.app/verify/sample', {
         errorCorrectionLevel: style === 'logo' ? 'H' : 'M',
       });

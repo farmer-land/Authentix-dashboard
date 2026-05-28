@@ -25,7 +25,7 @@ export function getPaymentStatusInfo(status: InvoiceStatus): PaymentStatusInfo {
   return statusMap[status] ?? statusMap.pending;
 }
 
-export function formatBillingPeriod(periodStart: string, periodEnd: string): string {
+export function formatBillingPeriod(periodStart: string, _periodEnd: string): string {
   const start = new Date(periodStart);
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',

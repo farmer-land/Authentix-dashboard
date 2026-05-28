@@ -182,6 +182,7 @@ export function assertBetaOrHigher(action: string): void {
  */
 export function logEnvironmentAction(
   action: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details: Record<string, any> = {}
 ): void {
   const env = getRuntimeEnvironment();
@@ -204,6 +205,7 @@ export function logEnvironmentAction(
 export function warnUnsafeOperation(
   action: string,
   reason: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details: Record<string, any> = {}
 ): void {
   const env = getRuntimeEnvironment();

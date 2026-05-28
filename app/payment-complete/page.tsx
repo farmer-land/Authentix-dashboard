@@ -16,7 +16,6 @@
  */
 
 import { Suspense } from 'react';
-import Link from 'next/link';
 import { PaymentCompleteContent } from './payment-complete-content';
 
 export default function PaymentCompletePage() {

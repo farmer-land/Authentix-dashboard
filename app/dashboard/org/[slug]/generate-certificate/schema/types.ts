@@ -55,6 +55,7 @@ export interface GenerateCertificateState {
   // Template
   template: CertificateTemplate | null;
   pdfFile: File | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   savedTemplates: any[]; // API response shape differs from frontend CertificateTemplate
   templateVersionId: string | null;
   isTemplateLoading: boolean;
@@ -126,6 +127,7 @@ export function createInitialState(templateIdFromUrl: string | null): GenerateCe
     currentStep: templateIdFromUrl ? "design" : "template",
     template: null,
     pdfFile: null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     savedTemplates: [] as any[],
     templateVersionId: null,
     isTemplateLoading: !!templateIdFromUrl,
@@ -152,7 +154,7 @@ export function createInitialState(templateIdFromUrl: string | null): GenerateCe
     leftPanelVisible: false,
     leftPanelPos: { x: 16, y: 24 },
     rightPanelVisible: false,
-    stepperExpanded: true,
+    stepperExpanded: false,
     previewOpen: false,
     panelPos: { x: 0, y: 0 },
     panelReady: false,

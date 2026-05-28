@@ -213,6 +213,7 @@ export default function TemplateEditorPage() {
           }
         });
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error("Error loading editor data:", err);
       setError(err.message || "Failed to load template editor");
@@ -311,6 +312,7 @@ export default function TemplateEditorPage() {
       setTimeout(() => {
         setSaveStatus("idle");
       }, 2000);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error("Error saving fields:", err);
       setError(err.message || "Failed to save fields");

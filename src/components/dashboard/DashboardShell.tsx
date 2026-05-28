@@ -6,7 +6,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  FileText,
   Upload,
   FileCheck,
   Shield,
@@ -104,8 +103,7 @@ const NAVIGATION_GROUPS: readonly NavGroup[] = [
   {
     label: "Certificates",
     items: [
-      { name: "Templates",    href: "/templates",            icon: FileText,  feature: "certs" },
-      { name: "Generate",     href: "/generate-certificate", icon: Sparkles,  feature: "certs" },
+      { name: "Playground",   href: "/generate-certificate", icon: Sparkles,  feature: "certs" },
       { name: "Issued",       href: "/certificates",         icon: FileCheck, feature: "certs" },
       { name: "Verification", href: "/verification-logs",    icon: Shield,    feature: "certs" },
     ],
@@ -158,14 +156,12 @@ function NavLink({
   pathname,
   expanded,
   pendingJobsCount,
-  activeCertJobsCount,
 }: {
   item: NavItem;
   basePath: string;
   pathname: string;
   expanded: boolean;
   pendingJobsCount: number;
-  activeCertJobsCount: number;
 }) {
   const fullHref = item.href ? `${basePath}${item.href}` : basePath;
   const isActive =
@@ -174,11 +170,9 @@ function NavLink({
       : pathname.startsWith(fullHref);
   const Icon = item.icon;
   const showImportsBadge = item.name === "Imports" && pendingJobsCount > 0;
-  const showCertBadge = item.name === "Generate" && activeCertJobsCount > 0;
-  const showBadge = showImportsBadge || showCertBadge;
-  const badgeCount = showImportsBadge ? pendingJobsCount : activeCertJobsCount;
-  const badgeColor = showCertBadge ? "bg-primary" : "bg-amber-400";
-  const badgeTextColor = showCertBadge ? "text-primary bg-primary/15" : "bg-amber-400/15 text-amber-500";
+  const showBadge = showImportsBadge;
+  const badgeCount = pendingJobsCount;
+  const badgeTextColor = "bg-amber-400/15 text-amber-500";
 
   return (
     <Link
@@ -195,7 +189,7 @@ function NavLink({
       <div className="relative shrink-0">
         <Icon className="h-4 w-4" />
         {showBadge && (
-          <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${badgeColor} ring-1 ring-background`} />
+          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-background" />
         )}
       </div>
       {expanded && <span className="whitespace-nowrap flex-1">{item.name}</span>}
@@ -208,7 +202,7 @@ function NavLink({
   );
 }
 
-function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobsCount }: SidebarNavProps) {
+function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobsCount: _activeCertJobsCount }: SidebarNavProps) {
   const basePath = `/dashboard/org/${slug}`;
   const { organization } = useOrganization();
 
@@ -241,7 +235,6 @@ function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobs
               pathname={pathname}
               expanded={expanded}
               pendingJobsCount={pendingJobsCount}
-              activeCertJobsCount={activeCertJobsCount}
             />
           ))}
         </div>

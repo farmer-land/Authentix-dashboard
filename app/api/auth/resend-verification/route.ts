@@ -6,7 +6,7 @@ import {
   ServerApiError,
 } from "@/lib/api/server";
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     // Check if user is authenticated
     const hasValidToken = await isServerAuthenticated();

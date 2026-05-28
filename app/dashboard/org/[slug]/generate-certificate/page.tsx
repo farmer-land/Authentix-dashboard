@@ -7,14 +7,12 @@ import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { useOrgSlug } from '@/lib/org';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { CertificateField, CertificateTemplate, ImportedData, FieldMapping, FIELD_TYPE_CONFIG, FieldType } from '@/lib/types/certificate';
-import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 import type { CertificateConfig } from './components/ExportSection';
-import { Button } from '@/components/ui/button';
 import {
   Image as ImageIcon, FileText,
   CheckCircle2, Layers, Palette, Database, Wand2,
-  ChevronDown, ChevronUp, X, Eye, ChevronRight,
+  X, Eye, ChevronRight,
   SlidersHorizontal, Maximize2,
   User, BookOpen, Calendar, Type, QrCode, AlertTriangle,
 } from 'lucide-react';
@@ -53,7 +51,7 @@ export default function GenerateCertificatePage() {
   const designHistoryPushedRef = useRef(false);
 
   const {
-    template, pdfFile, savedTemplates, templateVersionId,
+    template, savedTemplates, templateVersionId,
     fields, selectedFieldId, hiddenFields,
     importedData, savedImports, fieldMappings, additionalCertConfigs,
     templateMode, templateConfigs, activeTemplateIndex,
@@ -62,7 +60,7 @@ export default function GenerateCertificatePage() {
     snapToGrid, fitTrigger,
     leftPanelVisible, leftPanelPos, rightPanelVisible,
     previewOpen, templateMeta,
-    stepperExpanded, panelPos, panelReady,
+    stepperExpanded,
     canUndo, canRedo, saveStatus, showNavGuard,
     setCurrentStep, setTemplate, setSavedTemplates, setIsTemplateLoading,
     setTemplateMeta, setPdfFile, setTemplateVersionId,
@@ -71,10 +69,10 @@ export default function GenerateCertificatePage() {
     setImportedData, setSavedImports, setFieldMappings, setAdditionalCertConfigs,
     setRecentGenerated, setInProgressTemplates, setRecentLoading,
     setCanUndo, setCanRedo, setSaveStatus,
-    setCanvasScale, setActiveTab, setUseInfiniteCanvas,
+    setCanvasScale, setActiveTab,
     setSnapToGrid, setFitTrigger,
     setLeftPanelVisible, setLeftPanelPos, setRightPanelVisible, setStepperExpanded,
-    setPanelPos, setPanelReady, setPreviewOpen, setLibraryAssets, setShowNavGuard,
+    setPanelReady, setPreviewOpen, setLibraryAssets, setShowNavGuard,
   } = useGenerateCertificateState(templateIdFromUrl);
 
   const { organization } = useOrganization();
@@ -133,8 +131,6 @@ export default function GenerateCertificatePage() {
 
   // Cancellation ref for parallel multi-select loads
   const multiSelectRequestRef = useRef(0);
-  // Guard so auto-resume only fires once per load
-  const autoResumedRef = useRef(false);
 
   const leftPanelDragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -150,6 +146,7 @@ export default function GenerateCertificatePage() {
     futureRef.current = [];
     setCanUndo(true);
     setCanRedo(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const undo = useCallback(() => {
@@ -160,6 +157,7 @@ export default function GenerateCertificatePage() {
     setFields(prev);
     setCanUndo(historyRef.current.length > 0);
     setCanRedo(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields]);
 
   const redo = useCallback(() => {
@@ -170,6 +168,7 @@ export default function GenerateCertificatePage() {
     setFields(next);
     setCanUndo(true);
     setCanRedo(futureRef.current.length > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields]);
 
   // ⌘Z / Ctrl+Z → undo, ⌘⇧Z / Ctrl+Y / Ctrl+Shift+Z → redo
@@ -196,6 +195,7 @@ export default function GenerateCertificatePage() {
   // Clear sessionStorage on unmount so navigating away doesn't auto-restore the old design session.
   useEffect(() => {
     return () => { sessionStorage.removeItem(`gencert_session:${orgSlug}`); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Track whether initial mount has passed so we don't wipe the session on first render.
@@ -248,6 +248,7 @@ export default function GenerateCertificatePage() {
       sessionStorage.removeItem(`gencert_session:${orgSlug}`);
       try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, template?.id, fields, canvasScale, templateVersionId, importedData, fieldMappings]);
 
   // Re-run auto-mapping whenever the field composition changes (IDs added/removed)
@@ -261,11 +262,13 @@ export default function GenerateCertificatePage() {
       setFieldMappings(autoMapColumns(allFields, importedData.headers));
     }
     prevFieldIdsRef.current = currentIds;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields]);
 
   // Reset right-panel position when a new template is loaded or preview opens/closes
   useEffect(() => {
     setPanelReady(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template?.id, previewOpen]);
 
   // ── Auto-load ?import=ID when template is ready ───────────────────────────────
@@ -342,6 +345,7 @@ export default function GenerateCertificatePage() {
     if (currentStep === 'design' && !template && !isTemplateLoading && !templateIdFromUrl) {
       setCurrentStep('template');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, template, isTemplateLoading, templateIdFromUrl]);
 
   // ── Browser-back interception ───────────────────────────────────────────────
@@ -384,12 +388,15 @@ export default function GenerateCertificatePage() {
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, fields.length, pathname]);
 
   // Load saved templates and imports
   useEffect(() => {
     // Use a window-level flag (survives HMR module re-evaluation, unlike module-level variables)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const isInitialMount = !(window as any).__gencertInitialLoadDone;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__gencertInitialLoadDone = true;
     loadSavedData(isInitialMount);
 
@@ -397,9 +404,10 @@ export default function GenerateCertificatePage() {
     const onVisible = () => { if (document.visibilityState === "visible") loadSavedData(false); };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSavedData = async (isInitialMount = false) => {
+  const loadSavedData = async (_isInitialMount = false) => {
     try {
       // Load templates and recent usage in parallel
       const [templatesResponse, recentUsageResponse] = await Promise.all([
@@ -414,11 +422,13 @@ export default function GenerateCertificatePage() {
 
       // Get preview URLs for templates (with graceful error handling)
       const templatesWithSignedUrls = await Promise.all(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         templatesData.map(async (template: any) => {
           if (template.id) {
             try {
               const previewUrl = await api.templates.getPreviewUrl(template.id);
               return { ...template, preview_url: previewUrl };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } catch (error: any) {
               // Gracefully handle missing preview - template can still be used
               console.warn('[Generate] Preview not available for template:', template.id, error?.message || error);
@@ -459,11 +469,13 @@ export default function GenerateCertificatePage() {
       // is the ground-truth restore path.
       if (!new URLSearchParams(window.location.search).get('template')) {
         let templateIdToRestore: string | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let sessionFields: any[] | null = null;
         let sessionScale: number | undefined;
         let sessionVersionId: string | null = null;
         let sessionStep: string | null = null;
         let sessionImportMeta: { fileName: string; headers: string[]; rowCount: number; importId?: string; importIds?: string[] } | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let sessionFieldMappings: any[] | null = null;
 
         try {
@@ -511,6 +523,7 @@ export default function GenerateCertificatePage() {
 
         if (templateIdToRestore) {
           // Guard: if the template no longer exists (deleted), discard the stale session.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const templateObj = templatesWithSignedUrls.find((t: any) => t.id === templateIdToRestore);
           if (!templateObj) {
             sessionStorage.removeItem(`gencert_session:${orgSlug}`);
@@ -559,9 +572,11 @@ export default function GenerateCertificatePage() {
         setCurrentStep('template');
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateIdFromUrl, savedTemplates, template]);
 
   // Handler for selecting a recent template (with or without loading fields)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleRecentTemplateSelect = async (recentTemplate: any, loadFields: boolean) => {
     // Find the corresponding saved template
     let templateToSelect = savedTemplates.find((t) => t.id === recentTemplate.template_id);
@@ -593,6 +608,7 @@ export default function GenerateCertificatePage() {
   };
 
   // Handlers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleTemplateSelect = async (selectedTemplate: any) => {
     // Increment request ID — any previous in-flight call will see a stale ID and bail out
     const requestId = ++selectRequestRef.current;
@@ -714,6 +730,7 @@ export default function GenerateCertificatePage() {
 
   // Safety net: if handleTemplateSelect ever throws without resetting isTemplateLoading,
   // the user would be stuck on the skeleton forever. This wrapper ensures cleanup always happens.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleTemplateSelectSafe = async (selectedTemplate: any) => {
     try {
       await handleTemplateSelect(selectedTemplate);
@@ -726,6 +743,7 @@ export default function GenerateCertificatePage() {
   };
 
   // Load one template's data (fields + file URL + correct dimensions)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const loadTemplateData = async (t: any): Promise<{ template: CertificateTemplate; fields: CertificateField[]; versionId: string | null }> => {
     try {
       const editorData = await api.templates.getEditorData(t.id);
@@ -786,6 +804,7 @@ export default function GenerateCertificatePage() {
     const session = pendingResumeSession;
     setPendingResumeSession(null);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const templateObj = savedTemplates.find((t: any) => t.id === session.templateId);
     if (!templateObj) return;
 
@@ -810,6 +829,7 @@ export default function GenerateCertificatePage() {
 
     if (session.fields.length > 0) {
       const lostLabels: string[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sanitized = session.fields.map((f: any) => {
         const imageLost = f.imageUrl?.startsWith('blob:');
         const qrLogoLost = f.qrLogoUrl?.startsWith('blob:');
@@ -833,6 +853,7 @@ export default function GenerateCertificatePage() {
           api.imports.get(meta.importId),
           api.imports.getData(meta.importId, { limit: 2000 }),
         ]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rows = ((dataPage.items ?? []) as Array<{ row_index: number; data: Record<string, any> }>).map((r: any) => r.data ?? r);
         setImportedData({
           fileName: importJob.file_name ?? meta.fileName,
@@ -848,6 +869,7 @@ export default function GenerateCertificatePage() {
     }
 
     if (session.currentStep === 'data' || session.currentStep === 'export') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setCurrentStep(session.currentStep as any);
     }
   };
@@ -856,6 +878,7 @@ export default function GenerateCertificatePage() {
   // user choose between resuming or starting fresh without being silently redirected.
 
   // Multi-mode: load all selected templates in parallel, navigate to design
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSelectMultipleTemplates = async (selectedTemplates: any[]) => {
     if (selectedTemplates.length === 0) return;
     const requestId = ++multiSelectRequestRef.current;
@@ -924,7 +947,8 @@ export default function GenerateCertificatePage() {
     setCanRedo((cfg.future?.length ?? 0) > 0);
   };
 
-  const handleNewTemplateUpload = async (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string, onProgress?: (pct: number) => void): Promise<any> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleNewTemplateUpload = async (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string, onProgress?: (pct: number) => void, navigateToDesign = true): Promise<any> => {
     const fileType = 'image';
     const baseName = templateName || file.name.replace(/\.(jpe?g|png|webp|avif)$/i, '');
     const existingNames = savedTemplates.map(t => t.title?.toLowerCase() ?? '');
@@ -945,6 +969,7 @@ export default function GenerateCertificatePage() {
           subcategory_id: subcategoryId,
         }, onProgress);
         // Try to attach a preview URL so the carousel card shows the thumbnail
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let withPreview: any = templateData;
         try {
           const previewUrl = await api.templates.getPreviewUrl(templateData.id);
@@ -952,10 +977,28 @@ export default function GenerateCertificatePage() {
         } catch { /* preview not critical */ }
         setSavedTemplates(prev => [withPreview, ...prev]);
         return withPreview;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         console.error('Error saving template in multi mode:', error);
         return null;
       }
+    }
+
+    // ── Save-only path: upload to library but stay on template selection ─────
+    if (!navigateToDesign) {
+      const templateData = await api.templates.create(file, {
+        title: finalTemplateName.trim(),
+        category_id: categoryId,
+        subcategory_id: subcategoryId,
+      }, onProgress);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let withPreview: any = templateData;
+      try {
+        const previewUrl = await api.templates.getPreviewUrl(templateData.id);
+        withPreview = { ...templateData, preview_url: previewUrl };
+      } catch { /* preview not critical */ }
+      setSavedTemplates(prev => [withPreview, ...prev]);
+      return withPreview;
     }
 
     // ── Single mode: open design canvas immediately ───────────────────────────
@@ -987,6 +1030,7 @@ export default function GenerateCertificatePage() {
           setTemplateVersionId(templateData.version.id);
         }
         setTemplate((prev) => prev ? { ...prev, id: templateData.id } : null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         console.error('Error saving template:', error);
         if (error?.message?.includes('Bucket not found') || error?.message?.includes('bucket') || error?.statusCode === 404) {
@@ -1093,6 +1137,7 @@ export default function GenerateCertificatePage() {
         sampleValue: rawLabel,
       };
       if (fieldType === 'start_date' || fieldType === 'end_date') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (field as any).dateFormat = 'MMMM dd, yyyy';
       }
       newFields.push(field);
@@ -1125,6 +1170,7 @@ export default function GenerateCertificatePage() {
     setFields((prev) =>
       prev.map((field) => (field.id === fieldId ? { ...field, ...updates } : field))
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields, pushToHistory]);
 
   const handleDeleteField = (fieldId: string) => {
@@ -1520,8 +1566,9 @@ export default function GenerateCertificatePage() {
     const timeoutId = setTimeout(doSave, 1000); // Debounce: wait 1 second after last change
 
     return () => clearTimeout(timeoutId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields, template?.id, templateVersionId]);
-  
+
   const handleToggleVisibility = (fieldId: string) => {
     setHiddenFields(prev => {
       const next = new Set(prev);
@@ -1581,6 +1628,7 @@ export default function GenerateCertificatePage() {
       ]);
 
       // Backend returns { row_index, data: {...} } — extract the inner data object
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawItems = dataPage.items as Array<{ row_index: number; data: Record<string, any> }>;
       const rows = rawItems.map(r => r.data ?? r);
       if (rows.length === 0) throw new Error('The import file is empty or has no data.');
@@ -1654,18 +1702,20 @@ export default function GenerateCertificatePage() {
 
 
   const stepperContent = (
-    <div className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-full border">
+    <div className="flex items-center gap-0.5 bg-card/90 backdrop-blur-xl border border-border/50 rounded-xl shadow-lg px-2 py-2">
       {steps.map((step, index) => {
         const isActive = currentStep === step.id;
         const isCompleted = step.completed;
+        const currentIndex = steps.findIndex(s => s.id === currentStep);
+        const isNext = index === currentIndex + 1;
+        const canNavigate = isCompleted || isActive || isNext || step.id === 'template';
+        const StepIcon = step.icon;
 
         return (
           <div key={step.id} className="flex items-center">
             <button
               onClick={() => {
-                const canNavigate = step.completed || isActive || index === steps.findIndex(s => s.id === currentStep) + 1;
                 if (!canNavigate) return;
-                // Going back to template selection — warn if fields exist
                 if (step.id === 'template' && currentStep !== 'template' && fields.length > 0) {
                   setShowNavGuard(true);
                   return;
@@ -1679,30 +1729,30 @@ export default function GenerateCertificatePage() {
                   setPanelReady(false);
                   router.replace(pathname);
                 }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 setCurrentStep(step.id as any);
               }}
-              disabled={!step.completed && !isActive && index !== steps.findIndex(s => s.id === currentStep) + 1 && step.id !== 'template'}
-              className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all
-                ${isActive 
-                  ? 'bg-primary text-primary-foreground shadow-sm' 
-                  : isCompleted 
-                  ? 'text-foreground hover:bg-muted-foreground/10' 
-                  : index === steps.findIndex(s => s.id === currentStep) + 1
-                  ? 'text-foreground/70 hover:bg-muted-foreground/10'
-                  : 'text-muted-foreground opacity-50 cursor-not-allowed'
-                }
-              `}
+              disabled={!canNavigate}
+              title={step.label}
+              className={[
+                'flex items-center gap-2 rounded-lg transition-all select-none tracking-wide',
+                isActive
+                  ? 'px-4 py-2 bg-primary text-primary-foreground font-semibold text-[11px] shadow-[0_0_18px_hsl(var(--primary)/_0.55)]'
+                  : 'px-2.5 py-1.5 text-[10px] font-medium',
+                isCompleted && !isActive ? 'text-foreground/80 hover:bg-muted/60 cursor-pointer' : '',
+                isNext && !isCompleted ? 'text-muted-foreground hover:bg-muted/40 cursor-pointer' : '',
+                !canNavigate ? 'text-muted-foreground/25 cursor-not-allowed' : '',
+              ].filter(Boolean).join(' ')}
             >
-              {isCompleted ? (
-                <CheckCircle2 className="w-3.5 h-3.5" />
+              {isCompleted && !isActive ? (
+                <CheckCircle2 className={isActive ? 'w-4 h-4' : 'w-3.5 h-3.5 text-primary'} />
               ) : (
-                <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${isActive ? 'border-primary-foreground/30' : 'border-muted-foreground'}`}>{index + 1}</span>
+                <StepIcon className={isActive ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
               )}
-              <span className="hidden sm:inline">{step.label}</span>
+              <span className="leading-none whitespace-nowrap">{step.label}</span>
             </button>
             {index < steps.length - 1 && (
-              <div className="w-4 h-px bg-border mx-2" />
+              <div className="w-px h-5 bg-border/40 mx-0.5 shrink-0" />
             )}
           </div>
         );
@@ -1710,16 +1760,7 @@ export default function GenerateCertificatePage() {
     </div>
   );
 
-  const titleContent = (
-    <div className="flex flex-col justify-center">
-       <h1 className="text-sm font-semibold tracking-tight">Generate Certificate</h1>
-       <p className="text-[10px] text-muted-foreground hidden lg:block">
-         Design, customize, and issue certificates in four simple steps.
-       </p>
-    </div>
-  );
-
-  const handleLeftPanelDragStart = (e: React.MouseEvent) => {
+  const _handleLeftPanelDragStart = (e: React.MouseEvent) => {
     e.preventDefault();
     leftPanelDragOrigin.current = { mx: e.clientX, my: e.clientY, px: leftPanelPos.x, py: leftPanelPos.y };
     const onMove = (ev: MouseEvent) => {
@@ -1741,75 +1782,38 @@ export default function GenerateCertificatePage() {
       {/* Normal flow layout (template / data / export steps) */}
       <div className="flex flex-col h-[calc(100vh-3rem)]">
 
-        {/* Inline title + stepper (shown on non-design steps) */}
-        {currentStep !== 'design' && (
-          <div className="flex items-center justify-between pb-3 shrink-0">
-            {titleContent}
-            {stepperContent}
-          </div>
-        )}
-
-        <div className="flex-1 flex overflow-hidden min-h-0">
+        <div className="flex-1 flex overflow-hidden min-h-0 relative">
           {currentStep === 'template' && (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Resume session banner */}
-              {pendingResumeSession && (
-                <div className="shrink-0 mx-6 mt-4 rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                      <span className="text-sm">↩</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground">Continue where you left off?</p>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        <span className="font-medium text-foreground">{pendingResumeSession.templateName}</span>
-                        {pendingResumeSession.importedDataMeta?.fileName && (
-                          <span className="text-muted-foreground"> · {pendingResumeSession.importedDataMeta.rowCount?.toLocaleString() ?? '?'} rows from {pendingResumeSession.importedDataMeta.fileName}</span>
-                        )}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={handleResumeSession}
-                      className="shrink-0 bg-primary/90 hover:bg-primary gap-1.5 h-8 px-3 text-xs"
-                    >
-                      Resume session
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setPendingResumeSession(null);
-                        sessionStorage.removeItem(`gencert_session:${orgSlug}`);
-                        try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
-                      }}
-                      className="shrink-0 text-muted-foreground hover:text-foreground h-8 px-3 text-xs"
-                    >
-                      Start fresh
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <div className="flex-1 overflow-hidden">
-                <TemplateSelector
-                  savedTemplates={savedTemplates}
-                  onSelectTemplate={(t) => { setTemplateMode('single'); handleTemplateSelect(t); setPendingResumeSession(null); }}
-                  onNewUpload={handleNewTemplateUpload}
-                  onDeleteTemplate={handleDeleteTemplate}
-                  recentGenerated={recentGenerated}
-                  inProgress={inProgressTemplates}
-                  recentLoading={recentLoading}
-                  onSelectRecentTemplate={(t, loadFields) => { handleRecentTemplateSelect(t, loadFields); setPendingResumeSession(null); }}
-                  templateMode={templateMode}
-                  onTemplateModeChange={setTemplateMode}
-                  onSelectMultipleTemplates={(ts) => { handleSelectMultipleTemplates(ts); setPendingResumeSession(null); }}
-                />
-              </div>
+            <div className="flex-1 overflow-hidden">
+              <TemplateSelector
+                savedTemplates={savedTemplates}
+                onSelectTemplate={(t) => { setTemplateMode('single'); handleTemplateSelect(t); setPendingResumeSession(null); }}
+                onNewUpload={handleNewTemplateUpload}
+                onDeleteTemplate={handleDeleteTemplate}
+                onRenameTemplate={async (id, name) => {
+                  await api.templates.update(id, { name });
+                  setSavedTemplates(prev => prev.map(t => t.id === id ? { ...t, title: name, name } : t));
+                }}
+                recentGenerated={recentGenerated}
+                inProgress={inProgressTemplates}
+                recentLoading={recentLoading}
+                onSelectRecentTemplate={(t, loadFields) => { handleRecentTemplateSelect(t, loadFields); setPendingResumeSession(null); }}
+                templateMode={templateMode}
+                onTemplateModeChange={setTemplateMode}
+                onSelectMultipleTemplates={(ts) => { handleSelectMultipleTemplates(ts); setPendingResumeSession(null); }}
+                pendingResumeSession={pendingResumeSession}
+                onResumeSession={handleResumeSession}
+                onDismissResume={() => {
+                  setPendingResumeSession(null);
+                  sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+                  try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
+                }}
+              />
             </div>
           )}
 
           {currentStep === 'data' && (
-            <div className="flex-1 p-8 overflow-y-auto">
+            <div className="flex-1 px-8 pt-8 pb-20 overflow-y-auto">
               {(() => {
                 // In multi mode, expose all templates' fields for sample file + mapping
                 const allMultiFields = templateMode === 'multi' && templateConfigs.length > 0
@@ -1841,7 +1845,7 @@ export default function GenerateCertificatePage() {
           )}
 
           {currentStep === 'export' && (
-            <div className="flex-1 p-8 overflow-y-auto">
+            <div className="flex-1 px-8 pt-8 pb-20 overflow-y-auto">
               {(() => {
                 if (templateMode === 'multi' && templateConfigs.length > 0) {
                   // Build primary + additional from templateConfigs
@@ -1889,6 +1893,38 @@ export default function GenerateCertificatePage() {
               })()}
             </div>
           )}
+
+          {/* Floating stepper overlay — shown on data / export steps only (not template or design) */}
+          {currentStep !== 'design' && currentStep !== 'template' && (
+            <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center items-center pointer-events-none">
+              <div
+                className="pointer-events-auto relative"
+                onMouseEnter={() => setStepperExpanded(true)}
+                onMouseLeave={() => setStepperExpanded(false)}
+              >
+                {/* Expanded stepper — in flow when active (sizes the container) */}
+                <div
+                  className={['transition-all duration-300', stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
+                  style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
+                >
+                  {stepperContent}
+                </div>
+                {/* Collapsed pill — icon only, brand color border */}
+                {(() => {
+                  const stepDef = steps.find(s => s.id === currentStep);
+                  const StepIcon = stepDef?.icon;
+                  return (
+                    <div
+                      className={['transition-all duration-300 bg-card/90 backdrop-blur-xl border border-primary/50 rounded-md shadow-lg px-2.5 py-2.5 flex items-center justify-center', !stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
+                      style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
+                    >
+                      {StepIcon && <StepIcon className="w-4 h-4 text-primary shrink-0" />}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1907,7 +1943,7 @@ export default function GenerateCertificatePage() {
 
       {/* ── Full-screen design overlay ── */}
       {currentStep === 'design' && template && (
-        <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-background flex flex-col">
+        <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-[#0A0A0A] flex flex-col">
 
           {/* ── Version-change warning banner ── */}
           {versionChangedWarning && (
@@ -1958,14 +1994,14 @@ export default function GenerateCertificatePage() {
 
           {/* ── Canvas area (flex-1) — both panels are absolute overlays, layout never shifts ── */}
 
-          <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef}>
+          <div className="flex-1 relative overflow-hidden min-w-0" ref={canvasAreaRef} style={{ overscrollBehavior: 'none' }}>
 
             {/* ── Left panel — absolute overlay, never shifts canvas layout ── */}
             {!previewOpen && (
               !leftPanelVisible ? (
                 <div className="absolute top-3 left-3 z-40 pointer-events-auto">
                   <div
-                    className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                    className="flex flex-col items-center gap-3 bg-[#141414] border border-white/6 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-white/5 transition-colors select-none"
                     style={{ width: 40 }}
                     onClick={() => setLeftPanelVisible(true)}
                     title="Expand layers panel"
@@ -1981,14 +2017,14 @@ export default function GenerateCertificatePage() {
                   </div>
                 </div>
               ) : (
-                <div className="absolute top-3 left-3 bottom-12 z-40 w-72 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
+                <div className="absolute top-3 left-3 bottom-12 z-40 w-72 flex flex-col bg-[#141414] border border-white/6 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
                   {/* Panel header */}
-                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-semibold text-foreground flex-1">Design</span>
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/6 shrink-0">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span className="text-xs font-semibold text-zinc-200 flex-1">Design</span>
                     <button
                       onClick={() => setLeftPanelVisible(false)}
-                      className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
+                      className="text-zinc-500 hover:text-zinc-200 rounded p-0.5 hover:bg-white/5 transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -2247,34 +2283,42 @@ export default function GenerateCertificatePage() {
               </div>
             )}
 
-            {/* ── Stepper — transparent overlay at bottom of canvas ── */}
-            <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none">
-              <div className="flex items-center px-4 py-2 gap-2 pointer-events-auto">
-                <div className="flex-1 flex justify-center">
-                  {stepperExpanded ? (
-                    stepperContent
-                  ) : (
-                    <span className="text-xs font-medium text-muted-foreground select-none">
-                      {steps.find(s => s.id === currentStep)?.label ?? 'Design Fields'}
-                    </span>
-                  )}
-                </div>
-                <button
-                  className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
-                  onClick={() => setStepperExpanded(v => !v)}
-                  title={stepperExpanded ? 'Collapse steps' : 'Expand steps'}
+            {/* ── Stepper — floating glass overlay at bottom of canvas ── */}
+            <div className="absolute bottom-4 left-0 right-0 z-30 flex justify-center items-center pointer-events-none">
+              <div
+                className="pointer-events-auto relative"
+                onMouseEnter={() => setStepperExpanded(true)}
+                onMouseLeave={() => setStepperExpanded(false)}
+              >
+                {/* Expanded stepper — in flow when active (sizes the container) */}
+                <div
+                  className={['transition-all duration-300', stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
+                  style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
                 >
-                  {stepperExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-                </button>
+                  {stepperContent}
+                </div>
+                {/* Collapsed pill — icon only, brand color border */}
+                {(() => {
+                  const stepDef = steps.find(s => s.id === currentStep);
+                  const StepIcon = stepDef?.icon;
+                  return (
+                    <div
+                      className={['transition-all duration-300 bg-card/90 backdrop-blur-xl border border-primary/50 rounded-md shadow-lg px-2.5 py-2.5 flex items-center justify-center', !stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
+                      style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
+                    >
+                      {StepIcon && <StepIcon className="w-4 h-4 text-primary shrink-0" />}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             {/* ── Right panel — overlay inside canvas, never pushes template ── */}
             {!previewOpen && selectedField && (
               rightPanelVisible ? (
-                <div className="absolute top-3 right-3 bottom-12 z-40 w-80 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
-                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40 shrink-0">
-                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
+                <div className="absolute top-3 right-3 bottom-12 z-40 w-80 flex flex-col bg-[#141414] border border-white/6 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/6 shrink-0">
+                    <Palette className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span className="text-xs font-semibold text-zinc-200 flex-1">Properties</span>
                     <button
                       onClick={() => setRightPanelVisible(false)}
                       className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
@@ -2319,7 +2363,7 @@ export default function GenerateCertificatePage() {
               ) : (
                 <div className="absolute top-1/2 right-3 -translate-y-1/2 z-40 pointer-events-auto">
                   <div
-                    className="flex flex-col items-center gap-3 bg-card border border-border/50 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                    className="flex flex-col items-center gap-3 bg-[#141414] border border-white/6 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-white/5 transition-colors select-none"
                     style={{ width: 40 }}
                     onClick={() => setRightPanelVisible(true)}
                     title="Expand properties panel"
@@ -2417,7 +2461,9 @@ export default function GenerateCertificatePage() {
 }
 
 // Map a DB field record back to a frontend CertificateField, restoring all style properties
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDbFieldToFrontend(field: any): CertificateField {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = (field.style ?? {}) as Record<string, any>;
   const VALID_FRONTEND_TYPES = new Set(['name', 'course', 'start_date', 'end_date', 'custom_text', 'qr_code', 'image', 'credential_id', 'organization', 'grade', 'level', 'duration', 'issuer']);
   return {

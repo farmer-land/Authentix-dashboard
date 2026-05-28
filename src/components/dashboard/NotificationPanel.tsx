@@ -280,6 +280,7 @@ export function NotificationPanel({
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleToggle = () => {

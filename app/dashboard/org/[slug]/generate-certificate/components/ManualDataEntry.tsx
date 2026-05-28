@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -141,7 +140,7 @@ export function ManualDataEntry({ fields, onDataSubmit, onDataChange, initialDat
   };
 
   // Save edit with explicit updated data (avoids stale closure when field + save happen together)
-  const handleSaveEditWithData = (key: string, value: string) => {
+  const _handleSaveEditWithData = (key: string, value: string) => {
     if (!editingRow) return;
     const updatedRow = { ...editingRow, data: { ...editingRow.data, [key]: value }, isEditing: false };
     setRows(rows.map((r) => r.id === editingRow.id ? updatedRow : r));

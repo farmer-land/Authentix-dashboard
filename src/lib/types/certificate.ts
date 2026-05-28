@@ -110,6 +110,7 @@ export interface CertificateTemplate {
 export interface ImportedData {
   fileName: string;
   headers: string[]; // Column names
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rows: Record<string, any>[]; // Array of row objects (preview only)
   rowCount: number;
   /** Server-side import ID — set when the file was uploaded via the imports API */

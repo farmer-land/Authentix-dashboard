@@ -44,7 +44,7 @@ interface AccessContextResponse {
   } | null;
 }
 
-function ProfileErrorScreen({
+function _ProfileErrorScreen({
   errorCode,
   message,
 }: {
@@ -104,14 +104,14 @@ export default async function OrgDashboardLayout({
 
   // Single call returns user + org + membership + email_verified
   let ctx: AccessContextResponse | null = null;
-  let ctxError: ServerApiError | null = null;
+  let _ctxError: ServerApiError | null = null;
 
   try {
     const result = await serverApiRequest<AccessContextResponse>("/auth/access-context");
     ctx = result.data ?? null;
   } catch (error) {
     if (error instanceof ServerApiError) {
-      ctxError = error;
+      _ctxError = error;
       if (error.status === 401 || error.code === "AUTH_ERROR" || error.code === "UNAUTHORIZED") {
         redirect("/login");
       }

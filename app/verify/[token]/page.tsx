@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { track } from '@vercel/analytics';
 import { useParams } from 'next/navigation';
 import {
-  XCircle, AlertTriangle, Calendar, User, Building2, Award,
+  XCircle, AlertTriangle, Calendar, Building2, Award,
   ExternalLink, Download, Share2, Clock, ShieldCheck, ShieldX,
-  ShieldAlert, Hash, CheckCircle2, Loader2, RefreshCw, Link, Linkedin,
+  ShieldAlert, Hash, Loader2, RefreshCw, Link, Linkedin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { downloadFileFromUrl } from '@/lib/utils/download';

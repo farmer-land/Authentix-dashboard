@@ -34,6 +34,7 @@ export type GenerateCertificateAction =
 
   // Template
   | { type: "SET_TEMPLATE"; template: CertificateTemplate | null; versionId?: string | null }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | { type: "SET_SAVED_TEMPLATES"; templates: any[] }
   | { type: "SET_TEMPLATE_LOADING"; loading: boolean }
   | { type: "SET_TEMPLATE_META"; meta: TemplateMeta }

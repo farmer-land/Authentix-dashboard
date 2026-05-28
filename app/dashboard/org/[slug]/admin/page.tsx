@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { ALL_FEATURES, FEATURE_LABELS } from '@/lib/feature-flags';
 import type { OrgFeature } from '@/lib/feature-flags';

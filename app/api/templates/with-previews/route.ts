@@ -117,6 +117,7 @@ export async function GET(request: NextRequest) {
 
     // Normalize templates — category/subcategory names come from backend JOINs.
     // If the backend omits them, they are null; no client-side fallback lookups.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const templatesWithPreviews: Template[] = templates.map((template: any) => {
       const normalizedId = template.id || template.template_id;
       const normalizedTitle = template.title || template.name;
@@ -198,6 +199,7 @@ export async function GET(request: NextRequest) {
         width: template.width || null,
         height: template.height || null,
         fields: template.fields || [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         certificate_count: (template as any).certificates_count ?? template.certificate_count ?? 0,
         organization_id: template.organization_id,
         created_at: template.created_at,

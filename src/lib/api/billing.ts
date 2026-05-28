@@ -81,6 +81,7 @@ export const billingApi = {
 
   listPaymentMethods: async (): Promise<PaymentMethod[]> => {
     const response = await apiRequest<{ methods: PaymentMethod[] }>("/billing/payment-methods");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (response.data as any)?.methods ?? [];
   },
 

@@ -12,7 +12,7 @@ import {
   deleteTemplate,
   getTemplateCategories,
 } from "../api";
-import type { Template, TemplateListParams, TemplateCategoriesResponse } from "../types";
+import type { Template, TemplateListParams } from "../types";
 
 /**
  * Hook for managing templates list

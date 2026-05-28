@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Image as ImageIcon, Stamp, PenTool, Upload, Plus, Trash2, MousePointerClick, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, Stamp, PenTool, Upload, Plus, Trash2, MousePointerClick } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { api } from '@/lib/api/client';
 
@@ -33,7 +33,7 @@ export function AssetLibrary({ assets, onAssetsChange, onAddAsset }: AssetLibrar
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [assetName, setAssetName] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+  const [, setIsUploading] = useState(false);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {

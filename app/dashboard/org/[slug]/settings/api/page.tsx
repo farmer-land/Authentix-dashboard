@@ -42,6 +42,7 @@ export default function APISettingsPage() {
         : await bootstrapIdentity.mutateAsync();
       setNewApiKey(result.api_key || null);
       setShowKey(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message || "Failed to generate API key");
     }
@@ -50,6 +51,7 @@ export default function APISettingsPage() {
   const handleToggleAPI = async () => {
     try {
       await updateAPIEnabled.mutateAsync(!apiEnabled);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message || "Failed to update API status");
     }

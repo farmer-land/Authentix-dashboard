@@ -59,6 +59,7 @@ export function IndustrySelectModal({
 
       onIndustrySelected();
       onOpenChange(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message || "Failed to save industry selection");
     } finally {

@@ -4,7 +4,7 @@
  * Helper functions for template operations.
  */
 
-import type { Template, TemplateFileType, CertificateField } from "./types";
+import type { TemplateFileType, CertificateField } from "./types";
 
 /**
  * Badge colors based on category/subcategory text

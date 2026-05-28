@@ -6,6 +6,7 @@ import { CreditCard, Smartphone, Plus, Trash2, CheckCircle2, Loader2, AlertCircl
 
 // Preload Razorpay checkout script as soon as this component mounts
 function preloadRazorpay() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (typeof window === 'undefined' || (window as any).Razorpay) return;
   if (document.getElementById('rzp-checkout-js')) return;
   const s = document.createElement('script');
@@ -16,6 +17,7 @@ function preloadRazorpay() {
 
 function waitForRazorpay(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((window as any).Razorpay) { resolve(); return; }
     const el = document.getElementById('rzp-checkout-js');
     if (!el) { reject(new Error('Razorpay script not injected')); return; }
@@ -78,6 +80,7 @@ export function PaymentMethodsCard({ organizationId: _ }: { organizationId: stri
       const method = await billingApi.saveUpi(vpa);
       setMethods(prev => [...prev, method]);
       setUpiInput('');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setUpiError(err?.message ?? 'Failed to save UPI');
     } finally {
@@ -92,6 +95,7 @@ export function PaymentMethodsCard({ organizationId: _ }: { organizationId: stri
       // Ensure script is ready before fetching the order
       await waitForRazorpay();
       const order = await billingApi.setupCard();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const RazorpayClass = (window as any).Razorpay;
       if (!RazorpayClass) throw new Error('Razorpay not available after load');
 
@@ -122,6 +126,7 @@ export function PaymentMethodsCard({ organizationId: _ }: { organizationId: stri
       });
       rzp.on('payment.failed', () => { setCardError('Card setup failed. Please try again.'); setCardSetting(false); });
       rzp.open();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setCardError(err?.message ?? 'Failed to start card setup');
       setCardSetting(false);

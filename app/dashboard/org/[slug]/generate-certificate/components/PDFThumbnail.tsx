@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText } from 'lucide-react';
 
 interface PDFThumbnailProps {
   url: string;

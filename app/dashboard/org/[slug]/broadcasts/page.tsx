@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, Suspense } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/core";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,15 +21,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Megaphone, Plus, Loader2, Send, Trash2, MoreHorizontal, Clock,
-  CheckCircle2, AlertCircle, Edit2, Users, Upload, FileSpreadsheet,
+  CheckCircle2, AlertCircle, Users, Upload, FileSpreadsheet,
   ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw, Info,
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
 import {
-  useEmailBroadcasts, useCreateBroadcast, useUpdateBroadcast,
-  useSendBroadcast, useDeleteBroadcast, useDeliveryIntegrations,
+  useEmailBroadcasts, useCreateBroadcast,
+  useDeleteBroadcast, useDeliveryIntegrations,
   useEmailContacts, useDeliveryTemplates,
 } from "@/lib/hooks/queries/delivery";
 import { useEmailSegments } from "@/lib/hooks/queries/delivery";
@@ -44,6 +43,12 @@ import { useOrg } from "@/lib/org";
 // ── Template type inference ────────────────────────────────────────────────────
 
 const CERT_VARS = ["certificate_number", "cert_number", "certificate_id", "recipient_name", "course_name", "issue_date", "expiry_date"];
+
+// System variables auto-filled by the platform — not required as recipient columns
+const SYSTEM_VARS = new Set([
+  "verification_url", "certificate_number", "certificate_id",
+  "certificate_image_url", "unsubscribe_url", "preview_url",
+]);
 const CERT_BLOCKS = ["qr_code", "details_box", "certificate_number"];
 
 function inferTemplateType(body: string): "broadcast" | "certificate" {
@@ -236,7 +241,7 @@ function WizardSteps({ current }: { current: number }) {
 // ── Wizard ─────────────────────────────────────────────────────────────────────
 
 function CampaignWizard({
-  onClose,
+  onClose: _onClose,
   onCreated,
   initialTemplateId,
   initialSourceRef,
@@ -320,9 +325,6 @@ function CampaignWizard({
   // Show the dropdown only when the org has 2+ real integrations to choose from.
   // 0 or 1 real integration → auto-selected silently (platform fills in for 0).
   const showSenderDropdown = !integrationsLoading && realOptions.length > 1;
-  // integrationOptions kept for backwards-compat in the rest of the file
-  const integrationOptions = allSenderOptions;
-
   const [w, setW] = useState<WizardState>({
     name: savedDraft?.name ?? "",
     email_type: savedDraft?.email_type ?? "lifecycle",
@@ -398,6 +400,7 @@ function CampaignWizard({
       ?? allSenderOptions[0]!; // platform default when no real options
     setSelectedIntegrationId(def.id);
     setW(prev => ({ ...prev, from_name: def.name, from_email: def.email, reply_to: def.replyTo }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [integrationsLoading, showSenderDropdown, allSenderOptions.length]);
 
   // ── File upload ────────────────────────────────────────────────────────────
@@ -427,15 +430,10 @@ function CampaignWizard({
   }, []);
 
   // ── Template variables used in the composed HTML ──────────────────────────
-  // These are auto-filled by the system and must not be shown as required recipient columns.
-  const SYSTEM_VARS = new Set([
-    "verification_url", "certificate_number", "certificate_id",
-    "certificate_image_url", "unsubscribe_url", "preview_url",
-  ]);
-  const templateVarsFromHtml: string[] = w.html_body
+  const templateVarsFromHtml: string[] = useMemo(() => w.html_body
     ? [...new Set([...w.html_body.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]!))]
         .filter(v => v.toLowerCase() !== "email" && !SYSTEM_VARS.has(v.toLowerCase()))
-    : [];
+    : [], [w.html_body]);
 
   // Structured manual mode: when the email uses variables, show a table instead of a textarea
   const isStructuredManual = w.recipient_mode === "manual" && templateVarsFromHtml.length > 0;
@@ -483,13 +481,13 @@ function CampaignWizard({
     : [];
 
   // ── Step validation ────────────────────────────────────────────────────────
-  const step0Valid = !!w.name.trim() && !!w.from_email.trim() && !!w.from_name.trim();
+  const _step0Valid = !!w.name.trim() && !!w.from_email.trim() && !!w.from_name.trim();
   const step1Valid = w.recipient_mode === "segment"
     ? !!w.segment_id
     : w.recipient_mode === "contacts"
     ? contactTotal > 0
     : recipientCount > 0;
-  const step2Valid = !!w.subject.trim() && !!w.html_body.trim();
+  const _step2Valid = !!w.subject.trim() && !!w.html_body.trim();
 
   const handleEditorDone = useCallback((result: EmailEditorResult) => {
     setW(prev => ({
@@ -535,11 +533,11 @@ function CampaignWizard({
   // ── Smart step navigation ─────────────────────────────────────────────────
   // Step index 1 is the Design step. Skip it when template is already pre-selected
   // so the user never sees a pointless "template already chosen → Continue" screen.
-  const handleContinue = () => {
+  const _handleContinue = () => {
     const next = step + 1;
     setStep(next === 1 && selectedTemplateId ? 2 : next);
   };
-  const handleBack = () => {
+  const _handleBack = () => {
     const prev = step - 1;
     setStep(prev === 1 && selectedTemplateId ? 0 : prev);
   };
@@ -1429,7 +1427,7 @@ function CampaignWizard({
   // ── 2-step wizard: Compose → Recipients ───────────────────────────────────
   const composeValid = !!w.name.trim() && !!w.from_email.trim() && !!w.subject.trim() && !!w.html_body.trim();
   const stepRenders = [renderCompose, renderStep1];
-  const stepValid   = [composeValid, step1Valid];
+  const _stepValid   = [composeValid, step1Valid];
 
   const recipientSummary =
     w.recipient_mode === "segment"

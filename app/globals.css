@@ -169,8 +169,8 @@
   --sidebar-ring:                oklch(0.439 0 0);
 
   /* Canvas (generate-certificate design area) */
-  --canvas-bg:  #141414;
-  --canvas-dot: #333333;
+  --canvas-bg:  #0A0A0A;
+  --canvas-dot: #2a2a2a;
 }
 
 /* ============================================

@@ -44,9 +44,9 @@ export const catalogApi = {
       groups: Array<{
         group_key: string;
         label: string;
-        items: Array<{ id: string; name: string; key: string }>;
+        items: Array<{ id: string; name: string; key: string; color?: string | null }>;
       }>;
-      flat?: Array<{ id: string; name: string; key: string }>;
+      flat?: Array<{ id: string; name: string; key: string; color?: string | null }>;
     }>("/catalog/categories");
     return response.data!;
   },
@@ -63,6 +63,7 @@ export const catalogApi = {
         name: string;
         sort_order: number | null;
         is_org_custom: boolean;
+        color?: string | null;
       }>;
     }>(`/catalog/categories/${categoryId}/subcategories`);
     return response.data!;

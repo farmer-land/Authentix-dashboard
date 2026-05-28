@@ -30,9 +30,11 @@ vi.mock('@/lib/api/client', () => ({
 
 // Capture the onDrop callback from useDropzone so tests can invoke it directly.
 // This avoids having to simulate complex browser drag-and-drop DOM events.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let capturedOnDrop: (accepted: File[], rejected: any[]) => void = () => {};
 
 vi.mock('react-dropzone', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useDropzone: ({ onDrop }: { onDrop: (accepted: File[], rejected: any[]) => void }) => {
     capturedOnDrop = onDrop;
     return {

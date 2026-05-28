@@ -23,6 +23,7 @@ export interface CatalogCategory {
   id: string;
   name: string;
   key: string;
+  color?: string | null;
 }
 
 export interface CatalogSubcategory {
@@ -31,6 +32,7 @@ export interface CatalogSubcategory {
   name: string;
   sort_order: number | null;
   is_org_custom: boolean;
+  color?: string | null;
 }
 
 export interface CatalogCategoryGroup {

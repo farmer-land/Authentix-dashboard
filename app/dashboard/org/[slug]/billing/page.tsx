@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useBillingOverview } from '@/lib/hooks/queries/billing';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { getOrganizationLogoUrl } from '@/lib/utils/organization-logo';
@@ -10,8 +9,8 @@ import { InvoiceList } from './components/invoice-list';
 import { preloadRazorpay } from '@/lib/razorpay';
 import { PayNowButton } from './components/pay-now-button';
 import {
-  Zap, TrendingUp, Receipt, Sparkles, Info, Mail, Users,
-  HardDrive, ArrowUpRight, CheckCircle2, AlertTriangle, Lock,
+  Zap, TrendingUp, Receipt, Info, Mail, Users,
+  HardDrive, CheckCircle2, AlertTriangle, Lock,
   Building2, X, Check, Minus, ChevronRight, Moon, Sliders,
   Trash2, ShieldAlert,
 } from 'lucide-react';
@@ -220,7 +219,7 @@ function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClo
             </thead>
 
             <tbody>
-              {categories.map((category, ci) => {
+              {categories.map((category, _ci) => {
                 const rows = PLAN_FEATURES.filter(f => f.category === category);
                 return rows.map((row, ri) => {
                   const isFirstInCat = ri === 0;

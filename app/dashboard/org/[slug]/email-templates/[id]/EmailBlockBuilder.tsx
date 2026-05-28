@@ -30,13 +30,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Type, AlignLeft, AlignCenter, AlignRight, Image as ImageIcon, QrCode, MousePointerClick,
   TableProperties, Minus, ArrowUpDown, LayoutTemplate, Plus, Trash2,
-  GripVertical, GripHorizontal, AlertCircle, RefreshCw, Copy, SlidersHorizontal,
+  GripVertical, GripHorizontal, RefreshCw, Copy, SlidersHorizontal,
   ArrowUp, ArrowDown, ChevronDown, ChevronRight, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1342,6 +1339,7 @@ function EditableText({
     setSwapPopover(null);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Comp = Tag as any;
   return (
     <>
@@ -2466,6 +2464,7 @@ function InlineSwatch({ value, onChange, title }: { value: string; onChange: (v:
 
 // ── Font size input with preset dropdown ─────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function FontSizeInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -3847,7 +3846,7 @@ export function EmailBlockBuilder({
   onEmailBgChange: _onEmailBgChange,
   onChange,
   onSelect,
-  onStartFresh,
+  onStartFresh: _onStartFresh,
   onSubjectChange,
   onSenderNameChange,
   onAddBlock,
