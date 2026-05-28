@@ -18,6 +18,7 @@ beforeEach(() => {
     revokeObjectURL: vi.fn(),
   });
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
     blob: () => Promise.resolve(new Blob(['pdf-content'], { type: 'application/pdf' })),
   }));
   vi.stubGlobal('open', vi.fn());
@@ -280,7 +281,7 @@ describe('CertificateTable — Download All (ZIP)', () => {
     expect(screen.queryByRole('button', { name: /Download All/i })).not.toBeInTheDocument();
   });
 
-  it('clicking "Download All" opens the ZIP URL in a new tab', async () => {
+  it('clicking "Download All" fetches the ZIP and triggers an anchor download', async () => {
     const user = userEvent.setup();
     render(
       <CertificateTable
@@ -289,7 +290,19 @@ describe('CertificateTable — Download All (ZIP)', () => {
         zipDownloadUrl="https://storage.example.com/all.zip"
       />,
     );
+
+    const mockAnchor = { href: '', download: '', click: vi.fn() };
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'a') return mockAnchor as unknown as HTMLElement;
+      return origCreate(tag);
+    });
+    vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockAnchor as unknown as Node);
+    vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockAnchor as unknown as ChildNode);
+
     await user.click(screen.getByRole('button', { name: /Download All/i }));
-    expect(window.open).toHaveBeenCalledWith('https://storage.example.com/all.zip', '_blank');
+    await waitFor(() => expect(mockAnchor.click).toHaveBeenCalled());
+    expect(fetch).toHaveBeenCalledWith('https://storage.example.com/all.zip');
+    expect(mockAnchor.download).toBe('certificates.zip');
   });
 });
