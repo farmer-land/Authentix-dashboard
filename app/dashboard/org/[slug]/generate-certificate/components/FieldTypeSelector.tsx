@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   User, BookOpen, Calendar, Type, QrCode, Image as ImageIcon,
-  Hash, Building2, Award, TrendingUp, Clock, UserCheck,
+  Hash, Building2, Award, TrendingUp, Clock, UserCheck, Upload,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,6 +24,7 @@ interface FieldTypeSelectorProps {
   onAddImageFile?: (file: File) => void;
   pdfWidth: number;
   pdfHeight: number;
+  orgLogoUrl?: string | null;
 }
 
 const FIELD_ICONS: Record<FieldType, React.ComponentType<{ className?: string }>> = {
@@ -64,9 +65,10 @@ const FIELD_GROUPS: { label: string; types: FieldType[] }[] = [
 const REF_WIDTH = 595;
 const REF_HEIGHT = 842;
 
-export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile, pdfWidth, pdfHeight }: FieldTypeSelectorProps) {
+export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile, pdfWidth, pdfHeight, orgLogoUrl }: FieldTypeSelectorProps) {
   const [showCustomNameDialog, setShowCustomNameDialog] = useState(false);
   const [customFieldName, setCustomFieldName] = useState('');
+  const [showImagePickerDialog, setShowImagePickerDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const createField = (type: FieldType, customLabel?: string) => {
@@ -108,7 +110,11 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       setCustomFieldName('');
       setShowCustomNameDialog(true);
     } else if (type === 'image' && (onAddImageFile || onAddImageField)) {
-      fileInputRef.current?.click();
+      if (orgLogoUrl) {
+        setShowImagePickerDialog(true);
+      } else {
+        fileInputRef.current?.click();
+      }
     } else {
       createField(type);
     }
@@ -195,6 +201,46 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
             <Button variant="outline" onClick={() => setShowCustomNameDialog(false)}>Cancel</Button>
             <Button onClick={handleCreateCustomField}>Add Field</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImagePickerDialog} onOpenChange={setShowImagePickerDialog}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Add Image</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {orgLogoUrl && (
+              <button
+                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+                onClick={() => {
+                  onAddImageField?.(orgLogoUrl, 'Organization Logo');
+                  setShowImagePickerDialog(false);
+                }}
+              >
+                <img src={orgLogoUrl} alt="" className="w-10 h-10 object-contain rounded shrink-0 bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <div>
+                  <p className="text-sm font-medium">Organization logo</p>
+                  <p className="text-xs text-muted-foreground">Use your uploaded logo</p>
+                </div>
+              </button>
+            )}
+            <button
+              className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+              onClick={() => {
+                setShowImagePickerDialog(false);
+                fileInputRef.current?.click();
+              }}
+            >
+              <div className="w-10 h-10 flex items-center justify-center rounded bg-muted shrink-0">
+                <Upload className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Upload image</p>
+                <p className="text-xs text-muted-foreground">PNG, JPG, SVG, WebP</p>
+              </div>
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
     </>

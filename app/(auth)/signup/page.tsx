@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,65 @@ function Field({
         <p id={`${id}-err`} className="text-xs text-destructive leading-snug">
           {error}
         </p>
+      )}
+    </div>
+  );
+}
+
+// ── Website field with live favicon preview ────────────────────────────────────
+
+function WebsiteFieldWithPreview({
+  defaultValue,
+  error,
+}: {
+  defaultValue?: string;
+  error?: string;
+}) {
+  const [value, setValue] = useState(defaultValue ?? "");
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      try {
+        const url = new URL(value.startsWith("http") ? value : `https://${value}`);
+        setFaviconUrl(`https://www.google.com/s2/favicons?domain=${url.hostname}&sz=128`);
+      } catch {
+        setFaviconUrl(null);
+      }
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [value]);
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="website_url" className="text-sm font-medium leading-none">
+        Website <span className="text-muted-foreground font-normal">(optional)</span>
+      </Label>
+      <div className="flex items-center gap-2">
+        {faviconUrl && (
+          <img
+            src={faviconUrl}
+            alt=""
+            className="w-6 h-6 rounded shrink-0 object-contain"
+            onError={() => setFaviconUrl(null)}
+          />
+        )}
+        <Input
+          id="website_url"
+          name="website_url"
+          type="text"
+          placeholder="https://yourcompany.com"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className={`h-10 flex-1 ${error ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+          aria-invalid={error ? "true" : undefined}
+          aria-describedby={error ? "website_url-err" : undefined}
+        />
+      </div>
+      {error && (
+        <p id="website_url-err" className="text-xs text-destructive leading-snug">{error}</p>
       )}
     </div>
   );
@@ -181,6 +240,7 @@ function SignupPageContent() {
                 <input type="hidden" name="email" value={state.email ?? ""} />
                 <input type="hidden" name="full_name" value={state.full_name ?? ""} />
                 <input type="hidden" name="company_name" value={state.company_name ?? ""} />
+                <input type="hidden" name="website_url" value={state.website_url ?? ""} />
               </>
             )}
 
@@ -197,10 +257,14 @@ function SignupPageContent() {
                 />
                 <Field
                   id="company_name"
-                  label="Company or organization"
+                  label="Organization"
                   placeholder="Acme Corporation"
                   defaultValue={state.company_name ?? ""}
                   error={state.fieldErrors.company_name}
+                />
+                <WebsiteFieldWithPreview
+                  defaultValue={state.website_url ?? ""}
+                  error={state.fieldErrors.website_url}
                 />
                 <Field
                   id="email"

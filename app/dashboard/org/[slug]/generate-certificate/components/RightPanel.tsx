@@ -8,6 +8,7 @@ import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronD
 import { RgbaColorPicker } from 'react-colorful';
 import React, { useState, useRef, useEffect, useCallback, useMemo, startTransition, createContext, useContext } from 'react';
 import { api } from '@/lib/api/client';
+import { useOrganization } from '@/lib/hooks/queries/organizations';
 import type { GoogleFont } from '@/app/api/fonts/route';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -258,6 +259,8 @@ function QRLogoUploader({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const { organization } = useOrganization();
+  const orgLogoUrl = organization?.logo_url ?? null;
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -320,18 +323,29 @@ function QRLogoUploader({
           </div>
         </div>
       ) : (
-        <div
-          className="border border-dashed border-border/50 rounded-lg p-3 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); }}
-          onDrop={(e) => {
-            e.preventDefault();
-            const f = e.dataTransfer.files?.[0];
-            if (f) handleFile(f);
-          }}
-        >
-          <Upload className="w-4 h-4 text-muted-foreground/50 mx-auto mb-1" />
-          <p className="text-[10px] text-muted-foreground/60">Click or drag image</p>
+        <div className="space-y-1.5">
+          {orgLogoUrl && (
+            <button
+              onClick={() => onLogoChange(orgLogoUrl)}
+              className="w-full flex items-center justify-center gap-1.5 border border-primary/30 rounded-lg py-1.5 text-[10px] text-primary hover:bg-primary/5 transition-colors"
+            >
+              <img src={orgLogoUrl} className="w-4 h-4 object-contain rounded shrink-0" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              Use organization logo
+            </button>
+          )}
+          <div
+            className="border border-dashed border-border/50 rounded-lg p-3 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+          >
+            <Upload className="w-4 h-4 text-muted-foreground/50 mx-auto mb-1" />
+            <p className="text-[10px] text-muted-foreground/60">Click or drag image</p>
+          </div>
         </div>
       )}
     </div>

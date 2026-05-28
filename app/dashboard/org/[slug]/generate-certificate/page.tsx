@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useGenerateCertificateState } from './state/useGenerateCertificateState';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { useOrgSlug } from '@/lib/org';
+import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { CertificateField, CertificateTemplate, ImportedData, FieldMapping, FIELD_TYPE_CONFIG, FieldType } from '@/lib/types/certificate';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
@@ -75,6 +76,18 @@ export default function GenerateCertificatePage() {
     setLeftPanelVisible, setLeftPanelPos, setRightPanelVisible, setStepperExpanded,
     setPanelPos, setPanelReady, setPreviewOpen, setLibraryAssets, setShowNavGuard,
   } = useGenerateCertificateState(templateIdFromUrl);
+
+  const { organization } = useOrganization();
+
+  // Seed org logo as the first logo asset when the page loads and org logo is available
+  useEffect(() => {
+    const url = organization?.logo_url;
+    if (!url) return;
+    setLibraryAssets(prev => {
+      if (prev.some(a => a.id === '__org_logo__')) return prev;
+      return [{ id: '__org_logo__', name: (organization?.name ?? 'Org') + ' Logo', url, type: 'logo' as const }, ...prev];
+    });
+  }, [organization?.logo_url, organization?.name, setLibraryAssets]);
 
   // Manual entries appended after the uploaded file rows during generation
   const [additionalRows, setAdditionalRows] = useState<Record<string, unknown>[]>([]);
@@ -2018,6 +2031,7 @@ export default function GenerateCertificatePage() {
                                   onAddImageFile={handleAddImageFile}
                                   pdfWidth={template.pdfWidth}
                                   pdfHeight={template.pdfHeight}
+                                  orgLogoUrl={organization?.logo_url ?? null}
                                 />
                               </div>
                             )}
@@ -2031,6 +2045,7 @@ export default function GenerateCertificatePage() {
                               onAddImageFile={handleAddImageFile}
                               pdfWidth={template.pdfWidth}
                               pdfHeight={template.pdfHeight}
+                              orgLogoUrl={organization?.logo_url ?? null}
                             />
                           </div>
                         )}

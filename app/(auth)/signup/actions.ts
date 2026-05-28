@@ -13,6 +13,7 @@ export interface SignupState {
     email?: string;
     full_name?: string;
     company_name?: string;
+    website_url?: string;
     token?: string;
   };
   success: boolean;
@@ -20,6 +21,7 @@ export interface SignupState {
   email?: string;
   full_name?: string;
   company_name?: string;
+  website_url?: string;
   use_case?: UseCase;
 }
 
@@ -56,6 +58,7 @@ export async function signupAction(
       email: (formData.get("email") as string || "").trim().toLowerCase(),
       full_name: (formData.get("full_name") as string || "").trim(),
       company_name: (formData.get("company_name") as string || "").trim(),
+      website_url: (formData.get("website_url") as string || "").trim(),
       use_case: (formData.get("use_case") as UseCase) || prevState.use_case || "both",
     };
   }
@@ -65,6 +68,7 @@ export async function signupAction(
     const email = ((formData.get("email") as string) || "").trim().toLowerCase();
     const fullName = ((formData.get("full_name") as string) || "").trim();
     const companyName = ((formData.get("company_name") as string) || "").trim();
+    const websiteUrl = ((formData.get("website_url") as string) || "").trim();
 
     const fieldErrors: SignupState["fieldErrors"] = {};
 
@@ -82,16 +86,16 @@ export async function signupAction(
     }
 
     if (!companyName || companyName.length < 2) {
-      fieldErrors.company_name = "Please enter your company or organization name";
+      fieldErrors.company_name = "Please enter your organization name";
     }
 
     if (Object.keys(fieldErrors).length > 0) {
-      return { error: null, fieldErrors, success: false, step: "details", email, full_name: fullName, company_name: companyName };
+      return { error: null, fieldErrors, success: false, step: "details", email, full_name: fullName, company_name: companyName, website_url: websiteUrl };
     }
 
     return {
       error: null, fieldErrors: {}, success: false,
-      step: "usecase", email, full_name: fullName, company_name: companyName,
+      step: "usecase", email, full_name: fullName, company_name: companyName, website_url: websiteUrl,
     };
   }
 
@@ -100,6 +104,7 @@ export async function signupAction(
     const email = ((formData.get("email") as string) || "").trim().toLowerCase();
     const fullName = ((formData.get("full_name") as string) || "").trim();
     const companyName = ((formData.get("company_name") as string) || "").trim();
+    const websiteUrl = ((formData.get("website_url") as string) || "").trim();
     const useCase = (formData.get("use_case") as UseCase) || prevState.use_case || "both";
 
     if (!email) {
@@ -113,18 +118,18 @@ export async function signupAction(
       email,
       options: {
         shouldCreateUser: true,
-        data: { full_name: fullName, company_name: companyName, use_case: useCase },
+        data: { full_name: fullName, company_name: companyName, use_case: useCase, website_url: websiteUrl || undefined },
         emailRedirectTo: `${appUrl}/auth/callback`,
       },
     });
 
     if (error) {
-      return { error: error.message, fieldErrors: {}, success: false, step: "usecase", email, full_name: fullName, company_name: companyName, use_case: useCase };
+      return { error: error.message, fieldErrors: {}, success: false, step: "usecase", email, full_name: fullName, company_name: companyName, website_url: websiteUrl, use_case: useCase };
     }
 
     return {
       error: null, fieldErrors: {}, success: true,
-      step: "otp", email, full_name: fullName, company_name: companyName, use_case: useCase,
+      step: "otp", email, full_name: fullName, company_name: companyName, website_url: websiteUrl, use_case: useCase,
     };
   }
 
