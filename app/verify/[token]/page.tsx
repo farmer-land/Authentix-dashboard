@@ -9,6 +9,7 @@ import {
   ShieldAlert, Hash, CheckCircle2, Loader2, RefreshCw, Link, Linkedin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { downloadFileFromUrl } from '@/lib/utils/download';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,13 @@ export default function VerifyPage() {
       }
     })();
   }, [token]);
+
+  const handleDownload = useCallback(async (url: string, from?: string) => {
+    try {
+      await downloadFileFromUrl(url, 'certificate.png');
+      track('certificate_download', { format: 'png', ...(from ? { from } : {}) });
+    } catch { /* ignore */ }
+  }, []);
 
   const handleCopyLink = useCallback(async () => {
     await navigator.clipboard.writeText(window.location.href);
@@ -401,17 +409,13 @@ export default function VerifyPage() {
             {/* ── Action bar ───────────────────────────────────────────── */}
             {result.preview_url && (
               <div className="anim-up anim-up-2 flex items-center gap-2.5">
-                <a
-                  href={result.preview_url}
-                  download="certificate"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => handleDownload(result.preview_url!)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-gray-900 dark:bg-white hover:bg-gray-700 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold transition-colors shadow-sm"
-                  onClick={() => track('certificate_download', { format: 'png' })}
                 >
                   <Download className="w-4 h-4 shrink-0" />
                   Download Certificate
-                </a>
+                </button>
                 {/* Share */}
                 <div className="relative" ref={shareMenuRef}>
                   <button
@@ -431,16 +435,12 @@ export default function VerifyPage() {
                         <Link className="w-4 h-4 text-gray-400 shrink-0" /> Copy verification link
                       </button>
                       <div className="h-px bg-black/6 dark:bg-white/6" />
-                      <a
-                        href={result.preview_url}
-                        download="certificate"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => { setShowShareMenu(false); track('certificate_download', { format: 'png', from: 'share_menu' }); }}
+                      <button
+                        onClick={() => { setShowShareMenu(false); handleDownload(result.preview_url!, 'share_menu'); }}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                       >
                         <Download className="w-4 h-4 text-gray-400 shrink-0" /> Download image
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
