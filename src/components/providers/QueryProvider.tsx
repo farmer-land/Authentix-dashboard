@@ -1,12 +1,24 @@
 'use client';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { useState } from 'react';
+import { ApiError } from '@/lib/api/client';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        queryCache: new QueryCache({
+          onError: (error) => {
+            // Session is fully dead (refresh token expired) — send to login.
+            // apiRequest already retried once after refresh, so this is a final failure.
+            if (error instanceof ApiError && error.code === 'UNAUTHORIZED') {
+              if (typeof window !== 'undefined') {
+                window.location.href = '/login';
+              }
+            }
+          },
+        }),
         defaultOptions: {
           queries: {
             // Data stays fresh for 60s — avoids duplicate API calls when navigating

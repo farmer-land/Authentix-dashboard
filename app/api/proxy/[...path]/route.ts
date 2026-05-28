@@ -217,7 +217,12 @@ async function proxyRequest(
                 ? ((data as Record<string, Record<string, unknown>>).error?.message)
                 : (data as Record<string, unknown>).error)
             : 'Unknown error';
-          reqLog.error("Proxy: backend error response", { status: response.status, isMultipart, errorMessage });
+          // 4xx = client errors (auth, not found, validation) → warn; 5xx = server fault → error
+          if (response.status >= 500) {
+            reqLog.error("Proxy: backend error response", { status: response.status, isMultipart, errorMessage });
+          } else {
+            reqLog.warn("Proxy: backend error response", { status: response.status, isMultipart, errorMessage });
+          }
         }
       } catch (parseError) {
         reqLog.error("Proxy: failed to parse backend JSON response", { status: response.status, parseError: parseError instanceof Error ? parseError.message : String(parseError) });
