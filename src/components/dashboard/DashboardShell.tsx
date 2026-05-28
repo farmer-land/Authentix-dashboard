@@ -11,7 +11,6 @@ import {
   FileCheck,
   Shield,
   Settings,
-  Users,
   LogOut,
   Moon,
   Sun,
@@ -209,7 +208,7 @@ function NavLink({
   );
 }
 
-function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobsCount, isProductOwner }: SidebarNavProps) {
+function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobsCount }: SidebarNavProps) {
   const basePath = `/dashboard/org/${slug}`;
   const { organization } = useOrganization();
 
@@ -382,7 +381,9 @@ function UserMenu({
 // Main Component
 // ============================================================================
 
-export function DashboardShell({
+// DashboardShellBody must live INSIDE OrgProvider so its useOrganization()
+// call has access to OrgContext. DashboardShell (below) owns the OrgProvider.
+function DashboardShellBody({
   children,
   slug,
   initialUser,
@@ -528,7 +529,6 @@ export function DashboardShell({
   const isExpanded = sidebarExpanded || dropdownOpen || notificationOpen;
 
   return (
-    <OrgProvider slug={slug}>
     <JobNotificationProvider>
       <div className="min-h-screen bg-background">
         <OnboardingModal />
@@ -648,6 +648,13 @@ export function DashboardShell({
         </div>
       </div>
     </JobNotificationProvider>
+  );
+}
+
+export function DashboardShell(props: DashboardShellProps) {
+  return (
+    <OrgProvider slug={props.slug}>
+      <DashboardShellBody {...props} />
     </OrgProvider>
   );
 }

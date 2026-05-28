@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -18,7 +18,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth_failed`);
   }
 
-  const supabase = await createSupabaseServerClient();
+  // Accumulate cookies set during exchangeCodeForSession so we can write them
+  // directly onto the redirect response (NextResponse.redirect is a separate
+  // response object — cookies written to next/headers cookieStore won't carry over).
+  const cookiesToSet: Array<{ name: string; value: string; options?: object }> = [];
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll(); },
+        setAll(cookies) { cookiesToSet.push(...cookies); },
+      },
+    }
+  );
+
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.session) {
@@ -29,9 +44,11 @@ export async function GET(request: NextRequest) {
 
   // Detect invite: Supabase stores invite metadata in user_metadata
   const inviteOrgId = data.user?.user_metadata?.invited_to_org_id as string | undefined;
-  if (inviteOrgId) {
-    return NextResponse.redirect(`${origin}/accept-invite`);
-  }
+  const target = inviteOrgId ? `${origin}/accept-invite` : `${origin}${next}`;
 
-  return NextResponse.redirect(`${origin}${next}`);
+  const response = NextResponse.redirect(target);
+  cookiesToSet.forEach(({ name, value, options }) =>
+    response.cookies.set(name, value, options as Parameters<typeof response.cookies.set>[2])
+  );
+  return response;
 }
