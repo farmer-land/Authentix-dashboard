@@ -574,7 +574,7 @@ export default function EmailTemplateEditorPage() {
   }
 
   const allVars = [
-    "recipient_name", "organization_name", "course_name",
+    "recipient_name", "organization_name", "organization_logo", "course_name",
     "start_date", "end_date", "custom_text",
     "verification_url", "certificate_image_url",
   ];

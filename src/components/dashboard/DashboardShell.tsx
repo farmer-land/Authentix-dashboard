@@ -149,6 +149,7 @@ interface SidebarNavProps {
   readonly pathname: string;
   readonly expanded: boolean;
   readonly pendingJobsCount: number;
+  readonly activeCertJobsCount: number;
   readonly isProductOwner: boolean;
 }
 
@@ -158,12 +159,14 @@ function NavLink({
   pathname,
   expanded,
   pendingJobsCount,
+  activeCertJobsCount,
 }: {
   item: NavItem;
   basePath: string;
   pathname: string;
   expanded: boolean;
   pendingJobsCount: number;
+  activeCertJobsCount: number;
 }) {
   const fullHref = item.href ? `${basePath}${item.href}` : basePath;
   const isActive =
@@ -171,7 +174,12 @@ function NavLink({
       ? pathname === basePath
       : pathname.startsWith(fullHref);
   const Icon = item.icon;
-  const showBadge = item.name === "Imports" && pendingJobsCount > 0;
+  const showImportsBadge = item.name === "Imports" && pendingJobsCount > 0;
+  const showCertBadge = item.name === "Generate" && activeCertJobsCount > 0;
+  const showBadge = showImportsBadge || showCertBadge;
+  const badgeCount = showImportsBadge ? pendingJobsCount : activeCertJobsCount;
+  const badgeColor = showCertBadge ? "bg-primary" : "bg-amber-400";
+  const badgeTextColor = showCertBadge ? "text-primary bg-primary/15" : "bg-amber-400/15 text-amber-500";
 
   return (
     <Link
@@ -188,20 +196,20 @@ function NavLink({
       <div className="relative shrink-0">
         <Icon className="h-4 w-4" />
         {showBadge && (
-          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-background" />
+          <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${badgeColor} ring-1 ring-background`} />
         )}
       </div>
       {expanded && <span className="whitespace-nowrap flex-1">{item.name}</span>}
       {expanded && showBadge && (
-        <span className="ml-auto text-[10px] font-bold bg-amber-400/15 text-amber-500 rounded-full px-1.5 py-0.5 leading-none">
-          {pendingJobsCount > 99 ? "99+" : pendingJobsCount}
+        <span className={`ml-auto text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none ${badgeTextColor}`}>
+          {badgeCount > 99 ? "99+" : badgeCount}
         </span>
       )}
     </Link>
   );
 }
 
-function SidebarNav({ slug, pathname, expanded, pendingJobsCount, isProductOwner }: SidebarNavProps) {
+function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobsCount, isProductOwner }: SidebarNavProps) {
   const basePath = `/dashboard/org/${slug}`;
   const { organization } = useOrganization();
 
@@ -234,6 +242,7 @@ function SidebarNav({ slug, pathname, expanded, pendingJobsCount, isProductOwner
               pathname={pathname}
               expanded={expanded}
               pendingJobsCount={pendingJobsCount}
+              activeCertJobsCount={activeCertJobsCount}
             />
           ))}
         </div>
@@ -386,6 +395,7 @@ export function DashboardShell({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [pendingJobsCount, setPendingJobsCount] = useState(0);
+  const [activeCertJobsCount, setActiveCertJobsCount] = useState(0);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -429,6 +439,25 @@ export function DashboardShell({
         .single();
       if (stats) setPendingJobsCount(stats.pending_jobs ?? 0);
 
+      // Initial count of active cert generation jobs
+      const { count: certCount } = await supabase
+        .from("background_jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", org.id)
+        .in("type", ["certificate_generation", "batch_certificate_generation"])
+        .in("status", ["queued", "running"]);
+      setActiveCertJobsCount(certCount ?? 0);
+
+      const refreshCertCount = async () => {
+        const { count } = await supabase
+          .from("background_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", org.id)
+          .in("type", ["certificate_generation", "batch_certificate_generation"])
+          .in("status", ["queued", "running"]);
+        setActiveCertJobsCount(count ?? 0);
+      };
+
       // Live updates — uses same channel name as AnalyticsDashboardClient so the
       // Supabase client deduplicates to a single server-side Realtime subscription.
       channel = supabase
@@ -440,6 +469,11 @@ export function DashboardShell({
             const row = payload.new as { pending_jobs: number };
             setPendingJobsCount(row.pending_jobs ?? 0);
           }
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "background_jobs", filter: `organization_id=eq.${org.id}` },
+          refreshCertCount
         )
         .subscribe();
     })();
@@ -538,6 +572,7 @@ export function DashboardShell({
               pathname={pathname}
               expanded={isExpanded}
               pendingJobsCount={pendingJobsCount}
+              activeCertJobsCount={activeCertJobsCount}
               isProductOwner={isProductOwner}
             />
 

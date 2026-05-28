@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import { CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import type { SavedImport } from '../schema/types';
-import { Upload, FileSpreadsheet, Download, CheckCircle2, Plus, Database, ArrowRight, Edit2, Keyboard, AlertCircle, AlertTriangle, Link2, ChevronDown, Loader2, Info } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, CheckCircle2, Plus, Database, ArrowRight, Edit2, Keyboard, AlertCircle, AlertTriangle, Link2, ChevronDown, Loader2, Info, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 import { getXlsx } from '@/lib/utils/dynamic-imports';
@@ -957,6 +957,37 @@ export function DataSelector({
                 </div>
               </div>
             </div>
+
+            {/* Row 1 preview — shows real values so user can verify mappings before generating */}
+            {(() => {
+              const firstRow = importedData?.rows[0];
+              if (!firstRow || fieldMappings.length === 0) return null;
+              const previews = fieldMappings
+                .filter(m => m.columnName && firstRow[m.columnName] != null && String(firstRow[m.columnName]).trim() !== '')
+                .map(m => {
+                  const field = fields.find(f => f.id === m.fieldId);
+                  return field ? { label: field.label || field.type, column: m.columnName, value: String(firstRow[m.columnName]) } : null;
+                })
+                .filter(Boolean) as { label: string; column: string; value: string }[];
+              if (previews.length === 0) return null;
+              return (
+                <div className="mt-3 border border-border rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/30 border-b border-border">
+                    <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Row 1 preview</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {previews.map(p => (
+                      <div key={p.label} className="flex items-center gap-3 px-4 py-2 text-xs">
+                        <span className="w-28 shrink-0 font-medium text-foreground truncate" title={p.label}>{p.label}</span>
+                        <span className="text-muted-foreground/60 shrink-0">→</span>
+                        <span className="flex-1 text-foreground truncate" title={p.value}>{p.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </Card>}
 
           {/* Add manual entries accordion — only shown when there's already a file upload */}

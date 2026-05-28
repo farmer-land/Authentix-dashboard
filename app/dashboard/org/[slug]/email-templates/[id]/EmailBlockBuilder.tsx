@@ -353,9 +353,14 @@ function makeCertSvg(): string {
 const _CERT_SVG = makeCertSvg();
 const _QR_SVG = makeQrSvg("https://verify.authentix.io/abc123");
 
+const _ORG_LOGO_SVG = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40"><rect width="120" height="40" rx="8" fill="#3ECF8E"/><text x="60" y="26" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="white">Org Logo</text></svg>`
+);
+
 const PREVIEW_MOCKS: Record<string, string> = {
   recipient_name: "Alex Johnson",
   organization_name: "Authentix Academy",
+  organization_logo: _ORG_LOGO_SVG,
   issue_date: "March 22, 2026",
   course_name: "Advanced React Development",
   event_name: "Annual Tech Summit 2026",

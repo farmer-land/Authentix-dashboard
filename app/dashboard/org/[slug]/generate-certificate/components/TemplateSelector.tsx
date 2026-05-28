@@ -86,6 +86,7 @@ export function TemplateSelector({
   };
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDims, setUploadDims] = useState<{ w: number; h: number } | null>(null);
   const [templateName, setTemplateName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [subcategoryId, setSubcategoryId] = useState('');
@@ -173,8 +174,15 @@ export function TemplateSelector({
     const file = acceptedFiles[0];
     if (!file) return;
     setUploadFile(file);
+    setUploadDims(null);
     setTemplateName(file.name.replace(/\.(pdf|jpe?g|png)$/i, ''));
     setIsProcessing(false);
+    // Read dimensions asynchronously so we can display them as info
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); setUploadDims({ w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = () => { URL.revokeObjectURL(url); };
+    img.src = url;
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -222,6 +230,7 @@ export function TemplateSelector({
 
       setShowUploadDialog(false);
       setUploadFile(null);
+      setUploadDims(null);
       setTemplateName('');
       setCategoryId('');
       setSubcategoryId('');
@@ -469,7 +478,10 @@ export function TemplateSelector({
                           </div>
                           <div>
                             <p className="text-base font-medium">{uploadFile.name}</p>
-                            <p className="text-sm text-muted-foreground">{(uploadFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                              {uploadDims && <> · {uploadDims.w} × {uploadDims.h}px</>}
+                            </p>
                           </div>
                         </>
                       ) : (

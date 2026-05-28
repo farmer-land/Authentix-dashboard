@@ -55,6 +55,10 @@ export function CertificateCanvas({
   const templateResizeStart = useRef({ x: 0, y: 0 });
   const initialTemplateDims = useRef({ w: 0, h: 0 });
 
+  /* Alignment guides — canvas-coordinate lines shown while dragging */
+  const [alignGuides, setAlignGuides] = useState<{ h: number[]; v: number[] }>({ h: [], v: [] });
+  const clearGuidesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   const [canvasWidth, setCanvasWidth] = useState(600);
@@ -152,12 +156,62 @@ export function CertificateCanvas({
   
   const handleFieldDrag = (id: string, deltaX: number, deltaY: number) => {
     const field = fieldsRef.current.find(f => f.id === id);
-    if (field) {
-      onFieldUpdate(id, {
-        x: field.x + deltaX / scale,
-        y: field.y + deltaY / scale,
-      });
+    if (!field) return;
+
+    const newX = field.x + deltaX / scale;
+    const newY = field.y + deltaY / scale;
+    const w = field.width ?? 100;
+    const h = field.height ?? 30;
+
+    // Compute smart alignment guides: compare center/edges of dragged field vs all others
+    const SNAP_PX = 4; // canvas px threshold for showing a guide
+    const hLines: number[] = [];
+    const vLines: number[] = [];
+
+    const dragCenterX = newX + w / 2;
+    const dragCenterY = newY + h / 2;
+    const dragRight = newX + w;
+    const dragBottom = newY + h;
+
+    // Canvas center axes
+    const canvasW = pdfWidth;
+    const canvasH = pdfHeight;
+    const canvasCX = canvasW / 2;
+    const canvasCY = canvasH / 2;
+    if (Math.abs(dragCenterX - canvasCX) < SNAP_PX) vLines.push(canvasCX);
+    if (Math.abs(dragCenterY - canvasCY) < SNAP_PX) hLines.push(canvasCY);
+
+    for (const other of fieldsRef.current) {
+      if (other.id === id) continue;
+      const ow = other.width ?? 100;
+      const oh = other.height ?? 30;
+      const oCX = other.x + ow / 2;
+      const oCY = other.y + oh / 2;
+      const oRight = other.x + ow;
+      const oBottom = other.y + oh;
+
+      // Vertical guides (X alignment)
+      if (Math.abs(dragCenterX - oCX) < SNAP_PX)   vLines.push(oCX);
+      if (Math.abs(newX - other.x) < SNAP_PX)       vLines.push(other.x);
+      if (Math.abs(dragRight - oRight) < SNAP_PX)   vLines.push(oRight);
+      if (Math.abs(newX - oRight) < SNAP_PX)         vLines.push(oRight);
+      if (Math.abs(dragRight - other.x) < SNAP_PX)  vLines.push(other.x);
+
+      // Horizontal guides (Y alignment)
+      if (Math.abs(dragCenterY - oCY) < SNAP_PX)   hLines.push(oCY);
+      if (Math.abs(newY - other.y) < SNAP_PX)       hLines.push(other.y);
+      if (Math.abs(dragBottom - oBottom) < SNAP_PX) hLines.push(oBottom);
+      if (Math.abs(newY - oBottom) < SNAP_PX)        hLines.push(oBottom);
+      if (Math.abs(dragBottom - other.y) < SNAP_PX) hLines.push(other.y);
     }
+
+    setAlignGuides({ h: [...new Set(hLines)], v: [...new Set(vLines)] });
+
+    // Clear guides shortly after dragging stops
+    if (clearGuidesTimerRef.current) clearTimeout(clearGuidesTimerRef.current);
+    clearGuidesTimerRef.current = setTimeout(() => setAlignGuides({ h: [], v: [] }), 600);
+
+    onFieldUpdate(id, { x: newX, y: newY });
   };
 
   const handleFieldResize = (id: string, width: number, height: number) => {
@@ -388,6 +442,22 @@ export function CertificateCanvas({
                 }}
               />
               </div>
+            ))}
+
+            {/* Alignment guides — thin colored lines shown while dragging */}
+            {alignGuides.v.map((x, i) => (
+              <div
+                key={`vg-${i}`}
+                className="pointer-events-none absolute top-0 bottom-0"
+                style={{ left: x * scale, width: 1, background: 'rgba(62,207,142,0.85)', zIndex: 9999 }}
+              />
+            ))}
+            {alignGuides.h.map((y, i) => (
+              <div
+                key={`hg-${i}`}
+                className="pointer-events-none absolute left-0 right-0"
+                style={{ top: y * scale, height: 1, background: 'rgba(62,207,142,0.85)', zIndex: 9999 }}
+              />
             ))}
           </div>
 
