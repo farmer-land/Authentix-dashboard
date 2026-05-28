@@ -28,6 +28,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useOrg } from '@/lib/org';
 import { useJobNotifications } from '@/lib/notifications/job-notifications';
+import { downloadFileFromUrl } from '@/lib/utils/download';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1246,6 +1247,7 @@ export function ExportSection({
   const [generationStatus, setGenerationStatus] = useState<'idle' | 'generating' | 'completed' | 'error'>('idle');
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -1807,6 +1809,18 @@ export function ExportSection({
     }
   };
 
+  const handleDownloadZip = async () => {
+    if (!downloadUrl || isDownloadingZip) return;
+    setIsDownloadingZip(true);
+    try {
+      await downloadFileFromUrl(downloadUrl, 'certificates.zip');
+    } catch {
+      toast.error('ZIP download failed — please try again');
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
   // Fetch per-recipient failure details once the cert gen job ID is known and job is complete
   useEffect(() => {
     if (!certGenJobId || generationStatus !== 'completed') return;
@@ -2022,12 +2036,17 @@ export function ExportSection({
                           {isRefreshingLink ? 'Refreshing…' : 'Regenerate Link'}
                         </button>
                       ) : (
-                        <a href={downloadUrl} download>
-                          <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm" style={{ background: '#3ECF8E', color: '#000' }}>
-                            <Download style={{ width: 15, height: 15 }} />
-                            Download All
-                          </button>
-                        </a>
+                        <button
+                          onClick={handleDownloadZip}
+                          disabled={isDownloadingZip}
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm"
+                          style={{ background: '#3ECF8E', color: '#000' }}
+                        >
+                          {isDownloadingZip
+                            ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" />
+                            : <Download style={{ width: 15, height: 15 }} />}
+                          {isDownloadingZip ? 'Downloading…' : 'Download All'}
+                        </button>
                       )}
                       {downloadExpiresAt && (
                         <span className="text-xs tabular-nums" style={{ color: expiry === 'expired' ? 'rgba(251,191,36,0.7)' : expiry === 'soon' ? 'rgba(251,191,36,0.55)' : 'rgba(255,255,255,0.3)' }}>
@@ -2291,11 +2310,9 @@ export function ExportSection({
                       {isRefreshingLink ? 'Refreshing…' : 'Regenerate link'}
                     </Button>
                   ) : (
-                    <a href={downloadUrl} download>
-                      <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1">
-                        <Download className="w-3 h-3" /> ZIP
-                      </Button>
-                    </a>
+                    <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1" onClick={handleDownloadZip} disabled={isDownloadingZip}>
+                      {isDownloadingZip ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} ZIP
+                    </Button>
                   )}
                 </div>
               )}
@@ -2331,11 +2348,9 @@ export function ExportSection({
                     </>
                   ) : (
                     <>
-                      <a href={downloadUrl} download>
-                        <Button size="sm" variant="outline" className="gap-1.5">
-                          <Download className="w-3 h-3" /> Download ZIP
-                        </Button>
-                      </a>
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={handleDownloadZip} disabled={isDownloadingZip}>
+                        {isDownloadingZip ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} Download ZIP
+                      </Button>
                       {downloadExpiresAt && (
                         <p className="text-[11px] text-muted-foreground">{formatLinkExpiry(downloadExpiresAt)}</p>
                       )}
@@ -2694,11 +2709,9 @@ export function ExportSection({
       {generationStatus === 'completed' && (
         <div className="flex gap-2">
           {downloadUrl && (
-            <Button variant="outline" className="gap-2 shrink-0" asChild>
-              <a href={downloadUrl} download>
-                <FileArchive className="w-4 h-4" />
-                Download ZIP
-              </a>
+            <Button variant="outline" className="gap-2 shrink-0" onClick={handleDownloadZip} disabled={isDownloadingZip}>
+              {isDownloadingZip ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
+              Download ZIP
             </Button>
           )}
           <Button

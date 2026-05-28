@@ -268,6 +268,18 @@ export const certificatesApi = {
   },
 
   /**
+   * Returns a signed URL to the latest daily certificate snapshot (NDJSON.gz).
+   * Only available to orgs with a paid data-retention add-on. Admin role required.
+   * Snapshots are generated nightly at 03:00 UTC — no on-demand generation.
+   */
+  getBackupSnapshot: async (): Promise<{ url: string; snapshot_date: string; format: string; expires_in_seconds: number }> => {
+    const response = await apiRequest<{ url: string; snapshot_date: string; format: string; expires_in_seconds: number }>(
+      "/certificates/export",
+    );
+    return response.data!;
+  },
+
+  /**
    * Render a single certificate row in-memory on the server and return a data URL.
    * No DB writes or storage uploads — fast UI preview only.
    */

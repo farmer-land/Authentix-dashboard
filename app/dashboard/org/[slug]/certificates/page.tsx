@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
+import { downloadFileFromUrl } from "@/lib/utils/download";
 
 interface FilterState {
   search: string;
@@ -76,6 +77,7 @@ export default function CertificatesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [previewCertificate, setPreviewCertificate] = useState<Certificate | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
 
   const { certificates, pagination, loading, refetch } = useCertificates({
     page,
@@ -207,6 +209,25 @@ export default function CertificatesPage() {
     }
   };
 
+  const handleDownloadBackup = async () => {
+    if (downloadingBackup) return;
+    setDownloadingBackup(true);
+    try {
+      const { url, snapshot_date } = await api.certificates.getBackupSnapshot();
+      await downloadFileFromUrl(url, `certificates-backup-${snapshot_date}.ndjson.gz`);
+      toast.success(`Backup download started (snapshot: ${snapshot_date})`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      if (msg.includes("NOT_FOUND") || msg.toLowerCase().includes("no backup")) {
+        toast.info("No backup snapshot available yet — snapshots are generated nightly. Try again tomorrow.");
+      } else {
+        toast.error(`Backup download failed: ${msg}`);
+      }
+    } finally {
+      setDownloadingBackup(false);
+    }
+  };
+
   const getStatusBadge = (status: Certificate["status"]) => {
     const variants: Record<Certificate["status"], { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
       active: { variant: "default", label: "Active" },
@@ -233,6 +254,12 @@ export default function CertificatesPage() {
           <Button variant="outline" onClick={() => refetch()} className="gap-2">
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handleDownloadBackup} disabled={downloadingBackup} title="Download your latest daily vault backup (NDJSON.gz)">
+            {downloadingBackup
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Download className="h-4 w-4" />}
+            {downloadingBackup ? "Downloading…" : "Download Backup"}
           </Button>
           <Button className="gap-2" onClick={handleExportAll} disabled={exporting}>
             {exporting

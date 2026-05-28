@@ -19,6 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { downloadFileFromUrl } from '@/lib/utils/download';
 
 export interface GeneratedCertificate {
   id: string;
@@ -184,9 +185,18 @@ export function CertificateTable({
     setTimeout(() => setPreviewingId(null), 500);
   };
 
-  const handleDownloadAll = () => {
-    if (!zipDownloadUrl) return;
-    window.open(zipDownloadUrl, '_blank');
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
+  const handleDownloadAll = async () => {
+    if (!zipDownloadUrl || downloadingAll) return;
+    setDownloadingAll(true);
+    try {
+      await downloadFileFromUrl(zipDownloadUrl, 'certificates.zip');
+    } catch (err) {
+      console.error('ZIP download failed:', err);
+    } finally {
+      setDownloadingAll(false);
+    }
   };
 
   if (isLoading) {
@@ -219,9 +229,9 @@ export function CertificateTable({
         </div>
 
         {zipDownloadUrl && totalCount > 1 && (
-          <Button onClick={handleDownloadAll} variant="outline" size="sm" className="gap-2">
-            <FileArchive className="w-4 h-4" />
-            Download All (ZIP)
+          <Button onClick={handleDownloadAll} variant="outline" size="sm" className="gap-2" disabled={downloadingAll}>
+            {downloadingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
+            {downloadingAll ? 'Downloading…' : 'Download All (ZIP)'}
           </Button>
         )}
       </div>

@@ -460,17 +460,17 @@ export default function VerifyPage() {
             </div>
           </>
         ) : (
-          /* ── Not found ─────────────────────────────────────────────── */
+          /* ── Not found / temporarily unavailable ───────────────────── */
           <div className="anim-up mt-8">
             <div className="rounded-2xl bg-white dark:bg-[#111115] ring-1 ring-black/6 dark:ring-white/5 shadow-lg overflow-hidden">
-              <div className="h-1 w-full bg-gray-200 dark:bg-gray-800" />
+              <div className="h-1 w-full bg-amber-400/60 dark:bg-amber-500/40" />
               <div className="p-10 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800/80 flex items-center justify-center mx-auto mb-5">
-                  <XCircle className="w-7 h-7 text-gray-300 dark:text-gray-600" />
+                <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center mx-auto mb-5">
+                  <AlertTriangle className="w-7 h-7 text-amber-400 dark:text-amber-500" />
                 </div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Certificate Not Found</h2>
-                <p className="text-sm text-gray-400 dark:text-gray-500 leading-relaxed max-w-xs mx-auto">
-                  No certificate matches this verification link. The URL may be incorrect or the certificate may no longer exist.
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Verification Temporarily Unavailable</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs mx-auto">
+                  We&apos;re unable to verify this certificate right now due to a temporary system issue. Your certificate is valid — please try again in a little while or contact the issuing organization directly.
                 </p>
                 <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/5 flex items-center justify-center gap-2">
                   <img src="/brand/authentix-24-24.svg" alt="Authentix" className="w-4 h-4 opacity-40" />
