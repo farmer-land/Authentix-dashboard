@@ -885,7 +885,7 @@ export default function GenerateCertificatePage() {
     setCanRedo((cfg.future?.length ?? 0) > 0);
   };
 
-  const handleNewTemplateUpload = async (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string): Promise<any> => {
+  const handleNewTemplateUpload = async (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string, onProgress?: (pct: number) => void): Promise<any> => {
     const fileType = 'image';
     const baseName = templateName || file.name.replace(/\.(jpe?g|png|webp|avif)$/i, '');
     const existingNames = savedTemplates.map(t => t.title?.toLowerCase() ?? '');
@@ -904,7 +904,7 @@ export default function GenerateCertificatePage() {
           title: finalTemplateName.trim(),
           category_id: categoryId,
           subcategory_id: subcategoryId,
-        });
+        }, onProgress);
         // Try to attach a preview URL so the carousel card shows the thumbnail
         let withPreview: any = templateData;
         try {
@@ -942,7 +942,7 @@ export default function GenerateCertificatePage() {
           title: finalTemplateName.trim(),
           category_id: categoryId,
           subcategory_id: subcategoryId,
-        });
+        }, onProgress);
         setSavedTemplates((prev) => [templateData, ...prev]);
         if (templateData.version?.id) {
           setTemplateVersionId(templateData.version.id);

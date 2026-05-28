@@ -43,7 +43,7 @@ interface RecentTemplate {
 interface TemplateSelectorProps {
   savedTemplates: any[];
   onSelectTemplate: (template: any) => void;
-  onNewUpload: (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string) => Promise<any>;
+  onNewUpload: (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string, onProgress?: (pct: number) => void) => Promise<any>;
   onDeleteTemplate?: (templateId: string) => Promise<void>;
   recentGenerated?: RecentGeneratedTemplate[];
   inProgress?: InProgressTemplate[];
@@ -87,6 +87,7 @@ export function TemplateSelector({
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadDims, setUploadDims] = useState<{ w: number; h: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [templateName, setTemplateName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [subcategoryId, setSubcategoryId] = useState('');
@@ -218,7 +219,11 @@ export function TemplateSelector({
 
       // In multi mode always save (blob URLs can't be reloaded across renders).
       const shouldSave = templateMode === 'multi' ? true : saveTemplate;
-      const savedTemplate = await onNewUpload(uploadFile, width, height, shouldSave, templateName.trim(), categoryId, subcategoryId);
+      setUploadProgress(0);
+      const savedTemplate = await onNewUpload(
+        uploadFile, width, height, shouldSave, templateName.trim(), categoryId, subcategoryId,
+        (pct) => setUploadProgress(pct),
+      );
 
       // Multi mode: auto-add the newly saved template to the selection and stay on this step
       if (templateMode === 'multi' && savedTemplate) {
@@ -231,12 +236,14 @@ export function TemplateSelector({
       setShowUploadDialog(false);
       setUploadFile(null);
       setUploadDims(null);
+      setUploadProgress(null);
       setTemplateName('');
       setCategoryId('');
       setSubcategoryId('');
       setError('');
     } catch (err: any) {
       console.error('Error processing file:', err);
+      setUploadProgress(null);
       setError(err.message || 'Failed to process file. Please try again.');
     } finally {
       setIsProcessing(false);
@@ -597,6 +604,22 @@ export function TemplateSelector({
                         </Alert>
                       )}
 
+                      {/* Upload progress bar — visible only while XHR is in flight */}
+                      {isProcessing && uploadProgress !== null && (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>{uploadProgress < 100 ? 'Uploading…' : 'Processing on server…'}</span>
+                            {uploadProgress < 100 && <span>{uploadProgress}%</span>}
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all duration-200"
+                              style={{ width: uploadProgress < 100 ? `${uploadProgress}%` : '100%', opacity: uploadProgress >= 100 ? 0.6 : 1 }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <Button
                         onClick={handleUpload}
                         disabled={isProcessing || !templateName.trim() || !categoryId || (!subcategoryId && subcategories.length > 0) || categoriesLoading || subcategoriesLoading}
@@ -604,7 +627,7 @@ export function TemplateSelector({
                         size="lg"
                       >
                         {isProcessing
-                          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving template…</>
+                          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{uploadProgress !== null && uploadProgress < 100 ? `Uploading ${uploadProgress}%…` : 'Processing…'}</>
                           : templateMode === 'multi' ? 'Add to Selection' : 'Start Designing'}
                       </Button>
                     </div>
