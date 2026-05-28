@@ -1345,6 +1345,16 @@ export function ExportSection({
           setOverlayState('hidden');
           return;
         }
+
+        // Real progress from the backend — replace the starter animation
+        const rawResult = status.result as Record<string, unknown> | null | undefined;
+        const processedSoFar = rawResult?.processed_so_far as number | undefined;
+        const progressTotal = rawResult?.total as number | undefined;
+        if (processedSoFar !== undefined && progressTotal !== undefined && progressTotal > 0) {
+          if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+          setProgress(Math.min(Math.round((processedSoFar / progressTotal) * 100), 98));
+          setSimulatedCount(processedSoFar);
+        }
       } catch { /* network errors silently ignored — retry next tick */ }
 
       timerId = setTimeout(poll, 3000);
@@ -1678,20 +1688,15 @@ export function ExportSection({
 
     setProgressLabel(`Generating ${totalRows} certificate${totalRows !== 1 ? 's' : ''}…`);
 
-    // Simulate smooth progress — asymptotic curve so it never feels stuck.
-    // Estimate total time: 2s submit latency + 1.5s per cert (capped at 120s).
-    const estimatedMs = Math.min(Math.max(5000, 2000 + totalRows * configsToRun.length * 1500), 120000);
-    const tickMs = 300;
+    // Starter pulse: creeps to 3% while waiting for the job to be accepted by the
+    // worker.  Cleared as soon as the first real processed_so_far value arrives
+    // via the polling loop — real progress always takes over.
     let elapsed = 0;
     if (progressTimerRef.current) clearInterval(progressTimerRef.current);
     progressTimerRef.current = setInterval(() => {
-      elapsed += tickMs;
-      // Asymptotic: fast at first, slows near 88% — never reaches 90 on its own
-      const frac = 1 - Math.exp(-3 * elapsed / estimatedMs);
-      const pct = Math.round(frac * 88);
-      setProgress(pct);
-      setSimulatedCount(Math.max(1, Math.round(frac * totalRows)));
-    }, tickMs);
+      elapsed += 300;
+      setProgress(Math.min(3, Math.round((elapsed / 10000) * 3)));
+    }, 300);
 
     try {
       // Submit — returns 202 immediately with job_id

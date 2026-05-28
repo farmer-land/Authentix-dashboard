@@ -163,6 +163,9 @@ export const certificatesApi = {
     type: string;
     status: "queued" | "running" | "completed" | "failed" | "cancelled";
     result: {
+      /** Real-time partial progress — present while status is queued/running */
+      processed_so_far?: number;
+      total?: number;
       total_certificates?: number;
       first_job_id?: string | null;
       last_download_url?: string | null;
