@@ -227,10 +227,26 @@ export default function GenerateCertificatePage() {
       try {
         localStorage.setItem(`gencert_last_template_id:${orgSlug}`, template.id);
       } catch { /* storage unavailable */ }
+      // Persist import draft to localStorage so the import can be re-fetched from the server
+      // after a browser close. Only saved when there's a server-backed importId to restore from.
+      try {
+        if (importedData?.importId) {
+          localStorage.setItem(`gencert_draft:${orgSlug}`, JSON.stringify({
+            templateId: template.id,
+            importId: importedData.importId,
+            importIds: importedData.importIds ?? [importedData.importId],
+            fieldMappings,
+            fileName: importedData.fileName,
+            headers: importedData.headers,
+            rowCount: importedData.rowCount,
+          }));
+        }
+      } catch { /* quota */ }
     } else if (currentStep === 'template' && sessionInitRef.current) {
       // Only clear when the user deliberately navigates back to template selection,
       // not on the initial mount where currentStep starts as 'template'.
       sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+      try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
     }
   }, [currentStep, template?.id, fields, canvasScale, templateVersionId, importedData, fieldMappings]);
 
@@ -466,9 +482,32 @@ export default function GenerateCertificatePage() {
           sessionStorage.removeItem(`gencert_session:${orgSlug}`);
         }
 
-        // Note: we intentionally do NOT fall back to localStorage here.
-        // gencert_last_template_id is a hint for the email template editor only —
-        // using it here caused auto-jumping into design mode on every fresh navigation.
+        // localStorage fallback: recover the import after a browser close.
+        // sessionStorage is cleared on browser close; localStorage persists.
+        // Fields are recovered from the DB (via autosave) — we only need the importId.
+        // We show a banner so the user chooses to restore, rather than auto-jumping.
+        if (!templateIdToRestore) {
+          try {
+            const draftStr = localStorage.getItem(`gencert_draft:${orgSlug}`);
+            if (draftStr) {
+              const draft = JSON.parse(draftStr);
+              if (draft.templateId && draft.importId) {
+                templateIdToRestore = draft.templateId;
+                sessionImportMeta = {
+                  fileName: draft.fileName ?? 'Previous import',
+                  headers: draft.headers ?? [],
+                  rowCount: draft.rowCount ?? 0,
+                  importId: draft.importId,
+                  importIds: draft.importIds ?? [draft.importId],
+                };
+                sessionFieldMappings = draft.fieldMappings ?? null;
+                sessionStep = 'data'; // jump directly to data step on restore
+              }
+            }
+          } catch {
+            try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
+          }
+        }
 
         if (templateIdToRestore) {
           // Guard: if the template no longer exists (deleted), discard the stale session.
@@ -792,7 +831,7 @@ export default function GenerateCertificatePage() {
       try {
         const [importJob, dataPage] = await Promise.all([
           api.imports.get(meta.importId),
-          api.imports.getData(meta.importId, { limit: 100 }),
+          api.imports.getData(meta.importId, { limit: 2000 }),
         ]);
         const rows = ((dataPage.items ?? []) as Array<{ row_index: number; data: Record<string, any> }>).map((r: any) => r.data ?? r);
         setImportedData({
@@ -1497,6 +1536,10 @@ export default function GenerateCertificatePage() {
 
   const handleDataImport = (data: ImportedData | null) => {
     setAdditionalRows([]);
+    if (!data) {
+      // Clear the localStorage draft so the import isn't offered on next visit
+      try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
+    }
     if (data) {
       // In multi mode, auto-map for ALL templates' fields
       const allFields = templateMode === 'multi' && templateConfigs.length > 0
@@ -1534,7 +1577,7 @@ export default function GenerateCertificatePage() {
       // Fetch metadata and normalized rows from the backend — no client-side file parsing.
       const [importJob, dataPage] = await Promise.all([
         api.imports.get(importId),
-        api.imports.getData(importId, { limit: 100 }),
+        api.imports.getData(importId, { limit: 2000 }),
       ]);
 
       // Backend returns { row_index, data: {...} } — extract the inner data object
@@ -1719,7 +1762,10 @@ export default function GenerateCertificatePage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground">Continue where you left off?</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        Last session: <span className="font-medium text-foreground">{pendingResumeSession.templateName}</span>
+                        <span className="font-medium text-foreground">{pendingResumeSession.templateName}</span>
+                        {pendingResumeSession.importedDataMeta?.fileName && (
+                          <span className="text-muted-foreground"> · {pendingResumeSession.importedDataMeta.rowCount?.toLocaleString() ?? '?'} rows from {pendingResumeSession.importedDataMeta.fileName}</span>
+                        )}
                       </p>
                     </div>
                     <Button
@@ -1735,6 +1781,7 @@ export default function GenerateCertificatePage() {
                       onClick={() => {
                         setPendingResumeSession(null);
                         sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+                        try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
                       }}
                       className="shrink-0 text-muted-foreground hover:text-foreground h-8 px-3 text-xs"
                     >

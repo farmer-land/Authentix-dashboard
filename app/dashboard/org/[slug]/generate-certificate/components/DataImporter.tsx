@@ -347,41 +347,85 @@ export function DataImporter({
               No saved imports yet. Upload a file to get started.
             </div>
           ) : (
-            imports.map((imp: any) => (
-              <div
-                key={imp.id}
-                className="rounded-lg border px-3 py-2.5 flex items-center gap-3 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
-                onClick={async () => {
-                  // Load from saved import — fetch rows via API
-                  setIsProcessing(true);
-                  try {
-                    const { api } = await import('@/lib/api/client');
-                    const data = await api.imports.getData(imp.id, { page: 1, limit: 500 });
-                    const rawRows = (data.items ?? []).map((r: any) => r.data ?? r) as Record<string, unknown>[];
-                    if (!rawRows.length) { alert('No data in this import'); return; }
-                    const headers = Object.keys(rawRows[0]!);
-                    const rows = rawRows.map(r =>
-                      Object.fromEntries(headers.map(h => [h, String(r[h] ?? '')]))
-                    );
-                    applyParsed({ fileName: imp.file_name, headers, rows, rowCount: rows.length });
-                  } catch {
-                    alert('Failed to load import data');
-                  } finally {
-                    setIsProcessing(false);
-                  }
-                }}
-              >
-                <FileSpreadsheet className="h-5 w-5 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{imp.file_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {imp.total_rows ?? '?'} rows ·{' '}
-                    {formatDistanceToNow(new Date(imp.created_at), { addSuffix: true })}
-                  </p>
+            imports.map((imp: any) => {
+              // An import is "stuck" if it's been queued/processing for more than 3 minutes —
+              // this means the upload request was likely interrupted (browser closed mid-upload).
+              const isStuck = (imp.status === 'queued' || imp.status === 'processing')
+                && Date.now() - new Date(imp.created_at).getTime() > 3 * 60 * 1000;
+              const isFailed = imp.status === 'failed';
+              const isUnusable = isStuck || isFailed;
+
+              return (
+                <div
+                  key={imp.id}
+                  className={cn(
+                    'rounded-lg border px-3 py-2.5 flex items-center gap-3 transition-colors',
+                    isUnusable
+                      ? 'opacity-70 cursor-not-allowed'
+                      : 'cursor-pointer hover:border-primary hover:bg-primary/5'
+                  )}
+                  onClick={async () => {
+                    if (isUnusable) return;
+                    // Load from saved import — fetch all rows via API
+                    setIsProcessing(true);
+                    try {
+                      const { api } = await import('@/lib/api/client');
+                      const data = await api.imports.getData(imp.id, { page: 1, limit: 2000 });
+                      const rawRows = (data.items ?? []).map((r: any) => r.data ?? r) as Record<string, unknown>[];
+                      if (!rawRows.length) { alert('No data in this import'); return; }
+                      const headers = Object.keys(rawRows[0]!);
+                      const rows = rawRows.map(r =>
+                        Object.fromEntries(headers.map(h => [h, String(r[h] ?? '')]))
+                      );
+                      // Include importId so the draft persists to localStorage after browser close
+                      applyParsed({
+                        fileName: imp.file_name,
+                        headers,
+                        rows,
+                        rowCount: imp.total_rows ?? rows.length,
+                        importId: imp.id,
+                        importIds: [imp.id],
+                      });
+                      // Apply the saved field→column mapping from the import job (if any),
+                      // overriding the auto-map so the user's previous mapping is preserved.
+                      if (imp.mapping && Object.keys(imp.mapping).length > 0) {
+                        const currentFieldIds = new Set(fields.map(f => f.id));
+                        const validMappings = Object.entries(imp.mapping as Record<string, string>)
+                          .filter(([fieldId, col]) => currentFieldIds.has(fieldId) && headers.includes(col))
+                          .map(([fieldId, columnName]) => ({ fieldId, columnName }));
+                        if (validMappings.length > 0) onMappingChange(validMappings);
+                      }
+                    } catch {
+                      alert('Failed to load import data');
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
+                >
+                  <FileSpreadsheet className={cn('h-5 w-5 shrink-0', isUnusable ? 'text-muted-foreground' : 'text-primary')} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{imp.file_name ?? 'Unnamed import'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {isStuck
+                        ? 'Upload interrupted — please re-upload the file'
+                        : isFailed
+                        ? (imp.error_message ?? 'Upload failed — please re-upload the file')
+                        : `${(imp.total_rows ?? 0).toLocaleString()} rows · ${formatDistanceToNow(new Date(imp.created_at), { addSuffix: true })}`}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'text-xs shrink-0',
+                      isStuck && 'border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30',
+                      isFailed && 'border-destructive/40 text-destructive bg-destructive/5',
+                    )}
+                  >
+                    {isStuck ? 'interrupted' : imp.status}
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="text-xs shrink-0">{imp.status}</Badge>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
