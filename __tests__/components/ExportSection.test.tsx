@@ -8,7 +8,12 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 vi.mock('@/lib/org', () => ({
-  useOrg: () => ({ orgPath: (path: string) => `/dashboard/org/test-org${path}` }),
+  useOrg: () => ({ orgPath: (path: string) => `/dashboard/org/test-org${path}`, slug: 'test-org', basePath: '/dashboard/org/test-org' }),
+  useOrgSlug: () => 'test-org',
+}));
+
+vi.mock('@/lib/hooks/queries/organizations', () => ({
+  useOrganization: () => ({ organization: { name: 'Test Org', certificate_prefix: 'TST', certificate_number_format: '{prefix}-{seq:6}' }, loading: false, error: null }),
 }));
 
 vi.mock('@/lib/notifications/job-notifications', () => ({
@@ -28,6 +33,9 @@ vi.mock('@/lib/api/client', () => ({
     delivery: {
       listTemplates: vi.fn().mockResolvedValue([]),
       listIntegrations: vi.fn().mockResolvedValue([]),
+    },
+    organizations: {
+      update: vi.fn().mockResolvedValue({}),
     },
   },
 }));

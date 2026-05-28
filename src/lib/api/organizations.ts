@@ -38,6 +38,8 @@ export const organizationsApi = {
       billing_country?: string | null;
       billing_postal_code?: string | null;
       verification_message?: string | null;
+      certificate_prefix?: string;
+      certificate_number_format?: string;
     },
     logoFile?: File,
   ): Promise<Organization> => {

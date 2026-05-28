@@ -29,6 +29,7 @@ import { useRouter } from 'next/navigation';
 import { useOrg } from '@/lib/org';
 import { useJobNotifications } from '@/lib/notifications/job-notifications';
 import { downloadFileFromUrl } from '@/lib/utils/download';
+import { useOrganization } from '@/lib/hooks/queries/organizations';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1223,6 +1224,39 @@ function formatLinkExpiry(expiresAt: Date | null): string | null {
   return 'Expires very soon';
 }
 
+// ── Certificate number format helpers ─────────────────────────────────────────
+
+function derivePrefixFromName(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'ORG';
+  const first = words[0]!.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!first) return 'ORG';
+  return words.length === 1 ? first.slice(0, 5) : first.slice(0, 3);
+}
+
+function previewCertNumber(prefix: string, format: string, seq = 1): string {
+  return format
+    .replace('{prefix}', prefix || 'ORG')
+    .replace(/{seq:(\d+)}/g, (_, n) => String(seq).padStart(Number(n), '0'));
+}
+
+interface CertFormatPattern {
+  id: string;
+  label: string;
+  prefix: (derived: string) => string;
+  format: string;
+}
+
+function getCertFormatPatterns(derivedPrefix: string): CertFormatPattern[] {
+  return [
+    { id: 'p1', label: `${derivedPrefix}-000001`, prefix: () => derivedPrefix, format: '{prefix}-{seq:6}' },
+    { id: 'p2', label: `${derivedPrefix}-0001`, prefix: () => derivedPrefix, format: '{prefix}-{seq:4}' },
+    { id: 'p3', label: `CERT-000001`, prefix: () => 'CERT', format: '{prefix}-{seq:6}' },
+    { id: 'p4', label: `${derivedPrefix}000001`, prefix: () => derivedPrefix, format: '{prefix}{seq:6}' },
+    { id: 'p5', label: `${derivedPrefix}-001`, prefix: () => derivedPrefix, format: '{prefix}-{seq:3}' },
+  ];
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function ExportSection({
@@ -1238,6 +1272,66 @@ export function ExportSection({
 }: ExportSectionProps) {
   const { orgPath } = useOrg();
   const { addJob } = useJobNotifications();
+  const { organization } = useOrganization();
+
+  // ── Cert number format accordion ──
+  const derivedPrefix = derivePrefixFromName(organization?.name ?? 'ORG');
+  const [certFmtOpen, setCertFmtOpen] = useState(true);
+  const [expiryOpen, setExpiryOpen] = useState(true);
+  const [certFmtPatternId, setCertFmtPatternId] = useState<string>('p1');
+  const [certFmtCustomPrefix, setCertFmtCustomPrefix] = useState('');
+  const [certFmtCustomFormat, setCertFmtCustomFormat] = useState('{prefix}-{seq:6}');
+  const [certFmtSaving, setCertFmtSaving] = useState(false);
+
+  // Sync pattern selection from loaded org settings
+  useEffect(() => {
+    if (!organization) return;
+    const p = organization.certificate_prefix ?? 'ORG';
+    const f = organization.certificate_number_format ?? '{prefix}-{seq:6}';
+    const patterns = getCertFormatPatterns(derivedPrefix);
+    const match = patterns.find(pt => pt.prefix(derivedPrefix) === p && pt.format === f);
+    if (match) {
+      setCertFmtPatternId(match.id);
+    } else {
+      setCertFmtPatternId('custom');
+      setCertFmtCustomPrefix(p);
+      setCertFmtCustomFormat(f);
+    }
+  }, [organization?.certificate_prefix, organization?.certificate_number_format]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCertFmtSelect = async (patternId: string) => {
+    setCertFmtPatternId(patternId);
+    const patterns = getCertFormatPatterns(derivedPrefix);
+    const pt = patterns.find(p => p.id === patternId);
+    if (!pt) return;
+    setCertFmtSaving(true);
+    try {
+      await api.organizations.update({
+        certificate_prefix: pt.prefix(derivedPrefix),
+        certificate_number_format: pt.format,
+      });
+    } catch { /* non-fatal, user can retry */ }
+    setCertFmtSaving(false);
+  };
+
+  const handleCertFmtCustomSave = async () => {
+    const prefix = certFmtCustomPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    if (!prefix || !certFmtCustomFormat.trim()) return;
+    setCertFmtSaving(true);
+    try {
+      await api.organizations.update({
+        certificate_prefix: prefix,
+        certificate_number_format: certFmtCustomFormat.trim(),
+      });
+    } catch { /* non-fatal */ }
+    setCertFmtSaving(false);
+  };
+
+  // Current active prefix/format (for preview)
+  const activeCertPatterns = getCertFormatPatterns(derivedPrefix);
+  const activePt = activeCertPatterns.find(p => p.id === certFmtPatternId);
+  const activePrefix = activePt ? activePt.prefix(derivedPrefix) : (certFmtCustomPrefix || 'ORG');
+  const activeFormat = activePt ? activePt.format : (certFmtCustomFormat || '{prefix}-{seq:6}');
 
   // 'hidden' = idle, 'generating' = submitting, 'queued' = job sent to background, 'success' = done
   const [overlayState, setOverlayState] = useState<'hidden' | 'generating' | 'queued' | 'success'>('hidden');
@@ -2458,68 +2552,200 @@ export function ExportSection({
             )}
           </Card>
 
-          {/* Expiry Date Settings */}
-          <ExpiryDateSelector
-            value={expiryType}
-            customDate={customExpiryDate}
-            issueDate={useCustomIssueDate ? issueDate : undefined}
-            onChange={handleExpiryChange}
-          />
-
-          {/* Issue Date Settings */}
-          <Card className="p-4">
-            <div className="space-y-3">
+          {/* Certificate Number Format */}
+          <Card className="overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+              onClick={() => setCertFmtOpen(v => !v)}
+            >
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-primary" />
-                <Label className="text-sm font-medium">Issue Date</Label>
+                <Settings2 className="w-4 h-4 text-primary shrink-0" />
+                <div>
+                  <span className="text-sm font-medium">Certificate Number Format</span>
+                  {!certFmtOpen && (
+                    <span className="ml-2 text-xs text-muted-foreground font-mono">
+                      e.g. {previewCertNumber(activePrefix, activeFormat, 1)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="issueDate"
-                    checked={!useCustomIssueDate}
-                    onChange={() => setUseCustomIssueDate(false)}
-                    className="w-4 h-4 accent-primary"
-                  />
-                  <span className="text-sm">Today (generation date)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="issueDate"
-                    checked={useCustomIssueDate}
-                    onChange={() => setUseCustomIssueDate(true)}
-                    className="w-4 h-4 accent-primary"
-                  />
-                  <span className="text-sm">Custom date</span>
-                </label>
+              <div className="flex items-center gap-2">
+                {certFmtSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                {certFmtOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
               </div>
-              {useCustomIssueDate && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      data-empty={!issueDate}
-                      className="w-[212px] justify-between font-normal data-[empty=true]:text-muted-foreground"
+            </button>
+
+            {certFmtOpen && (
+              <div className="border-t px-4 py-3 space-y-3 bg-muted/10">
+                <p className="text-xs text-muted-foreground">
+                  Choose how certificate numbers are formatted. Applied to all future certificates for this organisation.
+                </p>
+
+                {/* 5 pattern options */}
+                <div className="space-y-1.5">
+                  {getCertFormatPatterns(derivedPrefix).map(pt => (
+                    <label
+                      key={pt.id}
+                      className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                        certFmtPatternId === pt.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted/30'
+                      }`}
                     >
-                      {issueDate && isValid(new Date(issueDate))
-                        ? format(new Date(issueDate), 'PPP')
-                        : <span>Pick a date</span>}
-                      <ChevronDown />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
-                    <CalendarPicker
-                      mode="single"
-                      selected={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
-                      onSelect={(d) => setIssueDate(d ? format(d, 'yyyy-MM-dd') : '')}
-                      defaultMonth={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
+                      <input
+                        type="radio"
+                        name="certFmt"
+                        checked={certFmtPatternId === pt.id}
+                        onChange={() => handleCertFmtSelect(pt.id)}
+                        className="accent-primary"
+                      />
+                      <span className="font-mono text-sm flex-1">{pt.label}</span>
+                      {certFmtPatternId === pt.id && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
+                    </label>
+                  ))}
+
+                  {/* Custom option */}
+                  <label
+                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      certFmtPatternId === 'custom'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted/30'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="certFmt"
+                      checked={certFmtPatternId === 'custom'}
+                      onChange={() => setCertFmtPatternId('custom')}
+                      className="accent-primary mt-2.5"
                     />
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
+                    <div className="flex-1 space-y-2">
+                      <span className="text-sm font-medium">Custom</span>
+                      {certFmtPatternId === 'custom' && (
+                        <div className="space-y-2 pt-0.5">
+                          <div className="flex gap-2">
+                            <div className="space-y-1 flex-1">
+                              <Label className="text-xs text-muted-foreground">Prefix (1–8 chars)</Label>
+                              <Input
+                                value={certFmtCustomPrefix}
+                                onChange={e => setCertFmtCustomPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+                                placeholder="XEN"
+                                className="h-7 text-xs font-mono"
+                              />
+                            </div>
+                            <div className="space-y-1 flex-1">
+                              <Label className="text-xs text-muted-foreground">Format string</Label>
+                              <Input
+                                value={certFmtCustomFormat}
+                                onChange={e => setCertFmtCustomFormat(e.target.value)}
+                                placeholder="{prefix}-{seq:6}"
+                                className="h-7 text-xs font-mono"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              Preview: <span className="font-mono">{previewCertNumber(certFmtCustomPrefix || 'ORG', certFmtCustomFormat || '{prefix}-{seq:6}', 1)}</span>
+                            </span>
+                            <Button size="sm" variant="outline" className="h-6 text-xs px-2 gap-1" onClick={handleCertFmtCustomSave} disabled={certFmtSaving}>
+                              {certFmtSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Expiry Date Settings — collapsible */}
+          <Card className="overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+              onClick={() => setExpiryOpen(v => !v)}
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary shrink-0" />
+                <div>
+                  <span className="text-sm font-medium">Expiry & Issue Date</span>
+                  {!expiryOpen && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {expiryType === 'never' ? 'No expiry' : expiryType === 'custom' && customExpiryDate ? format(new Date(customExpiryDate), 'MMM d, yyyy') : expiryType === 'year' ? 'Expires in 1 year' : expiryType === 'month' ? 'Expires in 1 month' : expiryType}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {expiryOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+
+            {expiryOpen && (
+              <div className="border-t">
+                <ExpiryDateSelector
+                  value={expiryType}
+                  customDate={customExpiryDate}
+                  issueDate={useCustomIssueDate ? issueDate : undefined}
+                  onChange={handleExpiryChange}
+                />
+
+                {/* Issue Date */}
+                <div className="px-4 py-3 border-t space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">Issue Date</Label>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="issueDate"
+                        checked={!useCustomIssueDate}
+                        onChange={() => setUseCustomIssueDate(false)}
+                        className="w-4 h-4 accent-primary"
+                      />
+                      <span className="text-sm">Today (generation date)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="issueDate"
+                        checked={useCustomIssueDate}
+                        onChange={() => setUseCustomIssueDate(true)}
+                        className="w-4 h-4 accent-primary"
+                      />
+                      <span className="text-sm">Custom date</span>
+                    </label>
+                  </div>
+                  {useCustomIssueDate && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          data-empty={!issueDate}
+                          className="w-[212px] justify-between font-normal data-[empty=true]:text-muted-foreground"
+                        >
+                          {issueDate && isValid(new Date(issueDate))
+                            ? format(new Date(issueDate), 'PPP')
+                            : <span>Pick a date</span>}
+                          <ChevronDown />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
+                        <CalendarPicker
+                          mode="single"
+                          selected={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
+                          onSelect={(d) => setIssueDate(d ? format(d, 'yyyy-MM-dd') : '')}
+                          defaultMonth={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              </div>
+            )}
           </Card>
 
           {/* Unmapped field warning */}

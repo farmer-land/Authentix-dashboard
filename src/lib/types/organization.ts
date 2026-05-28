@@ -39,6 +39,8 @@ export interface Organization extends OrganizationLogoFields {
   billing_country?: string | null;
   billing_postal_code?: string | null;
   verification_message?: string | null;
+  certificate_prefix?: string | null;
+  certificate_number_format?: string | null;
   features: string[];
   created_at: string;
   updated_at: string;
