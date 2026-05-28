@@ -205,6 +205,18 @@ export const certificatesApi = {
     return response.data! as any;
   },
 
+  /**
+   * Re-sign the ZIP export for a completed generation job.
+   * Returns a fresh 7-day download URL and its ISO expiry timestamp.
+   */
+  refreshDownloadLink: async (certGenJobId: string): Promise<{ download_url: string; expires_at: string }> => {
+    const response = await apiRequest<{ download_url: string; expires_at: string }>(
+      `/certificates/generation-jobs/${certGenJobId}/refresh-download`,
+      { method: 'POST' },
+    );
+    return response.data!;
+  },
+
   getDownloadUrl: async (certificateId: string): Promise<{ url: string }> => {
     const response = await apiRequest<{ url: string }>(
       `/certificates/${certificateId}/download`,

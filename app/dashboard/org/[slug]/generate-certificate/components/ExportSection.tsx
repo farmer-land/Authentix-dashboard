@@ -1199,6 +1199,29 @@ function CertPreviewCard({
   );
 }
 
+// ── Download link expiry helpers ──────────────────────────────────────────────
+
+const CERT_DOWNLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000; // mirrors backend SIGNED_URL_TTL.CERT_DOWNLOAD
+
+function linkExpiryStatus(expiresAt: Date | null): 'ok' | 'soon' | 'expired' {
+  if (!expiresAt) return 'ok';
+  const ms = expiresAt.getTime() - Date.now();
+  if (ms <= 0) return 'expired';
+  if (ms < 3 * 24 * 60 * 60 * 1000) return 'soon'; // <3 days
+  return 'ok';
+}
+
+function formatLinkExpiry(expiresAt: Date | null): string | null {
+  if (!expiresAt) return null;
+  const ms = expiresAt.getTime() - Date.now();
+  if (ms <= 0) return 'Link expired';
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days >= 1) return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  if (hours >= 1) return `Expires in ${hours} hour${hours !== 1 ? 's' : ''}`;
+  return 'Expires very soon';
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function ExportSection({
@@ -1328,6 +1351,9 @@ export function ExportSection({
           }
           setTotalGenerated(prev => prev + total);
           setDownloadUrl(url ?? null);
+          if (status.completed_at) {
+            setDownloadExpiresAt(new Date(new Date(status.completed_at).getTime() + CERT_DOWNLOAD_TTL_MS));
+          }
           setGeneratedCertificates(allCerts);
           if (summary.length > 0) setGenerationSummary(summary);
           setGenerationStatus('completed');
@@ -1401,6 +1427,10 @@ export function ExportSection({
   const [allCertJobIds, setAllCertJobIds] = useState<string[]>([]);
   // Background job IDs for import files 2+ (file 1 is tracked by generationJobId)
   const [extraGenerationJobIds, setExtraGenerationJobIds] = useState<string[]>([]);
+
+  // Download link expiry — derived from completed_at + 7-day TTL
+  const [downloadExpiresAt, setDownloadExpiresAt] = useState<Date | null>(null);
+  const [isRefreshingLink, setIsRefreshingLink] = useState(false);
 
   // Poll each extra background job (files 2+) in parallel to accumulate their cert-gen job IDs and total counts.
   // These jobs don't drive the overlay — the primary job does — but we need their cert job IDs for email send.
@@ -1756,6 +1786,21 @@ export function ExportSection({
     }
   };
 
+  const handleRefreshDownload = async () => {
+    if (!certGenJobId || isRefreshingLink) return;
+    setIsRefreshingLink(true);
+    try {
+      const { download_url, expires_at } = await api.certificates.refreshDownloadLink(certGenJobId);
+      setDownloadUrl(download_url);
+      setDownloadExpiresAt(new Date(expires_at));
+      toast.success('Download link refreshed — valid for 7 more days');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to refresh download link');
+    } finally {
+      setIsRefreshingLink(false);
+    }
+  };
+
   const handleExpiryChange = (type: ExpiryType, customDate?: string) => {
     setExpiryType(type);
     if (customDate !== undefined) setCustomExpiryDate(customDate);
@@ -1915,14 +1960,36 @@ export function ExportSection({
 
               {/* CTAs */}
               <div className="flex gap-3" style={{ animation: 'genFadeUp 0.5s ease-out 0.55s both' }}>
-                {downloadUrl && (
-                  <a href={downloadUrl} download>
-                    <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm" style={{ background: '#3ECF8E', color: '#000' }}>
-                      <Download style={{ width: 15, height: 15 }} />
-                      Download All
-                    </button>
-                  </a>
-                )}
+                {downloadUrl && (() => {
+                  const expiry = linkExpiryStatus(downloadExpiresAt);
+                  return (
+                    <div className="flex flex-col items-center gap-1">
+                      {expiry === 'expired' ? (
+                        <button
+                          onClick={handleRefreshDownload}
+                          disabled={isRefreshingLink}
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm opacity-60 hover:opacity-80 transition-opacity"
+                          style={{ background: '#3ECF8E', color: '#000' }}
+                        >
+                          {isRefreshingLink ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" /> : <Download style={{ width: 15, height: 15 }} />}
+                          {isRefreshingLink ? 'Refreshing…' : 'Regenerate Link'}
+                        </button>
+                      ) : (
+                        <a href={downloadUrl} download>
+                          <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm" style={{ background: '#3ECF8E', color: '#000' }}>
+                            <Download style={{ width: 15, height: 15 }} />
+                            Download All
+                          </button>
+                        </a>
+                      )}
+                      {downloadExpiresAt && (
+                        <span className="text-xs tabular-nums" style={{ color: expiry === 'expired' ? 'rgba(251,191,36,0.7)' : expiry === 'soon' ? 'rgba(251,191,36,0.55)' : 'rgba(255,255,255,0.3)' }}>
+                          {formatLinkExpiry(downloadExpiresAt)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <button
                   onClick={() => setOverlayState('hidden')}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-white/10"
@@ -2140,27 +2207,78 @@ export function ExportSection({
 
           {/* Certificate preview cards */}
           {generatedCertificates.length > 0 ? (
-            <div className="max-h-[420px] overflow-y-auto pr-1">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {generatedCertificates.map((cert) => (
-                  <CertPreviewCard
-                    key={cert.id}
-                    cert={cert}
-                    isImageTemplate={true}
-                    emailStatus={cert.recipient_email ? emailStatuses?.[cert.recipient_email] : undefined}
-                  />
-                ))}
+            <>
+              {/* Download ZIP strip — shown when ZIP is available alongside individual cards */}
+              {downloadUrl && (
+                <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/30 border">
+                  <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Download all as ZIP</p>
+                    {downloadExpiresAt && (
+                      <p className="text-[11px]" style={{ color: linkExpiryStatus(downloadExpiresAt) === 'ok' ? undefined : '#f59e0b' }}>
+                        {formatLinkExpiry(downloadExpiresAt)}
+                      </p>
+                    )}
+                  </div>
+                  {linkExpiryStatus(downloadExpiresAt) === 'expired' ? (
+                    <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs" onClick={handleRefreshDownload} disabled={isRefreshingLink}>
+                      {isRefreshingLink ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                      {isRefreshingLink ? 'Refreshing…' : 'Regenerate link'}
+                    </Button>
+                  ) : (
+                    <a href={downloadUrl} download>
+                      <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1">
+                        <Download className="w-3 h-3" /> ZIP
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              )}
+              <div className="max-h-[420px] overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {generatedCertificates.map((cert) => (
+                    <CertPreviewCard
+                      key={cert.id}
+                      cert={cert}
+                      isImageTemplate={true}
+                      emailStatus={cert.recipient_email ? emailStatuses?.[cert.recipient_email] : undefined}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            </>
           ) : totalGenerated > 0 && (
             /* Backend didn't return individual cert data — show download prompt */
-            <div className="rounded-lg border bg-muted/20 p-6 text-center space-y-2">
+            <div className="rounded-lg border bg-muted/20 p-6 text-center space-y-3">
               <FileCheck className="w-8 h-8 mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
                 {totalGenerated} certificate{totalGenerated !== 1 ? 's' : ''} are ready.
-                {downloadUrl ? ' Download the ZIP to view them all.' : ''}
               </p>
-              <Link href={orgPath('/certificates')} className="text-xs text-primary underline underline-offset-2">
+              {downloadUrl && (
+                <div className="flex flex-col items-center gap-1">
+                  {linkExpiryStatus(downloadExpiresAt) === 'expired' ? (
+                    <>
+                      <p className="text-xs text-amber-600 dark:text-amber-400">Download link expired</p>
+                      <Button size="sm" variant="outline" onClick={handleRefreshDownload} disabled={isRefreshingLink} className="gap-1.5">
+                        {isRefreshingLink ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                        {isRefreshingLink ? 'Refreshing…' : 'Regenerate download link'}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <a href={downloadUrl} download>
+                        <Button size="sm" variant="outline" className="gap-1.5">
+                          <Download className="w-3 h-3" /> Download ZIP
+                        </Button>
+                      </a>
+                      {downloadExpiresAt && (
+                        <p className="text-[11px] text-muted-foreground">{formatLinkExpiry(downloadExpiresAt)}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              <Link href={orgPath('/certificates')} className="text-xs text-primary underline underline-offset-2 block">
                 View in Certificates →
               </Link>
             </div>
