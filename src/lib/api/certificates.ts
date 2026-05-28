@@ -217,6 +217,49 @@ export const certificatesApi = {
     return response.data!;
   },
 
+  /**
+   * Per-recipient status for a completed generation job.
+   * Returns failed_recipients (with error messages) and aggregate counts.
+   */
+  listJobRecipients: async (certGenJobId: string): Promise<{
+    failed_recipients: Array<{
+      recipient_id: string | null;
+      recipient_name: string;
+      recipient_email: string | null;
+      error: string;
+      index: number;
+    }>;
+    total_submitted: number;
+    failed_count: number;
+    succeeded_count: number;
+  }> => {
+    const response = await apiRequest<{
+      failed_recipients: Array<{
+        recipient_id: string | null;
+        recipient_name: string;
+        recipient_email: string | null;
+        error: string;
+        index: number;
+      }>;
+      total_submitted: number;
+      failed_count: number;
+      succeeded_count: number;
+    }>(`/certificates/generation-jobs/${certGenJobId}/recipients`);
+    return response.data!;
+  },
+
+  /**
+   * Re-submit failed recipients from a completed generation job as a new batch job.
+   * Returns the new background job_id to poll for completion.
+   */
+  retryFailedRecipients: async (certGenJobId: string): Promise<{ job_id: string; status: string; retry_count: number }> => {
+    const response = await apiRequest<{ job_id: string; status: string; retry_count: number }>(
+      `/certificates/generation-jobs/${certGenJobId}/retry-failed`,
+      { method: 'POST' },
+    );
+    return response.data!;
+  },
+
   getDownloadUrl: async (certificateId: string): Promise<{ url: string }> => {
     const response = await apiRequest<{ url: string }>(
       `/certificates/${certificateId}/download`,

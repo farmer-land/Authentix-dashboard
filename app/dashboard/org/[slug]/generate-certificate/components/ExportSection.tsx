@@ -1432,6 +1432,12 @@ export function ExportSection({
   const [downloadExpiresAt, setDownloadExpiresAt] = useState<Date | null>(null);
   const [isRefreshingLink, setIsRefreshingLink] = useState(false);
 
+  // Per-recipient failure tracking
+  type FailedRecipient = { recipient_id: string | null; recipient_name: string; recipient_email: string | null; error: string; index: number };
+  const [failedRecipients, setFailedRecipients] = useState<FailedRecipient[]>([]);
+  const [failedPanelOpen, setFailedPanelOpen] = useState(false);
+  const [isRetryingFailed, setIsRetryingFailed] = useState(false);
+
   // Poll each extra background job (files 2+) in parallel to accumulate their cert-gen job IDs and total counts.
   // These jobs don't drive the overlay — the primary job does — but we need their cert job IDs for email send.
   useEffect(() => {
@@ -1801,6 +1807,35 @@ export function ExportSection({
     }
   };
 
+  // Fetch per-recipient failure details once the cert gen job ID is known and job is complete
+  useEffect(() => {
+    if (!certGenJobId || generationStatus !== 'completed') return;
+    let cancelled = false;
+    api.certificates.listJobRecipients(certGenJobId).then(result => {
+      if (!cancelled && result.failed_count > 0) setFailedRecipients(result.failed_recipients);
+    }).catch(() => { /* non-fatal — failure list is a bonus */ });
+    return () => { cancelled = true; };
+  }, [certGenJobId, generationStatus]);
+
+  const handleRetryFailed = async () => {
+    if (!certGenJobId || isRetryingFailed) return;
+    setIsRetryingFailed(true);
+    try {
+      const result = await api.certificates.retryFailedRecipients(certGenJobId);
+      setFailedPanelOpen(false);
+      setFailedRecipients([]);
+      // Wire the new job into the existing polling infrastructure
+      setGenerationJobId(result.job_id);
+      setGenerationStatus('generating');
+      setOverlayState('generating');
+      toast.success(`Retrying ${result.retry_count} failed recipient${result.retry_count !== 1 ? 's' : ''}…`);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to start retry job');
+    } finally {
+      setIsRetryingFailed(false);
+    }
+  };
+
   const handleExpiryChange = (type: ExpiryType, customDate?: string) => {
     setExpiryType(type);
     if (customDate !== undefined) setCustomExpiryDate(customDate);
@@ -1957,6 +1992,18 @@ export function ExportSection({
                   </div>
                 )}
               </div>
+
+              {/* Failed recipients chip */}
+              {failedRecipients.length > 0 && (
+                <button
+                  onClick={() => setFailedPanelOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-opacity hover:opacity-80"
+                  style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: 'rgba(252,165,165,1)', animation: 'genFadeUp 0.4s ease-out 0.5s both' }}
+                >
+                  <AlertCircle style={{ width: 14, height: 14 }} />
+                  {failedRecipients.length} failed — view &amp; retry
+                </button>
+              )}
 
               {/* CTAs */}
               <div className="flex gap-3" style={{ animation: 'genFadeUp 0.5s ease-out 0.55s both' }}>
@@ -2202,6 +2249,24 @@ export function ExportSection({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Failed recipients banner — shown in results view after overlay is dismissed */}
+          {failedRecipients.length > 0 && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 flex items-center gap-3">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-red-600">
+                  {failedRecipients.length} recipient{failedRecipients.length !== 1 ? 's' : ''} failed
+                </p>
+                <p className="text-xs text-red-500/80 mt-0.5">
+                  {failedRecipients.length !== 1 ? 'These recipients were' : 'This recipient was'} not issued a certificate due to an error.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="shrink-0 border-red-500/40 text-red-600 hover:bg-red-50 text-xs" onClick={() => setFailedPanelOpen(true)}>
+                View &amp; Retry
+              </Button>
             </div>
           )}
 
@@ -2668,6 +2733,47 @@ export function ExportSection({
           </Button>
         </div>
       )}
+
+      {/* ── Failed recipients panel ── */}
+      <Dialog open={failedPanelOpen} onOpenChange={setFailedPanelOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            <AlertCircle className="w-4 h-4 text-red-500" />
+            {failedRecipients.length} Failed Recipient{failedRecipients.length !== 1 ? 's' : ''}
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground -mt-1">
+            These rows could not be processed. Fix the underlying issue in your source data before retrying.
+          </p>
+          <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
+            {failedRecipients.map((r, i) => (
+              <div key={i} className="px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{r.recipient_name}</p>
+                    {r.recipient_email && <p className="text-xs text-muted-foreground truncate">{r.recipient_email}</p>}
+                  </div>
+                  <Badge variant="destructive" className="text-[10px] shrink-0 mt-0.5">Row {r.index + 1}</Badge>
+                </div>
+                <p className="text-xs text-red-500/80 mt-1 line-clamp-2">{r.error}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs text-muted-foreground">
+              {certGenJobId ? 'Retry re-submits only the failed rows using the same template.' : 'Retry not available for this job.'}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setFailedPanelOpen(false)}>Close</Button>
+              {certGenJobId && (
+                <Button size="sm" variant="destructive" onClick={handleRetryFailed} disabled={isRetryingFailed}>
+                  {isRetryingFailed ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" /> : null}
+                  {isRetryingFailed ? 'Starting…' : `Retry ${failedRecipients.length} failed`}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Send via Email modal ── */}
       {sendModalOpen && generationJobId && (
