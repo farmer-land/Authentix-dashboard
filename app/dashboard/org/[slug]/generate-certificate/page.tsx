@@ -172,6 +172,20 @@ export default function GenerateCertificatePage() {
     setCanRedo(futureRef.current.length > 0);
   }, [fields]);
 
+  // ⌘Z / Ctrl+Z → undo, ⌘⇧Z / Ctrl+Y / Ctrl+Shift+Z → redo
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); redo(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo]);
+
   // Template resize tracking — used to scale fields proportionally
   const templateResizeOrigin = useRef<{ w: number; h: number; fields: CertificateField[] }>({ w: 0, h: 0, fields: [] });
 
