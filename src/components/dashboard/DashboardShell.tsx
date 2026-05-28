@@ -391,13 +391,17 @@ export function DashboardShell({
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  // Live org data — reflects logo / name changes without a full page reload
+  const { organization: liveOrganization } = useOrganization();
+
   // Derived values
   const profileName =
     initialUser?.full_name ?? initialUser?.email?.split("@")[0] ?? "User";
   const isProductOwner  = isProductOwnerEmail(initialUser?.email);
   // Product-owner accounts show "Authentix" as the workspace name in nav
-  const organizationName = isProductOwner ? "Authentix" : (initialOrganization?.name ?? "Organization");
-  const organizationLogo = initialOrganization?.logo ?? null;
+  const organizationName = isProductOwner ? "Authentix" : (liveOrganization?.name ?? initialOrganization?.name ?? "Organization");
+  // Prefer the live signed URL (updates after logo upload); fall back to SSR snapshot on first render
+  const organizationLogo = liveOrganization?.logo_url ?? initialOrganization?.logo ?? null;
 
   // Mounted effect for hydration safety
   useEffect(() => {
