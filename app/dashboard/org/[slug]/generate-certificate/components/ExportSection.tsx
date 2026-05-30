@@ -1,6 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
+import Lottie from 'lottie-react';
+import generationAnimationData from '../assets/generation.json';
+import successAnimationData from '../assets/success-animation.json';
 import { CertificateTemplate, CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -11,17 +15,16 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format, isValid } from 'date-fns';
 import {
   Download, Loader2, CheckCircle2, AlertCircle, Calendar, Plus, X,
   FileText, ChevronDown, ChevronUp, Settings2, Eye, ChevronLeft, ChevronRight,
-  ShieldCheck, BadgeCheck, Mail, Send, ExternalLink, Bell, ArrowRight,
-  FileArchive, FileCheck, Info,
+  ShieldCheck, Mail, Send, ExternalLink, Bell, ArrowRight,
+  FileArchive, FileCheck, Info, RefreshCw,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { ExpiryDateSelector, type ExpiryType } from './ExpiryDateSelector';
+import { type ExpiryType } from './ExpiryDateSelector';
 import { type GeneratedCertificate } from './CertificateTable';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -56,8 +59,12 @@ interface ExportSectionProps {
   /** Additional certificate configurations added by the user */
   additionalConfigs?: CertificateConfig[];
   onAdditionalConfigsChange?: (configs: CertificateConfig[]) => void;
+  /** Called when the user changes a primary-template field mapping directly in Step 4 */
+  onFieldMappingsChange?: (mappings: FieldMapping[]) => void;
   /** Manual entries appended after file rows during generation */
   additionalRows?: Record<string, unknown>[];
+  /** Pass-through from page-level useEditorEvents — keeps the same session ID */
+  onTrackEvent?: (eventType: string, data?: Record<string, unknown>) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -90,22 +97,95 @@ function estimateGenerationTime(totalRows: number, configs: CertificateConfig[])
   return 'several hours';
 }
 
-function getExportFormatDescription(template: CertificateTemplate | null): string {
-  return template ? 'PNG' : 'ZIP';
+// Infer the semantic type of a column by sampling its values.
+// Returns null when the sample is too small or too mixed to determine type.
+function inferColumnType(values: unknown[]): 'name' | 'email' | 'date' | null {
+  const sample = values.slice(0, 30).map(v => String(v ?? '').trim()).filter(Boolean);
+  if (sample.length < 3) return null;
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  // Covers ISO (2024-01-15), UK/US (01/15/2024, 15-01-2024), written (Jan 15, 2024), year-only
+  const dateRe = /^\d{4}-\d{2}-\d{2}$|^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}/i;
+  // Two or more capitalized words with no digits — "John Smith", "María García"
+  const nameRe = /^[A-ZÀ-ɏ][a-zÀ-ɏ'-]+(?:\s+[A-ZÀ-ɏ][a-zÀ-ɏ'-]+)+$/;
+
+  let emailHits = 0, dateHits = 0, nameHits = 0;
+  for (const s of sample) {
+    if (emailRe.test(s)) emailHits++;
+    else if (dateRe.test(s)) dateHits++;
+    else if (nameRe.test(s)) nameHits++;
+  }
+
+  const thresh = sample.length * 0.55; // 55% consensus
+  if (emailHits >= thresh) return 'email';
+  if (dateHits  >= thresh) return 'date';
+  if (nameHits  >= thresh) return 'name';
+  return null;
+}
+
+// Score how well a header column matches a template field.
+// Higher = better match. 0 = no signal.
+function scoreHeaderForField(
+  header: string,
+  field: CertificateField,
+  inferredType: ReturnType<typeof inferColumnType>,
+): number {
+  const h = header.toLowerCase().trim();
+  let score = 0;
+
+  // ── String heuristics ──────────────────────────────────────────────────────
+  if (field.type === 'name') {
+    // Guard against "Course Name" stealing the name field
+    const hasCourseWord = /course|program|subject|workshop|training|award|event/.test(h);
+    if (!hasCourseWord && h.includes('name')) score += 2;
+    if (h === 'name' || h === 'full name' || h === 'recipient name' || h === 'student name') score += 2; // bonus for exact-ish
+  }
+  if (field.type === 'course') {
+    if (/course|program|subject|workshop|internship|training|award|event/.test(h)) score += 2;
+  }
+  if (field.type === 'start_date') {
+    if (/start|issue|issu|begin|from|commencement|award/.test(h)) score += 2;
+    if (/date/.test(h) && !/end|expir|valid|until/.test(h)) score += 1;
+  }
+  if (field.type === 'end_date') {
+    if (/end|expir|valid|until|to\b/.test(h)) score += 2;
+    if (/date/.test(h) && /end|expir|valid/.test(h)) score += 1;
+  }
+  if (field.label.toLowerCase().includes('email') && /email|e-mail|mail/.test(h)) score += 3;
+
+  // ── Value-inference boost ──────────────────────────────────────────────────
+  // These can rescue columns with unhelpful names (e.g. "Column A", "Field 1")
+  if (inferredType === 'name'  && field.type === 'name') score += 3;
+  if (inferredType === 'email' && field.label.toLowerCase().includes('email')) score += 3;
+  if (inferredType === 'date') {
+    if (field.type === 'start_date') score += 2; // prefer start over end for ambiguous dates
+    if (field.type === 'end_date')   score += 1;
+  }
+
+  return score;
 }
 
 // Auto-map imported data headers to a template's fields.
-// Uses exact label match first, then type-based fallback so renamed fields
-// (e.g. "Student Name" vs "Recipient Name") still resolve correctly.
+// Pass 1: exact label match (highest priority, claimed first).
+// Pass 2: scored fuzzy match combining string heuristics + value-type inference.
+// The optional sampleRows parameter enables value inference — pass importedData.rows.
 export function autoMapForTemplate(
   fields: CertificateField[],
-  headers: string[]
+  headers: string[],
+  sampleRows?: Record<string, unknown>[],
 ): FieldMapping[] {
   const mappings: FieldMapping[] = [];
   const usedHeaders = new Set<string>();
 
+  // Pre-compute inferred column types from sample data
+  const inferredTypes = new Map<string, ReturnType<typeof inferColumnType>>();
+  if (sampleRows && sampleRows.length > 0) {
+    for (const h of headers) {
+      inferredTypes.set(h, inferColumnType(sampleRows.map(r => r[h])));
+    }
+  }
+
   // Pass 1: exact label matches — claimed first so fuzzy matching can't steal them.
-  // Prevents 'course name'.includes('name') from mapping "Course Name" to a `name` field.
   fields.forEach((field) => {
     const exact = headers.find(
       (h) => h.toLowerCase().trim() === field.label.toLowerCase().trim()
@@ -116,26 +196,36 @@ export function autoMapForTemplate(
     }
   });
 
-  // Pass 2: semantic type fuzzy matches — only on unclaimed headers, only for unmatched fields.
+  // Pass 2: scored fuzzy + value-inference matching on remaining fields/headers.
   fields.forEach((field) => {
     if (mappings.some((m) => m.fieldId === field.id)) return;
-    const match = headers.find((h) => {
-      if (usedHeaders.has(h)) return false;
-      const nh = h.toLowerCase().trim();
-      if (field.type === 'name' && nh.includes('name')) return true;
-      if (field.type === 'course' && (nh.includes('course') || nh.includes('program'))) return true;
-      if (field.type === 'start_date' && (nh.includes('start') || nh.includes('issue'))) return true;
-      if (field.type === 'end_date' && (nh.includes('end') || nh.includes('expir'))) return true;
-      if (field.label.toLowerCase().includes('email') && (nh.includes('email') || nh.includes('e-mail'))) return true;
-      return false;
-    });
-    if (match) {
-      mappings.push({ fieldId: field.id, columnName: match });
-      usedHeaders.add(match);
+
+    let bestHeader: string | null = null;
+    let bestScore = 0;
+
+    for (const h of headers) {
+      if (usedHeaders.has(h)) continue;
+      const score = scoreHeaderForField(h, field, inferredTypes.get(h) ?? null);
+      if (score > bestScore) { bestScore = score; bestHeader = h; }
+    }
+
+    if (bestHeader && bestScore > 0) {
+      mappings.push({ fieldId: field.id, columnName: bestHeader });
+      usedHeaders.add(bestHeader);
     }
   });
 
   return mappings;
+}
+
+// Returns true when a mapping from srcField should propagate to targetField.
+// `name` type always propagates (recipient identity is universal across templates).
+// All other types only propagate when labels match exactly — prevents "Workshop Name"
+// from silently overwriting "Course Name" just because both have type `course`.
+function shouldPropagate(srcField: CertificateField, targetField: CertificateField): boolean {
+  if (targetField.type !== srcField.type) return false;
+  if (srcField.type === 'name') return true;
+  return targetField.label.toLowerCase().trim() === srcField.label.toLowerCase().trim();
 }
 
 // ── Sub-component: single template config row ─────────────────────────────────
@@ -146,84 +236,76 @@ interface ConfigRowProps {
   index: number;
   onRemove: () => void;
   onMappingChange: (fieldId: string, column: string) => void;
-  onLabelChange: (label: string) => void;
 }
 
-function ConfigRow({ config, importedData, index, onRemove, onMappingChange, onLabelChange }: ConfigRowProps) {
+function ConfigRow({ config, importedData, index, onRemove, onMappingChange }: ConfigRowProps) {
   const mappableFields = config.fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
   const hasUnmapped = mappableFields.some(f => !config.fieldMappings.find(m => m.fieldId === f.id));
   const [expanded, setExpanded] = useState(hasUnmapped);
-  const mappedCount = config.fieldMappings.length;
+  const mappedCount = config.fieldMappings.filter(m => mappableFields.some(f => f.id === m.fieldId)).length;
+  const allMapped = mappedCount === mappableFields.length && mappableFields.length > 0;
 
   return (
-    <Card className="overflow-hidden">
-      {/* Header row */}
-      <div className="flex items-center gap-3 p-3">
-        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+    <div className="rounded-xl border border-border overflow-hidden">
+      <div className="flex items-center gap-2.5 px-3 py-2.5 bg-muted/20">
+        <div className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0 flex items-center justify-center">
           {index + 1}
         </div>
         <div className="flex-1 min-w-0">
-          <input
-            className="text-sm font-medium bg-transparent border-none outline-none w-full placeholder:text-muted-foreground/50"
-            value={config.label}
-            placeholder={`Certificate Type ${index + 1}`}
-            onChange={e => onLabelChange(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground truncate">{config.template.templateName}</p>
+          <p className="text-sm font-medium truncate leading-none">{config.template.templateName}</p>
         </div>
-        <Badge variant="outline" className={`text-xs shrink-0 ${mappedCount === mappableFields.length && mappedCount > 0 ? 'border-green-500 text-green-600' : ''}`}>
-          {mappedCount}/{mappableFields.length} mapped
-        </Badge>
+        {mappableFields.length > 0 && (
+          <span className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-md ${
+            allMapped
+              ? 'bg-green-500/10 text-green-700 dark:text-green-400'
+              : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
+          }`}>
+            {mappedCount}/{mappableFields.length}
+          </span>
+        )}
         <button
-          className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           onClick={() => setExpanded(v => !v)}
-          title={expanded ? 'Collapse mappings' : 'Edit field mappings'}
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+          title={expanded ? 'Collapse' : 'Edit field mappings'}
         >
-          {expanded ? <ChevronUp className="w-4 h-4" /> : <Settings2 className="w-4 h-4" />}
+          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <Settings2 className="w-3.5 h-3.5" />}
         </button>
         {index > 0 && (
           <button
-            className="p-1 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
             onClick={onRemove}
-            title="Remove this certificate type"
+            className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+            title="Remove"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
-
-      {/* Expanded field mapping */}
       {expanded && (
-        <div className="border-t p-3 space-y-2 bg-muted/20">
+        <div className="px-3 pt-2 pb-3 space-y-2 border-t border-border/50">
           {mappableFields.length === 0 ? (
             <p className="text-xs text-muted-foreground">No mappable fields on this template.</p>
-          ) : (
-            mappableFields.map(field => {
-              const mapped = config.fieldMappings.find(m => m.fieldId === field.id)?.columnName;
-              return (
-                <div key={field.id} className="flex items-center gap-3">
-                  <Label className="text-xs w-32 shrink-0 truncate" title={field.label}>{field.label}</Label>
-                  <Select
-                    value={mapped || ''}
-                    onValueChange={val => onMappingChange(field.id, val)}
-                  >
-                    <SelectTrigger className={`h-7 text-xs ${mapped ? 'border-green-500' : ''}`}>
-                      <SelectValue placeholder="Select column…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(importedData?.headers ?? []).map(h => (
-                        <SelectItem key={h} value={h} className="text-xs">{h}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {mapped && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
-                </div>
-              );
-            })
-          )}
+          ) : mappableFields.map(field => {
+            const mapped = config.fieldMappings.find(m => m.fieldId === field.id)?.columnName;
+            return (
+              <div key={field.id} className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground min-w-[5.5rem] truncate">{field.label}</span>
+                <Select value={mapped || ''} onValueChange={val => onMappingChange(field.id, val)}>
+                  <SelectTrigger className={`h-7 text-xs flex-1 ${mapped ? 'border-green-500/60' : ''}`}>
+                    <SelectValue placeholder="Select column…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(importedData?.headers ?? []).map(h => (
+                      <SelectItem key={h} value={h} className="text-xs">{h}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {mapped && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />}
+              </div>
+            );
+          })}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -1262,6 +1344,143 @@ function getCertFormatPatterns(derivedPrefix: string): CertFormatPattern[] {
   ];
 }
 
+// ── Smart date picker ─────────────────────────────────────────────────────────
+// Fully custom — no react-day-picker. Always 42 cells (6×7), fixed height.
+// Header: month + year <select> on the left, ← → arrows on the right.
+interface SmartCalendarProps {
+  selected?: Date;
+  onSelect: (d: Date | undefined) => void;
+  defaultMonth?: Date;
+  fromYear: number;
+  toYear: number;
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const DOW_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function SmartCalendar({ selected, onSelect, defaultMonth, fromYear, toYear }: SmartCalendarProps) {
+  const today = new Date();
+  const initial = defaultMonth ?? selected ?? today;
+  const [viewYear, setViewYear] = useState(initial.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+
+  const goToPrev = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  };
+  const goToNext = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+  };
+
+  // Build 42-cell grid: leading prev-month, current month, trailing next-month
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const prevMonthTotal = new Date(viewYear, viewMonth, 0).getDate();
+  const cells: { date: Date; outOfMonth: boolean }[] = [];
+  for (let i = firstDow - 1; i >= 0; i--) {
+    cells.push({ date: new Date(viewYear, viewMonth - 1, prevMonthTotal - i), outOfMonth: true });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ date: new Date(viewYear, viewMonth, d), outOfMonth: false });
+  }
+  let next = 1;
+  while (cells.length < 42) {
+    cells.push({ date: new Date(viewYear, viewMonth + 1, next++), outOfMonth: true });
+  }
+
+  const years = Array.from({ length: toYear - fromYear + 1 }, (_, i) => fromYear + i);
+  const atStart = viewYear === fromYear && viewMonth === 0;
+  const atEnd = viewYear === toYear && viewMonth === 11;
+
+  return (
+    <div className="p-3 select-none" style={{ width: 272 }}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-0.5">
+          <select
+            value={viewMonth}
+            onChange={e => setViewMonth(Number(e.target.value))}
+            className="text-sm font-semibold bg-transparent border-none outline-none cursor-pointer rounded px-0.5 hover:bg-muted transition-colors"
+          >
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+          <select
+            value={viewYear}
+            onChange={e => setViewYear(Number(e.target.value))}
+            className="text-sm font-semibold bg-transparent border-none outline-none cursor-pointer rounded px-0.5 hover:bg-muted transition-colors"
+          >
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={goToPrev}
+            disabled={atStart}
+            className="size-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={goToNext}
+            disabled={atEnd}
+            className="size-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Day-of-week labels */}
+      <div className="grid grid-cols-7 mb-0.5">
+        {DOW_LABELS.map(d => (
+          <div key={d} className="h-7 flex items-center justify-center text-[11px] font-medium text-muted-foreground">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Date grid — always 42 cells so height never shifts */}
+      <div className="grid grid-cols-7">
+        {cells.map(({ date, outOfMonth }, i) => {
+          const isSel = !!selected && isSameDay(date, selected);
+          const isToday = isSameDay(date, today);
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(date)}
+              className={[
+                'h-8 w-full flex items-center justify-center text-[13px] rounded-full transition-colors',
+                isSel
+                  ? 'bg-primary text-primary-foreground font-semibold'
+                  : isToday
+                  ? 'ring-1 ring-primary text-primary font-medium hover:bg-primary/10'
+                  : outOfMonth
+                  ? 'text-muted-foreground/25 hover:bg-muted'
+                  : 'text-foreground hover:bg-muted',
+              ].join(' ')}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function ExportSection({
@@ -1273,23 +1492,38 @@ export function ExportSection({
   savedTemplates = [],
   additionalConfigs = [],
   onAdditionalConfigsChange,
+  onFieldMappingsChange,
   additionalRows,
+  onTrackEvent,
 }: ExportSectionProps) {
   const { orgPath } = useOrg();
   const { addJob } = useJobNotifications();
   const { organization } = useOrganization();
 
-  // ── Cert number format accordion ──
+  // ── Cert number format ──
   const derivedPrefix = derivePrefixFromName(organization?.name ?? 'ORG');
-  const [certFmtOpen, setCertFmtOpen] = useState(true);
-  const [expiryOpen, setExpiryOpen] = useState(true);
-  const [certFmtPatternId, setCertFmtPatternId] = useState<string>('p1');
-  const [certFmtCustomPrefix, setCertFmtCustomPrefix] = useState('');
-  const [certFmtCustomFormat, setCertFmtCustomFormat] = useState('{prefix}-{seq:6}');
+
+  // Lazy initializers read from React Query cache synchronously on mount (org is typically
+  // already cached from page.tsx's useOrganization call). This prevents the flash where
+  // pills first render as "ORG-000001" then jump to the real prefix after the effect fires.
+  const [certFmtPatternId, setCertFmtPatternId] = useState<string>(() => {
+    if (!organization) return 'p1';
+    const p = organization.certificate_prefix ?? 'ORG';
+    const f = organization.certificate_number_format ?? '{prefix}-{seq:6}';
+    const dp = derivePrefixFromName(organization.name ?? 'ORG');
+    return getCertFormatPatterns(dp).find(pt => pt.prefix(dp) === p && pt.format === f)?.id ?? 'custom';
+  });
+  const [certFmtCustomPrefix, setCertFmtCustomPrefix] = useState<string>(() =>
+    organization?.certificate_prefix ?? ''
+  );
+  const [certFmtCustomFormat, setCertFmtCustomFormat] = useState<string>(() =>
+    organization?.certificate_number_format ?? '{prefix}-{seq:6}'
+  );
   const [certFmtSaving, setCertFmtSaving] = useState(false);
 
-  // Sync pattern selection from loaded org settings
-  useEffect(() => {
+  // Keep in sync if org data arrives after mount (edge case: direct URL navigation to step 4).
+  // useLayoutEffect fires before paint, so the correct value is visible on first frame.
+  useLayoutEffect(() => {
     if (!organization) return;
     const p = organization.certificate_prefix ?? 'ORG';
     const f = organization.certificate_number_format ?? '{prefix}-{seq:6}';
@@ -1388,115 +1622,132 @@ export function ExportSection({
   // Declared here so the polling effect below can reference it before other state declarations.
   const [generationJobId, setGenerationJobId] = useState<string | null>(null);
 
-  // Poll for job completion after submission — transitions overlay from 'generating' to 'success'
-  // when the job finishes while the user is still watching. Stops once a terminal status is reached.
+  // Shared handler — processes a job row update from Realtime or an initial fetch.
+  // Called for both the primary job and any extra jobs.
+  type JobRow = {
+    status: string;
+    result: unknown;
+    error: string | null;
+    completed_at: string | null;
+  };
+
+  const handlePrimaryJobRow = useCallback((row: JobRow) => {
+    if (!isMountedRef.current) return;
+
+    if (row.status === 'completed') {
+      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+      const result = row.result as Record<string, unknown> | null;
+      const total = (result?.total_certificates as number | undefined) ?? 0;
+      type ResultEntry = {
+        label: string; count: number; download_url: string | null; job_id: string | null;
+        certificates?: Array<{
+          id: string; certificate_number: string; recipient_name: string;
+          recipient_email: string | null; issued_at: string; expires_at: string | null;
+          download_url: string | null; preview_url: string | null; recipient_id?: string | null;
+        }>;
+      };
+      const resultsArr = result?.results as ResultEntry[] | undefined;
+      const url = (result?.last_download_url as string | null | undefined) ?? resultsArr?.[0]?.download_url ?? null;
+      const allCerts: GeneratedCertificate[] = [];
+      const summary: Array<{ label: string; count: number }> = [];
+      for (const r of resultsArr ?? []) {
+        if (r.label) summary.push({ label: r.label, count: r.count });
+        for (const c of r.certificates ?? []) {
+          allCerts.push({
+            id: c.id, certificate_number: c.certificate_number,
+            recipient_name: c.recipient_name, recipient_email: c.recipient_email,
+            issued_at: c.issued_at, expires_at: c.expires_at,
+            download_url: c.download_url, preview_url: c.preview_url,
+            recipient_id: c.recipient_id ?? null,
+          });
+        }
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const certJobIds = (resultsArr ?? []).map((r: any) => r.job_id as string | null | undefined).filter((id): id is string => !!id);
+      if (certJobIds.length > 0) {
+        setCertGenJobId(certJobIds[0]!);
+        setAllCertJobIds(prev => Array.from(new Set([...prev, ...certJobIds])));
+      } else {
+        const firstJobId = result?.first_job_id as string | null | undefined;
+        if (firstJobId) {
+          setCertGenJobId(prev => prev ?? firstJobId);
+          setAllCertJobIds(prev => prev.includes(firstJobId) ? prev : [...prev, firstJobId]);
+        }
+      }
+      setTotalGenerated(prev => prev + total);
+      setDownloadUrl(url ?? null);
+      if (row.completed_at) {
+        setDownloadExpiresAt(new Date(new Date(row.completed_at).getTime() + CERT_DOWNLOAD_TTL_MS));
+      }
+      setGeneratedCertificates(allCerts);
+      if (summary.length > 0) setGenerationSummary(summary);
+      setGenerationStatus('completed');
+      setProgress(100);
+      onTrackEvent?.('generation_completed', { template_id: template?.id, total_generated: total });
+      setOverlayState(prev => prev !== 'hidden' ? 'success' : 'hidden');
+      return;
+    }
+
+    if (row.status === 'failed') {
+      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+      setGenerationError(row.error ?? 'Certificate generation failed. Please try again.');
+      setGenerationStatus('error');
+      setOverlayState('hidden');
+      return;
+    }
+
+    // In-progress: update real progress bar if backend reports partial counts
+    const rawResult = row.result as Record<string, unknown> | null | undefined;
+    const processedSoFar = rawResult?.processed_so_far as number | undefined;
+    const progressTotal = rawResult?.total as number | undefined;
+    if (processedSoFar !== undefined && progressTotal !== undefined && progressTotal > 0) {
+      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+      setProgress(Math.min(Math.round((processedSoFar / progressTotal) * 100), 98));
+      setSimulatedCount(processedSoFar);
+    }
+  }, [onTrackEvent, template?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Subscribe to Realtime updates for the primary generation job.
+  // Initial fetch handles jobs that complete before the subscription is established.
   useEffect(() => {
     if (!generationJobId) return;
 
-    let stopped = false;
-    let timerId: ReturnType<typeof setTimeout>;
+    let active = true;
+    const supabase = createSupabaseBrowserClient();
 
-    const poll = async () => {
-      if (stopped || !isMountedRef.current) return;
-      try {
-        const status = await api.certificates.pollJobStatus(generationJobId);
-        if (!isMountedRef.current || stopped) return;
+    // One-shot initial check — catches jobs that already finished before subscribe() fires
+    api.certificates.pollJobStatus(generationJobId).then(status => {
+      if (!active) return;
+      if (status.status === 'completed' || status.status === 'failed') {
+        handlePrimaryJobRow(status);
+      }
+    }).catch(() => { /* ignore — realtime will still deliver updates */ });
 
-        if (status.status === 'completed') {
-          stopped = true;
-          if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
-          const total = (status.result?.total_certificates as number | undefined) ?? 0;
-          const result = status.result as Record<string, unknown> | null;
-          type ResultEntry = {
-            label: string; count: number; download_url: string | null;
-            certificates?: Array<{
-              id: string; certificate_number: string; recipient_name: string;
-              recipient_email: string | null; issued_at: string; expires_at: string | null;
-              download_url: string | null; preview_url: string | null; recipient_id?: string | null;
-            }>;
-          };
-          const resultsArr = result?.results as ResultEntry[] | undefined;
-          const url = (result?.last_download_url as string | null | undefined) ?? resultsArr?.[0]?.download_url ?? null;
-          // Extract individual certificates and per-template summary from job result
-          const allCerts: GeneratedCertificate[] = [];
-          const summary: Array<{ label: string; count: number }> = [];
-          for (const r of resultsArr ?? []) {
-            if (r.label) summary.push({ label: r.label, count: r.count });
-            for (const c of r.certificates ?? []) {
-              allCerts.push({
-                id: c.id, certificate_number: c.certificate_number,
-                recipient_name: c.recipient_name, recipient_email: c.recipient_email,
-                issued_at: c.issued_at, expires_at: c.expires_at,
-                download_url: c.download_url, preview_url: c.preview_url,
-                recipient_id: c.recipient_id ?? null,
-              });
-            }
-          }
-          // Collect all cert-gen job IDs: one per template config in this background job's results
-          const certJobIds = (resultsArr ?? [])
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((r: any) => r.job_id as string | null | undefined)
-            .filter((id): id is string => !!id);
-          if (certJobIds.length > 0) {
-            setCertGenJobId(certJobIds[0]!);
-            setAllCertJobIds(prev => {
-              const merged = Array.from(new Set([...prev, ...certJobIds]));
-              return merged;
-            });
-          } else {
-            // Fallback: use first_job_id if results didn't include per-entry job IDs
-            const firstJobId = result?.first_job_id as string | null | undefined;
-            if (firstJobId) {
-              setCertGenJobId(prev => prev ?? firstJobId);
-              setAllCertJobIds(prev => prev.includes(firstJobId) ? prev : [...prev, firstJobId]);
-            }
-          }
-          setTotalGenerated(prev => prev + total);
-          setDownloadUrl(url ?? null);
-          if (status.completed_at) {
-            setDownloadExpiresAt(new Date(new Date(status.completed_at).getTime() + CERT_DOWNLOAD_TTL_MS));
-          }
-          setGeneratedCertificates(allCerts);
-          if (summary.length > 0) setGenerationSummary(summary);
-          setGenerationStatus('completed');
-          setProgress(100);
-          // Transition to success if the overlay is still visible; otherwise leave it hidden
-          setOverlayState(prev => prev !== 'hidden' ? 'success' : 'hidden');
-          return;
-        }
+    const channel = supabase
+      .channel(`bg-job:${generationJobId}-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'background_jobs', filter: `id=eq.${generationJobId}` },
+        (payload) => {
+          if (!active) return;
+          handlePrimaryJobRow(payload.new as JobRow);
+        },
+      )
+      .subscribe();
 
-        if (status.status === 'failed') {
-          stopped = true;
-          if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
-          setGenerationError(status.error ?? 'Certificate generation failed. Please try again.');
-          setGenerationStatus('error');
-          setOverlayState('hidden');
-          return;
-        }
-
-        // Real progress from the backend — replace the starter animation
-        const rawResult = status.result as Record<string, unknown> | null | undefined;
-        const processedSoFar = rawResult?.processed_so_far as number | undefined;
-        const progressTotal = rawResult?.total as number | undefined;
-        if (processedSoFar !== undefined && progressTotal !== undefined && progressTotal > 0) {
-          if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
-          setProgress(Math.min(Math.round((processedSoFar / progressTotal) * 100), 98));
-          setSimulatedCount(processedSoFar);
-        }
-      } catch { /* network errors silently ignored — retry next tick */ }
-
-      timerId = setTimeout(poll, 3000);
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
     };
-
-    timerId = setTimeout(poll, 2000);
-    return () => { stopped = true; clearTimeout(timerId); };
-  }, [generationJobId]);
+  }, [generationJobId, handlePrimaryJobRow]);
 
   // Expiry settings
   const [expiryType, setExpiryType] = useState<ExpiryType>('year');
   const [customExpiryDate, setCustomExpiryDate] = useState<string>('');
   const [issueDate, setIssueDate] = useState<string>('');
   const [useCustomIssueDate, setUseCustomIssueDate] = useState(false);
+  const [expiryPickerOpen, setExpiryPickerOpen] = useState(false);
+  const [issueDatePickerOpen, setIssueDatePickerOpen] = useState(false);
 
   // Generated certificates
   const [generatedCertificates, setGeneratedCertificates] = useState<GeneratedCertificate[]>([]);
@@ -1540,46 +1791,57 @@ export function ExportSection({
   const [failedPanelOpen, setFailedPanelOpen] = useState(false);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
 
-  // Poll each extra background job (files 2+) in parallel to accumulate their cert-gen job IDs and total counts.
-  // These jobs don't drive the overlay — the primary job does — but we need their cert job IDs for email send.
+  // Subscribe to Realtime updates for extra background jobs (files 2+).
+  // These don't drive the overlay but we need their cert-gen job IDs for email send.
   useEffect(() => {
     if (extraGenerationJobIds.length === 0) return;
-    const cleanups: Array<() => void> = [];
-    for (const ejId of extraGenerationJobIds) {
-      let stopped = false;
-      let timerId: ReturnType<typeof setTimeout>;
-      const poll = async () => {
-        if (stopped || !isMountedRef.current) return;
-        try {
-          const status = await api.certificates.pollJobStatus(ejId);
-          if (!isMountedRef.current || stopped) return;
-          if (status.status === 'completed') {
-            stopped = true;
-            const result = status.result as Record<string, unknown> | null;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const resultsArr = result?.results as Array<any> | undefined;
-            const certJobIds = (resultsArr ?? [])
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              .map((r: any) => r.job_id as string | null | undefined)
-              .filter((id): id is string => !!id);
-            if (certJobIds.length > 0) {
-              setAllCertJobIds(prev => Array.from(new Set([...prev, ...certJobIds])));
-            } else {
-              const fallback = result?.first_job_id as string | null | undefined;
-              if (fallback) setAllCertJobIds(prev => prev.includes(fallback) ? prev : [...prev, fallback]);
-            }
-            const extraTotal = (result?.total_certificates as number | undefined) ?? 0;
-            if (extraTotal > 0) setTotalGenerated(prev => prev + extraTotal);
-            return;
-          }
-          if (status.status === 'failed') { stopped = true; return; }
-        } catch { /* ignore, retry */ }
-        timerId = setTimeout(poll, 4000);
-      };
-      timerId = setTimeout(poll, 3000);
-      cleanups.push(() => { stopped = true; clearTimeout(timerId); });
-    }
-    return () => cleanups.forEach(c => c());
+
+    const supabase = createSupabaseBrowserClient();
+    let active = true;
+
+    const handleExtraJobRow = (ejId: string, row: JobRow) => {
+      if (!active || !isMountedRef.current) return;
+      if (row.status === 'completed') {
+        const result = row.result as Record<string, unknown> | null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const resultsArr = result?.results as Array<any> | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const certJobIds = (resultsArr ?? []).map((r: any) => r.job_id as string | null | undefined).filter((id): id is string => !!id);
+        if (certJobIds.length > 0) {
+          setAllCertJobIds(prev => Array.from(new Set([...prev, ...certJobIds])));
+        } else {
+          const fallback = result?.first_job_id as string | null | undefined;
+          if (fallback) setAllCertJobIds(prev => prev.includes(fallback) ? prev : [...prev, fallback]);
+        }
+        const extraTotal = (result?.total_certificates as number | undefined) ?? 0;
+        if (extraTotal > 0) setTotalGenerated(prev => prev + extraTotal);
+      }
+      void ejId; // used only for channel naming
+    };
+
+    const channels = extraGenerationJobIds.map(ejId => {
+      // Initial check for jobs that may have finished before subscription
+      api.certificates.pollJobStatus(ejId).then(status => {
+        if (!active) return;
+        if (status.status === 'completed' || status.status === 'failed') {
+          handleExtraJobRow(ejId, status);
+        }
+      }).catch(() => {});
+
+      return supabase
+        .channel(`bg-job-extra:${ejId}-${Date.now()}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'background_jobs', filter: `id=eq.${ejId}` },
+          (payload) => handleExtraJobRow(ejId, payload.new as JobRow),
+        )
+        .subscribe();
+    });
+
+    return () => {
+      active = false;
+      channels.forEach(ch => supabase.removeChannel(ch));
+    };
   }, [extraGenerationJobIds]);
 
   // Email setup pre-check (soft warning before generating)
@@ -1643,13 +1905,17 @@ export function ExportSection({
     ...additionalConfigs,
   ];
 
+  // Display count: count configs with any template present (id may be set async for new uploads).
+  // Generation uses the stricter `c.template?.id` filter so the API call always has a valid id.
+  const activeConfigCount = allConfigs.filter(c => c.template != null).length;
+
   const estimatedTime = canGenerate && importedData
     ? estimateGenerationTime(importedData.rowCount, allConfigs.filter(c => c.template?.id))
     : '';
 
   // ── Add a template as extra config ────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleAddTemplate = async (savedTemplate: any) => {
+  const handleAddTemplate = async (savedTemplate: any, existingConfigs?: CertificateConfig[]) => {
     setLoadingTemplateId(savedTemplate.id);
     try {
       const editorData = await api.templates.getEditorData(savedTemplate.id);
@@ -1658,10 +1924,7 @@ export function ExportSection({
         id: f.id || f.field_key,
         type: f.type === 'qrcode' ? 'qr_code' : f.type === 'date' ? 'start_date' : 'custom_text',
         label: f.label,
-        x: f.x,
-        y: f.y,
-        width: f.width || 200,
-        height: f.height || 30,
+        x: f.x, y: f.y, width: f.width || 200, height: f.height || 30,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fontSize: (f.style as any)?.fontSize || 16,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1676,8 +1939,26 @@ export function ExportSection({
         textAlign: (f.style as any)?.textAlign || 'left',
       }));
 
-      const autoMappings = autoMapForTemplate(templateFields, importedData?.headers ?? []);
+      // Step 1: auto-detect from headers + value inference
+      const rawMappings = autoMapForTemplate(templateFields, importedData?.headers ?? [], importedData?.rows);
+      const autoMappedIds = new Set(rawMappings.map(m => m.fieldId));
+      const headers = importedData?.headers ?? [];
 
+      // Step 2: inherit primary config's confirmed mappings for unmapped fields.
+      // Uses shouldPropagate: name type is universal, content types only inherit when labels match.
+      const enhanced = [...rawMappings];
+      for (const f of templateFields) {
+        if (autoMappedIds.has(f.id)) continue;
+        const primaryField = fields.find(pf => shouldPropagate(pf, f));
+        const primaryCol = primaryField
+          ? fieldMappings.find(m => m.fieldId === primaryField.id)?.columnName
+          : undefined;
+        if (primaryCol && headers.includes(primaryCol)) {
+          enhanced.push({ fieldId: f.id, columnName: primaryCol });
+        }
+      }
+
+      const currentConfigs = existingConfigs ?? additionalConfigs;
       const newConfig: CertificateConfig = {
         key: crypto.randomUUID(),
         template: {
@@ -1690,38 +1971,110 @@ export function ExportSection({
           fields: templateFields,
         },
         fields: templateFields,
-        fieldMappings: autoMappings,
-        label: savedTemplate.title || savedTemplate.name || `Certificate ${additionalConfigs.length + 2}`,
+        fieldMappings: enhanced,
+        label: savedTemplate.title || savedTemplate.name || `Certificate ${currentConfigs.length + 2}`,
       };
 
-      onAdditionalConfigsChange?.([...additionalConfigs, newConfig]);
+      // Return the new config for multi-add; caller manages onAdditionalConfigsChange
+      return newConfig;
     } catch (err) {
       console.error('Failed to load template fields:', err);
+      return null;
     } finally {
       setLoadingTemplateId(null);
-      setShowTemplatePicker(false);
     }
+  };
+
+  // Handle adding multiple selected templates at once
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
+  const [isAddingMultiple, setIsAddingMultiple] = useState(false);
+
+  const handleAddSelectedTemplates = async () => {
+    const ids = [...selectedTemplateIds];
+    if (ids.length === 0) return;
+    setIsAddingMultiple(true);
+    try {
+      let currentConfigs = additionalConfigs;
+      const newConfigs: CertificateConfig[] = [];
+      for (const id of ids) {
+        const t = savedTemplates.find(st => st.id === id);
+        if (!t) continue;
+        const newConfig = await handleAddTemplate(t, [...currentConfigs, ...newConfigs]);
+        if (newConfig) newConfigs.push(newConfig);
+      }
+      if (newConfigs.length > 0) {
+        onAdditionalConfigsChange?.([...additionalConfigs, ...newConfigs]);
+      }
+      setSelectedTemplateIds(new Set());
+      setShowTemplatePicker(false);
+    } finally {
+      setIsAddingMultiple(false);
+    }
+  };
+
+  // Push primary config's field mappings to all other configs (only fills unmapped fields).
+  // Uses shouldPropagate: name type propagates universally; content types only when labels match.
+  const handleSyncAllMappings = () => {
+    const headers = importedData?.headers ?? [];
+    const newAdditional = additionalConfigs.map(cfg => {
+      const newMappings = [...cfg.fieldMappings];
+      for (const f of cfg.fields) {
+        if (newMappings.find(m => m.fieldId === f.id)?.columnName) continue; // already mapped
+        const primaryField = fields.find(pf => shouldPropagate(pf, f));
+        const primaryCol = primaryField
+          ? fieldMappings.find(m => m.fieldId === primaryField.id)?.columnName
+          : undefined;
+        if (primaryCol && headers.includes(primaryCol)) {
+          const idx = newMappings.findIndex(m => m.fieldId === f.id);
+          if (idx >= 0) newMappings[idx] = { ...newMappings[idx]!, columnName: primaryCol };
+          else newMappings.push({ fieldId: f.id, columnName: primaryCol });
+        }
+      }
+      return { ...cfg, fieldMappings: newMappings };
+    });
+    onAdditionalConfigsChange?.(newAdditional);
   };
 
   const handleRemoveConfig = (key: string) => {
     onAdditionalConfigsChange?.(additionalConfigs.filter(c => c.key !== key));
   };
 
-  const handleConfigMappingChange = (key: string, fieldId: string, column: string) => {
-    onAdditionalConfigsChange?.(
-      additionalConfigs.map(c =>
-        c.key !== key ? c : {
-          ...c,
-          fieldMappings: c.fieldMappings.find(m => m.fieldId === fieldId)
-            ? c.fieldMappings.map(m => m.fieldId === fieldId ? { ...m, columnName: column } : m)
-            : [...c.fieldMappings, { fieldId, columnName: column }],
-        }
-      )
-    );
-  };
+  // Unified mapping change handler — updates the source config and auto-fills the same
+  // field *type* in all other configs that don't yet have that type mapped.
+  const handleMappingChange = (sourceConfigKey: string, fieldId: string, col: string) => {
+    const applyMapping = (mappings: FieldMapping[], fId: string, column: string): FieldMapping[] =>
+      mappings.find(m => m.fieldId === fId)
+        ? mappings.map(m => m.fieldId === fId ? { ...m, columnName: column } : m)
+        : [...mappings, { fieldId: fId, columnName: column }];
 
-  const handleConfigLabelChange = (key: string, label: string) => {
-    onAdditionalConfigsChange?.(additionalConfigs.map(c => c.key !== key ? c : { ...c, label }));
+    const sourceField = allConfigs.find(c => c.key === sourceConfigKey)?.fields.find(f => f.id === fieldId);
+
+    // Primary config: direct update or propagation
+    const newPrimary = sourceConfigKey === '__primary__'
+      ? applyMapping(fieldMappings, fieldId, col)
+      : (() => {
+          if (!sourceField) return fieldMappings;
+          const target = allConfigs[0]?.fields.find(
+            f => shouldPropagate(sourceField, f) && !fieldMappings.find(m => m.fieldId === f.id)?.columnName,
+          );
+          return target ? applyMapping(fieldMappings, target.id, col) : fieldMappings;
+        })();
+    onFieldMappingsChange?.(newPrimary);
+
+    // Additional configs: direct update for source, propagate to others using shouldPropagate
+    const newAdditional = additionalConfigs.map(cfg => {
+      if (cfg.key === sourceConfigKey) {
+        return { ...cfg, fieldMappings: applyMapping(cfg.fieldMappings, fieldId, col) };
+      }
+      if (!sourceField) return cfg;
+      const target = cfg.fields.find(
+        f => shouldPropagate(sourceField, f) && !cfg.fieldMappings.find(m => m.fieldId === f.id)?.columnName,
+      );
+      return target
+        ? { ...cfg, fieldMappings: applyMapping(cfg.fieldMappings, target.id, col) }
+        : cfg;
+    });
+    onAdditionalConfigsChange?.(newAdditional);
   };
 
   // ── Preview first row ────────────────────────────────────────────────────────
@@ -1891,6 +2244,12 @@ export function ExportSection({
 
       setGenerationJobId(firstJobId);
       if (restJobIds.length > 0) setExtraGenerationJobIds(restJobIds);
+      onTrackEvent?.('generation_started', {
+        template_id: template?.id,
+        row_count: totalRows,
+        config_count: configsToRun.length,
+        has_qr: hasQrCodeField,
+      });
       // Progress timer keeps running through polling — cleared only on completion or error
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
@@ -1975,9 +2334,12 @@ export function ExportSection({
 
   // Full-screen generation overlay
   if (overlayState !== 'hidden') {
-    const PARTICLE_ANGLES = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background select-none overflow-hidden">
+
+        {/* Dark-mode subtle glow */}
+        <div className="absolute inset-0 pointer-events-none hidden dark:block" aria-hidden style={{ background: 'radial-gradient(ellipse 60% 40% at 50% 30%, rgba(62,207,142,0.05) 0%, transparent 70%)' }} />
+
         {/* Cancel button — only during 'generating'; press Escape or click to dismiss */}
         {overlayState === 'generating' && (
           <button
@@ -1994,29 +2356,16 @@ export function ExportSection({
         <style>{`
           @keyframes genZoomIn    { from{opacity:0;transform:scale(0.6)} to{opacity:1;transform:scale(1)} }
           @keyframes genRipple    { 0%{transform:scale(1);opacity:0.7} 100%{transform:scale(3);opacity:0} }
-          @keyframes genShieldPop { 0%{opacity:0;transform:scale(0.4) rotate(-12deg)} 65%{transform:scale(1.12) rotate(4deg)} 100%{opacity:1;transform:scale(1) rotate(0deg)} }
-          @keyframes genBadgePop  { 0%{opacity:0;transform:scale(0) rotate(20deg)} 70%{transform:scale(1.18) rotate(-6deg)} 100%{opacity:1;transform:scale(1) rotate(0deg)} }
-          @keyframes genBadgeFloat{ 0%,100%{transform:translateY(0px) rotate(-6deg)} 50%{transform:translateY(-8px) rotate(-2deg)} }
-          @keyframes genShieldGlow{ 0%,100%{filter:drop-shadow(0 0 10px #3ECF8E66)} 50%{filter:drop-shadow(0 0 28px #3ECF8Ecc)} }
-          @keyframes genPulse     { 0%,100%{opacity:0.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.06)} }
-          @keyframes genSpin      { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-          @keyframes genSpinRev   { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
-          @keyframes genOrbit     { from{transform:rotate(0deg) translateX(90px) rotate(0deg)} to{transform:rotate(360deg) translateX(90px) rotate(-360deg)} }
-          @keyframes genOrbit2    { from{transform:rotate(120deg) translateX(70px) rotate(-120deg)} to{transform:rotate(480deg) translateX(70px) rotate(-480deg)} }
-          @keyframes genOrbit3    { from{transform:rotate(240deg) translateX(110px) rotate(-240deg)} to{transform:rotate(600deg) translateX(110px) rotate(-600deg)} }
-          @keyframes genDocLine   { 0%,100%{opacity:0.2} 50%{opacity:0.75} }
           @keyframes genFadeSlide { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
           @keyframes genFadeUp    { from{opacity:0;transform:translateY(16px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)} }
           @keyframes genCountPop  { 0%{transform:scale(0.6);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
-          @keyframes genParticle  { 0%{transform:translate(0,0) scale(1);opacity:1} 100%{transform:var(--tx,0) var(--ty,0) scale(0);opacity:0} }
-          @keyframes genRay       { 0%,100%{opacity:0.15} 50%{opacity:0.5} }
           @keyframes genMsgFade   { from{opacity:0;transform:translateY(4px)} to{opacity:0.6;transform:translateY(0)} }
-          @keyframes genBgPulse   { 0%,100%{opacity:0} 50%{opacity:1} }
+          @keyframes shimmer      { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         `}</style>
 
         {/* Bottom CTA — while generating animation plays */}
         {overlayState === 'generating' && generationJobId && (
-          <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3" style={{ animation: 'genFadeSlide 0.4s ease-out 1s both' }}>
+          <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3 z-10" style={{ animation: 'genFadeSlide 0.4s ease-out 1s both' }}>
             <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
               Want to keep working? Run this in the background.
             </p>
@@ -2038,65 +2387,19 @@ export function ExportSection({
           </div>
         )}
 
-        <div className="flex flex-col items-center gap-10">
+        <div className="relative z-10 flex flex-col items-center gap-10">
           {overlayState === 'success' ? (
             /* ── Success ── */
             <div className="flex flex-col items-center gap-8">
-              {/* Icon cluster with particles */}
-              <div className="relative flex items-center justify-center" style={{ width: 240, height: 240 }}>
-                {/* Particle burst */}
-                {PARTICLE_ANGLES.map((angle, i) => {
-                  const rad = (angle * Math.PI) / 180;
-                  const dist = 90 + (i % 3) * 20;
-                  const tx = `translateX(${Math.round(Math.cos(rad) * dist)}px)`;
-                  const ty = `translateY(${Math.round(Math.sin(rad) * dist)}px)`;
-                  const size = i % 3 === 0 ? 8 : i % 3 === 1 ? 5 : 6;
-                  const colors = ['#3ECF8E', '#3ECF8Eaa', '#3ECF8E77'];
-                  return (
-                    <div key={angle} style={{
-                      position: 'absolute',
-                      width: size, height: size,
-                      borderRadius: i % 2 === 0 ? '50%' : '2px',
-                      background: colors[i % 3],
-                      boxShadow: i % 3 === 0 ? `0 0 6px #3ECF8E` : 'none',
-                      // @ts-expect-error css custom properties
-                      '--tx': tx, '--ty': ty,
-                      animation: `genParticle 0.9s cubic-bezier(0.2,0,0.8,1) ${i * 0.04}s both`,
-                    }} />
-                  );
-                })}
-
-                {/* Ripple rings */}
-                <div className="absolute w-56 h-56 rounded-full" style={{ border: '1.5px solid #3ECF8E44', animation: 'genRipple 2s ease-out 0.1s infinite' }} />
-                <div className="absolute w-56 h-56 rounded-full" style={{ border: '1px solid #3ECF8E22', animation: 'genRipple 2s ease-out 0.7s infinite' }} />
-                <div className="absolute w-56 h-56 rounded-full" style={{ border: '1px solid #3ECF8E11', animation: 'genRipple 2s ease-out 1.3s infinite' }} />
-
-                {/* Rotating rays */}
-                {[0,45,90,135].map(r => (
-                  <div key={r} style={{
-                    position: 'absolute', width: 2, height: 70, borderRadius: 1,
-                    background: 'linear-gradient(to bottom, #3ECF8E66, transparent)',
-                    transformOrigin: 'bottom center',
-                    transform: `rotate(${r}deg) translateY(-70px)`,
-                    animation: `genRay 2s ease-in-out ${r * 0.015}s infinite`,
-                  }} />
-                ))}
-
-                {/* Glow backdrop */}
-                <div className="absolute rounded-full" style={{ width: 140, height: 140, background: 'radial-gradient(circle, #3ECF8E28 0%, transparent 70%)' }} />
-
-                {/* Main shield */}
-                <ShieldCheck style={{
-                  width: 100, height: 100, color: '#3ECF8E',
-                  animation: 'genShieldPop 0.6s cubic-bezier(0.34,1.56,0.64,1) both, genShieldGlow 2.2s ease-in-out 0.6s infinite',
-                }} />
-
-                {/* Floating badge */}
-                <div style={{ position: 'absolute', top: 20, right: 16, animation: 'genBadgePop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.25s both' }}>
-                  <div style={{ animation: 'genBadgeFloat 3s ease-in-out 0.8s infinite' }}>
-                    <BadgeCheck style={{ width: 38, height: 38, color: '#3ECF8E' }} />
-                  </div>
-                </div>
+              {/* Medal celebration animation */}
+              <div style={{ animation: 'genZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                <Lottie
+                  animationData={successAnimationData}
+                  loop={false}
+                  autoplay
+                  style={{ width: 300, height: 180 }}
+                  rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
+                />
               </div>
 
               {/* Text with count-up */}
@@ -2222,120 +2525,58 @@ export function ExportSection({
             </div>
           ) : (
             /* ── Generating animation ── */
-            <>
-              {/* Central animated visual */}
-              <div className="relative flex items-center justify-center" style={{ width: 260, height: 260 }}>
+            <div className="flex flex-col items-center gap-8" style={{ animation: 'genFadeSlide 0.3s ease-out both' }}>
+              <Lottie
+                animationData={generationAnimationData}
+                loop
+                autoplay
+                style={{ width: 280, height: 280 }}
+                rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
+              />
 
-                {/* Outermost slow-spinning dashed ring */}
-                <div className="absolute inset-0 rounded-full pointer-events-none" style={{
-                  border: '1px dashed rgba(62,207,142,0.25)',
-                  animation: 'genSpin 18s linear infinite',
-                }} />
+              {/* Status label */}
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)', animation: 'genMsgFade 0.4s ease-out both' }} key={statusMsgIndex}>
+                {progressLabel || STATUS_MESSAGES[statusMsgIndex]}
+              </p>
 
-                {/* Mid spinning ring */}
-                <div className="absolute rounded-full pointer-events-none" style={{
-                  inset: 18,
-                  border: '1.5px dashed rgba(62,207,142,0.35)',
-                  animation: 'genSpinRev 12s linear infinite',
-                }} />
-
-                {/* Inner glowing ring */}
-                <div className="absolute rounded-full pointer-events-none" style={{
-                  inset: 38,
-                  border: '2px solid rgba(62,207,142,0.45)',
-                  boxShadow: '0 0 18px rgba(62,207,142,0.15) inset',
-                  animation: 'genPulse 2.4s ease-in-out infinite',
-                }} />
-
-                {/* Orbiting dot 1 */}
-                <div style={{ position: 'absolute', top: '50%', left: '50%', animation: 'genOrbit 4s linear infinite' }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3ECF8E', boxShadow: '0 0 8px #3ECF8E' }} />
-                </div>
-                {/* Orbiting dot 2 */}
-                <div style={{ position: 'absolute', top: '50%', left: '50%', animation: 'genOrbit2 3s linear infinite' }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#3ECF8Eaa' }} />
-                </div>
-                {/* Orbiting dot 3 */}
-                <div style={{ position: 'absolute', top: '50%', left: '50%', animation: 'genOrbit3 6s linear infinite' }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3ECF8E77', boxShadow: '0 0 6px #3ECF8E55' }} />
-                </div>
-
-                {/* Centre: document icon */}
-                <div className="relative flex flex-col items-center justify-center rounded-2xl" style={{
-                  width: 100, height: 120,
-                  background: 'rgba(62,207,142,0.08)',
-                  border: '1.5px solid rgba(62,207,142,0.4)',
-                  boxShadow: '0 0 32px rgba(62,207,142,0.12)',
-                  animation: 'genPulse 2.4s ease-in-out infinite',
-                }}>
-                  {/* Folded corner */}
-                  <div style={{
-                    position: 'absolute', top: 0, right: 0,
-                    width: 0, height: 0,
-                    borderStyle: 'solid',
-                    borderWidth: '0 18px 18px 0',
-                    borderColor: 'transparent rgba(62,207,142,0.5) transparent transparent',
-                  }} />
-                  {/* Doc lines */}
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} style={{
-                      height: 3,
-                      borderRadius: 2,
-                      background: 'rgba(62,207,142,0.5)',
-                      width: i === 0 ? 52 : i === 3 ? 32 : 64,
-                      marginBottom: i < 3 ? 8 : 0,
-                      animation: `genDocLine 1.8s ease-in-out ${i * 0.18}s infinite`,
-                    }} />
-                  ))}
-                  {/* Seal dot */}
-                  <div style={{
-                    position: 'absolute', bottom: 12, right: 12,
-                    width: 18, height: 18, borderRadius: '50%',
-                    background: 'rgba(62,207,142,0.2)',
-                    border: '1.5px solid rgba(62,207,142,0.6)',
-                  }} />
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div style={{ width: 480 }} className="space-y-2">
-                <div className="relative rounded-full overflow-visible" style={{ height: 10, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.16)' }}>
-                  {/* Fill — dragger is a child so it moves with the bar, always in sync */}
+              {/* Modern progress bar */}
+              <div style={{ width: 420 }} className="space-y-2.5">
+                {/* Track */}
+                <div className="relative rounded-full overflow-hidden" style={{ height: 6, background: 'rgba(255,255,255,0.08)' }}>
+                  {/* Animated fill with gradient */}
                   <div
                     className="absolute inset-y-0 left-0 rounded-full"
                     style={{
                       width: `${progress}%`,
-                      background: '#3ECF8E',
-                      boxShadow: progress > 0 ? '0 0 10px #3ECF8E88' : 'none',
-                      minWidth: progress > 0 ? 10 : 0,
-                      transition: 'width 600ms linear',
+                      background: 'linear-gradient(90deg, #3ECF8E 0%, #6EE7B7 100%)',
+                      boxShadow: progress > 0 ? '0 0 12px rgba(62,207,142,0.6)' : 'none',
+                      minWidth: progress > 0 ? 6 : 0,
+                      transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)',
                     }}
-                  >
-                    {/* Dragger dot — pinned to right edge of fill, always perfectly in sync */}
-                    {progress > 0 && progress < 100 && (
-                      <div style={{
-                        position: 'absolute',
-                        right: -7,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 14, height: 14, borderRadius: '50%',
-                        background: 'white',
-                        boxShadow: '0 0 0 2.5px #3ECF8E, 0 0 8px #3ECF8E66',
-                      }} />
-                    )}
-                  </div>
+                  />
+                  {/* Shimmer sweep on the fill */}
+                  {progress > 0 && progress < 100 && (
+                    <div
+                      className="absolute inset-y-0 rounded-full pointer-events-none"
+                      style={{
+                        left: 0,
+                        width: `${progress}%`,
+                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.6s ease-in-out infinite',
+                      }}
+                    />
+                  )}
                 </div>
-                <div className="flex items-center justify-between px-0.5">
-                  <span className="text-sm font-bold tabular-nums" style={{ color: '#3ECF8E' }}>{progress}%</span>
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)', animation: 'genMsgFade 0.4s ease-out both' }} key={statusMsgIndex}>
-                    {progressLabel || STATUS_MESSAGES[statusMsgIndex]}
-                  </span>
-                  <span className="text-xs tabular-nums" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                {/* Numeric labels */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold tabular-nums" style={{ color: '#3ECF8E' }}>{progress}%</span>
+                  <span className="text-xs tabular-nums" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     {simulatedCount > 0 ? `${simulatedCount} / ${importedData?.rowCount ?? '?'}` : '—'}
                   </span>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -2480,456 +2721,427 @@ export function ExportSection({
 
       {/* Settings — hidden after completion */}
       {generationStatus !== 'completed' && (
-        <>
-          {/* ── Multi-certificate configuration ── */}
-          <Card className="p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold">Certificate Types</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Generate multiple certificate types from the same data in one click.
-                </p>
+        <div className="space-y-8">
+          {/* ── Stats hero ── */}
+          {importedData && (
+            <div className="rounded-2xl bg-gradient-to-br from-muted/60 to-muted/20 border border-border/50 p-5 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-3">Ready to generate</p>
+              <div className="flex items-center justify-center gap-2 text-4xl font-black tabular-nums tracking-tight">
+                <div className="flex flex-col items-center gap-0.5">
+                  <span>{importedData.rowCount}</span>
+                  <span className="text-[9px] font-normal text-muted-foreground/50 uppercase tracking-wide">recipients</span>
+                </div>
+                <span className="text-muted-foreground/40 text-2xl font-light pb-3">×</span>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span>{activeConfigCount}</span>
+                  <span className="text-[9px] font-normal text-muted-foreground/50 uppercase tracking-wide">templates</span>
+                </div>
+                <span className="text-muted-foreground/40 text-2xl font-light pb-3">=</span>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-primary">{importedData.rowCount * activeConfigCount}</span>
+                  <span className="text-[9px] font-normal text-primary/50 uppercase tracking-wide">certificates</span>
+                </div>
               </div>
-              <Badge variant="secondary" className="text-xs">
-                {allConfigs.filter(c => c.template?.id).length} type{allConfigs.filter(c => c.template?.id).length !== 1 ? 's' : ''}
-              </Badge>
+              {hasQrCodeField && <p className="text-[11px] text-green-600 dark:text-green-400 font-medium mt-2">QR codes included</p>}
+              {estimatedTime && overlayState === 'hidden' && (() => {
+                const rowCount = importedData.rowCount;
+                const CHUNK = 50;
+                const chunksPerTemplate = Math.ceil(rowCount / CHUNK);
+                const totalChunks = chunksPerTemplate * activeConfigCount;
+                const isMultiTemplate = activeConfigCount > 1;
+                const showBreakdown = rowCount > CHUNK;
+                return (
+                  <p className="text-[11px] text-muted-foreground/60 mt-2">
+                    Est.{' '}
+                    <span className="font-medium text-muted-foreground">{estimatedTime}</span>
+                    {showBreakdown && (
+                      <>
+                        {' · '}runs in background
+                        <span className="relative group inline-block ml-1 align-middle cursor-help">
+                          <Info className="w-3 h-3 text-muted-foreground/40 inline" />
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 hidden group-hover:flex w-72 flex-col gap-1.5 rounded-lg bg-gray-900 px-3 py-2.5 text-left text-xs text-white shadow-xl">
+                            <strong className="text-white/90">Why does this take so long?</strong>
+                            <span className="text-white/70 leading-relaxed">Background job runs once per minute and processes <strong className="text-white/90">up to 50 per run</strong>.</span>
+                            <span className="text-white/60 font-mono text-[10px] bg-white/5 rounded px-2 py-1">
+                              {rowCount.toLocaleString()} recipients ÷ {CHUNK}/run = {chunksPerTemplate} runs{isMultiTemplate && <> × {activeConfigCount} templates</>} = ~{totalChunks} min
+                            </span>
+                            <span className="text-white/50">You can close this page — you&apos;ll get a notification when it&apos;s done.</span>
+                          </span>
+                        </span>
+                      </>
+                    )}
+                  </p>
+                );
+              })()}
             </div>
+          )}
 
-            <div className="space-y-2">
-              {/* Primary config */}
-              {template && (
-                <ConfigRow
-                  config={allConfigs[0]!}
-                  importedData={importedData}
-                  index={0}
-                  onRemove={() => {}}
-                  onMappingChange={() => {}}
-                  onLabelChange={() => {}}
-                />
-              )}
-
-              {/* Additional configs */}
-              {additionalConfigs.map((cfg, idx) => (
-                <ConfigRow
-                  key={cfg.key}
-                  config={cfg}
-                  importedData={importedData}
-                  index={idx + 1}
-                  onRemove={() => handleRemoveConfig(cfg.key)}
-                  onMappingChange={(fieldId, col) => handleConfigMappingChange(cfg.key, fieldId, col)}
-                  onLabelChange={(label) => handleConfigLabelChange(cfg.key, label)}
-                />
-              ))}
-            </div>
-
-            {/* Add template picker */}
-            {showTemplatePicker ? (
-              <div className="border rounded-lg p-3 space-y-2 bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium">Select a saved template</p>
+          {/* ── Certificate templates ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-0.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Certificate Templates</p>
+              <div className="flex items-center gap-2">
+                {additionalConfigs.length > 0 && fieldMappings.some(m => m.columnName) && (
                   <button
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowTemplatePicker(false)}
+                    title="Fill unmapped fields in all templates using primary config's mappings"
+                    onClick={handleSyncAllMappings}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
                   >
+                    <RefreshCw className="w-3 h-3" />
+                    Sync all
+                  </button>
+                )}
+                <span className="text-[10px] text-muted-foreground/50">{activeConfigCount} selected</span>
+              </div>
+            </div>
+
+            {template && (
+              <ConfigRow
+                config={allConfigs[0]!}
+                importedData={importedData}
+                index={0}
+                onRemove={() => {}}
+                onMappingChange={(fieldId, col) => handleMappingChange('__primary__', fieldId, col)}
+              />
+            )}
+
+            {additionalConfigs.map((cfg, idx) => (
+              <ConfigRow
+                key={cfg.key}
+                config={cfg}
+                importedData={importedData}
+                index={idx + 1}
+                onRemove={() => handleRemoveConfig(cfg.key)}
+                onMappingChange={(fieldId, col) => handleMappingChange(cfg.key, fieldId, col)}
+              />
+            ))}
+
+            {showTemplatePicker ? (
+              <div className="rounded-xl border border-border/60 p-3 space-y-2.5 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium">
+                    {selectedTemplateIds.size > 0
+                      ? `${selectedTemplateIds.size} selected`
+                      : 'Add certificate templates'}
+                  </p>
+                  <button className="text-muted-foreground hover:text-foreground" onClick={() => { setShowTemplatePicker(false); setSelectedTemplateIds(new Set()); }}>
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                {savedTemplates.filter(t => t.id !== template?.id).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No other saved templates found.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                    {savedTemplates
-                      .filter(t => t.id && t.id !== template?.id && !additionalConfigs.find(c => c.template.id === t.id))
-                      .map(t => (
+                {(() => {
+                  const available = savedTemplates.filter(t => t.id && t.id !== template?.id && !additionalConfigs.find(c => c.template.id === t.id));
+                  if (available.length === 0) {
+                    return <p className="text-xs text-muted-foreground">No other saved templates found.</p>;
+                  }
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto">
+                        {available.map(t => {
+                          const checked = selectedTemplateIds.has(t.id);
+                          const isLoading = loadingTemplateId === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              disabled={isLoading || isAddingMultiple}
+                              onClick={() => setSelectedTemplateIds(prev => {
+                                const next = new Set(prev);
+                                next.has(t.id) ? next.delete(t.id) : next.add(t.id);
+                                return next;
+                              })}
+                              className={`flex items-center gap-2 p-2 text-left rounded-lg border transition-colors text-xs ${
+                                checked
+                                  ? 'border-primary/50 bg-primary/8 text-foreground'
+                                  : 'border-border/50 hover:bg-muted/50 text-foreground/80'
+                              }`}
+                            >
+                              {isLoading
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                : <div className={`w-3.5 h-3.5 rounded shrink-0 border flex items-center justify-center transition-colors ${checked ? 'bg-primary border-primary' : 'border-border'}`}>
+                                    {checked && <CheckCircle2 className="w-2.5 h-2.5 text-primary-foreground" />}
+                                  </div>}
+                              <span className="truncate">{t.title || t.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center gap-2 pt-0.5">
                         <button
-                          key={t.id}
-                          disabled={loadingTemplateId === t.id}
-                          onClick={() => handleAddTemplate(t)}
-                          className="flex items-center gap-2 p-2 text-left rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-xs"
+                          disabled={selectedTemplateIds.size === 0 || isAddingMultiple}
+                          onClick={handleAddSelectedTemplates}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground disabled:opacity-40 hover:opacity-90 transition-opacity"
                         >
-                          {loadingTemplateId === t.id
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                            : <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                          }
-                          <span className="truncate">{t.title || t.name}</span>
+                          {isAddingMultiple
+                            ? <><Loader2 className="w-3 h-3 animate-spin" />Adding…</>
+                            : <><Plus className="w-3 h-3" />Add {selectedTemplateIds.size > 0 ? selectedTemplateIds.size : ''} template{selectedTemplateIds.size !== 1 ? 's' : ''}</>}
                         </button>
-                      ))}
-                  </div>
-                )}
+                        {selectedTemplateIds.size > 0 && (
+                          <button
+                            onClick={() => setSelectedTemplateIds(new Set())}
+                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2 border-dashed"
+              <button
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-xs text-muted-foreground hover:text-primary"
                 onClick={() => setShowTemplatePicker(true)}
               >
-                <Plus className="w-4 h-4" />
-                Add Another Certificate Type
-              </Button>
+                <Plus className="w-3.5 h-3.5" />
+                Add another certificate type
+              </button>
             )}
-          </Card>
+          </div>
 
-          {/* Certificate Number Format */}
-          <Card className="overflow-hidden">
-            <button
-              type="button"
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-              onClick={() => setCertFmtOpen(v => !v)}
-            >
-              <div className="flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-primary shrink-0" />
-                <div>
-                  <span className="text-sm font-medium">Certificate Number Format</span>
-                  {!certFmtOpen && (
-                    <span className="ml-2 text-xs text-muted-foreground font-mono">
-                      e.g. {previewCertNumber(activePrefix, activeFormat, 1)}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {certFmtSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
-                {certFmtOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-              </div>
-            </button>
-
-            {certFmtOpen && (
-              <div className="border-t px-4 py-3 space-y-3 bg-muted/10">
+          {/* ── Cert number format ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-0.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Certificate Number</p>
+              <span className="font-mono text-[10px] text-muted-foreground/50">{previewCertNumber(activePrefix, activeFormat, 1)}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {getCertFormatPatterns(derivedPrefix).map(pt => (
+                <button
+                  key={pt.id}
+                  onClick={() => handleCertFmtSelect(pt.id)}
+                  className={`px-3 py-1.5 text-xs rounded-lg border transition-all font-mono ${
+                    certFmtPatternId === pt.id
+                      ? 'bg-foreground text-background border-transparent font-semibold'
+                      : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                  }`}
+                >
+                  {pt.label}
+                </button>
+              ))}
+              <button
+                onClick={() => setCertFmtPatternId('custom')}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                  certFmtPatternId === 'custom'
+                    ? 'bg-foreground text-background border-transparent font-semibold'
+                    : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                }`}
+              >
+                Custom…
+              </button>
+              {certFmtSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground self-center" />}
+            </div>
+            {certFmtPatternId === 'custom' && (
+              <div className="rounded-xl border border-border/60 p-3 space-y-3 bg-muted/20">
                 <p className="text-xs text-muted-foreground">
-                  Choose how certificate numbers are formatted. Applied to all future certificates for this organisation.
+                  Build your own format. <span className="font-mono text-foreground/70">{'{prefix}'}</span> is your short code (e.g. <span className="font-mono text-foreground/70">XEN</span>), and <span className="font-mono text-foreground/70">{'{seq:6}'}</span> is a zero-padded counter — the number sets how many digits wide it is.
                 </p>
-
-                {/* 5 pattern options */}
-                <div className="space-y-1.5">
-                  {getCertFormatPatterns(derivedPrefix).map(pt => (
-                    <label
-                      key={pt.id}
-                      className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                        certFmtPatternId === pt.id
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:bg-muted/30'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="certFmt"
-                        checked={certFmtPatternId === pt.id}
-                        onChange={() => handleCertFmtSelect(pt.id)}
-                        className="accent-primary"
-                      />
-                      <span className="font-mono text-sm flex-1">{pt.label}</span>
-                      {certFmtPatternId === pt.id && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
-                    </label>
-                  ))}
-
-                  {/* Custom option */}
-                  <label
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                      certFmtPatternId === 'custom'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted/30'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="certFmt"
-                      checked={certFmtPatternId === 'custom'}
-                      onChange={() => setCertFmtPatternId('custom')}
-                      className="accent-primary mt-2.5"
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <p className="text-[10px] font-medium text-muted-foreground mb-1">Short code <span className="font-normal opacity-60">(letters/numbers, max 8)</span></p>
+                    <Input
+                      value={certFmtCustomPrefix}
+                      onChange={e => setCertFmtCustomPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+                      placeholder="XEN"
+                      className="h-7 text-xs font-mono"
                     />
-                    <div className="flex-1 space-y-2">
-                      <span className="text-sm font-medium">Custom</span>
-                      {certFmtPatternId === 'custom' && (
-                        <div className="space-y-2 pt-0.5">
-                          <div className="flex gap-2">
-                            <div className="space-y-1 flex-1">
-                              <Label className="text-xs text-muted-foreground">Prefix (1–8 chars)</Label>
-                              <Input
-                                value={certFmtCustomPrefix}
-                                onChange={e => setCertFmtCustomPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
-                                placeholder="XEN"
-                                className="h-7 text-xs font-mono"
-                              />
-                            </div>
-                            <div className="space-y-1 flex-1">
-                              <Label className="text-xs text-muted-foreground">Format string</Label>
-                              <Input
-                                value={certFmtCustomFormat}
-                                onChange={e => setCertFmtCustomFormat(e.target.value)}
-                                placeholder="{prefix}-{seq:6}"
-                                className="h-7 text-xs font-mono"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">
-                              Preview: <span className="font-mono">{previewCertNumber(certFmtCustomPrefix || 'ORG', certFmtCustomFormat || '{prefix}-{seq:6}', 1)}</span>
-                            </span>
-                            <Button size="sm" variant="outline" className="h-6 text-xs px-2 gap-1" onClick={handleCertFmtCustomSave} disabled={certFmtSaving}>
-                              {certFmtSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                              Save
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </label>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-medium text-muted-foreground mb-1">Format <span className="font-normal opacity-60">({'{prefix}'} + {'{seq:N}'})</span></p>
+                    <Input
+                      value={certFmtCustomFormat}
+                      onChange={e => setCertFmtCustomFormat(e.target.value)}
+                      placeholder="{prefix}-{seq:6}"
+                      className="h-7 text-xs font-mono"
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Expiry Date Settings — collapsible */}
-          <Card className="overflow-hidden">
-            <button
-              type="button"
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-              onClick={() => setExpiryOpen(v => !v)}
-            >
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-primary shrink-0" />
-                <div>
-                  <span className="text-sm font-medium">Expiry & Issue Date</span>
-                  {!expiryOpen && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {expiryType === 'never' ? 'No expiry' : expiryType === 'custom' && customExpiryDate ? format(new Date(customExpiryDate), 'MMM d, yyyy') : expiryType === 'year' ? 'Expires in 1 year' : expiryType === 'month' ? 'Expires in 1 month' : expiryType}
+                <div className="flex items-center justify-between pt-0.5">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Preview</p>
+                    <span className="font-mono text-sm font-semibold">
+                      {previewCertNumber(certFmtCustomPrefix || 'ORG', certFmtCustomFormat || '{prefix}-{seq:6}', 1)}
                     </span>
-                  )}
-                </div>
-              </div>
-              {expiryOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-            </button>
-
-            {expiryOpen && (
-              <div className="border-t">
-                <ExpiryDateSelector
-                  value={expiryType}
-                  customDate={customExpiryDate}
-                  issueDate={useCustomIssueDate ? issueDate : undefined}
-                  onChange={handleExpiryChange}
-                />
-
-                {/* Issue Date */}
-                <div className="px-4 py-3 border-t space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium">Issue Date</Label>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="issueDate"
-                        checked={!useCustomIssueDate}
-                        onChange={() => setUseCustomIssueDate(false)}
-                        className="w-4 h-4 accent-primary"
-                      />
-                      <span className="text-sm">Today (generation date)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="issueDate"
-                        checked={useCustomIssueDate}
-                        onChange={() => setUseCustomIssueDate(true)}
-                        className="w-4 h-4 accent-primary"
-                      />
-                      <span className="text-sm">Custom date</span>
-                    </label>
-                  </div>
-                  {useCustomIssueDate && (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          data-empty={!issueDate}
-                          className="w-[212px] justify-between font-normal data-[empty=true]:text-muted-foreground"
-                        >
-                          {issueDate && isValid(new Date(issueDate))
-                            ? format(new Date(issueDate), 'PPP')
-                            : <span>Pick a date</span>}
-                          <ChevronDown />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
-                        <CalendarPicker
-                          mode="single"
-                          selected={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
-                          onSelect={(d) => setIssueDate(d ? format(d, 'yyyy-MM-dd') : '')}
-                          defaultMonth={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  )}
+                  <Button size="sm" variant="outline" className="h-7 text-xs px-3" onClick={handleCertFmtCustomSave} disabled={certFmtSaving}>
+                    {certFmtSaving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Save format
+                  </Button>
                 </div>
               </div>
             )}
-          </Card>
+          </div>
 
-          {/* Unmapped field warning */}
-          {unmappedFields.length > 0 && (
-            <Card className="p-3 bg-destructive/5 border-destructive/30">
-              <div className="flex gap-2">
-                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <div className="text-xs">
-                  <p className="font-medium text-destructive">Unmapped Fields</p>
-                  <p className="text-destructive/80 mt-1">
-                    {unmappedFields.map(f => f.label).join(', ')} {unmappedFields.length === 1 ? 'is' : 'are'} not mapped and will be left empty.
-                  </p>
+          {/* ── Expiry & Issue Date ── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-0.5">Expiry & Issue Date</p>
+            <div className="rounded-xl border border-border/60 overflow-hidden divide-y divide-border/40">
+
+              {/* Expiry row */}
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <span className="text-[11px] text-muted-foreground shrink-0 w-10">Expiry</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['never', 'year', '5_years', 'month'] as ExpiryType[]).map(value => {
+                    const labels: Record<string, string> = { never: 'Never', year: '1 Year', '5_years': '5 Years', month: '1 Month' };
+                    return (
+                      <button key={value} onClick={() => handleExpiryChange(value)}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-all ${expiryType === value ? 'bg-foreground text-background border-transparent font-semibold' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'}`}>
+                        {labels[value]}
+                      </button>
+                    );
+                  })}
+                  {/* Custom chip — doubles as the calendar trigger; date shows on the chip */}
+                  <Popover open={expiryPickerOpen} onOpenChange={setExpiryPickerOpen} modal={true}>
+                    <PopoverTrigger asChild>
+                      <button
+                        onClick={() => handleExpiryChange('custom')}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-all flex items-center gap-1 ${expiryType === 'custom' ? 'bg-foreground text-background border-transparent font-semibold' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'}`}
+                      >
+                        <Calendar className="w-3 h-3 opacity-70" />
+                        {expiryType === 'custom' && customExpiryDate && isValid(new Date(customExpiryDate))
+                          ? format(new Date(customExpiryDate), 'MMM d, yyyy')
+                          : 'Custom…'}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start" sideOffset={8}>
+                      <SmartCalendar
+                        selected={customExpiryDate && isValid(new Date(customExpiryDate)) ? new Date(customExpiryDate) : undefined}
+                        defaultMonth={customExpiryDate && isValid(new Date(customExpiryDate)) ? new Date(customExpiryDate) : undefined}
+                        onSelect={d => { handleExpiryChange('custom', d ? format(d, 'yyyy-MM-dd') : ''); setExpiryPickerOpen(false); }}
+                        fromYear={new Date().getFullYear()}
+                        toYear={2099}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
-            </Card>
-          )}
 
-          {/* Summary */}
-          <Card className="p-4 bg-muted/50">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Recipients:</span>
-                <span className="font-medium">{importedData?.rowCount || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Certificate Types:</span>
-                <span className="font-medium">{allConfigs.filter(c => c.template?.id).length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Total to Generate:</span>
-                <span className="font-medium font-mono">
-                  {(importedData?.rowCount || 0) * allConfigs.filter(c => c.template?.id).length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Export Format:</span>
-                <span className="font-medium">{getExportFormatDescription(template)}</span>
-              </div>
-              {hasQrCodeField && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">QR Code:</span>
-                  <span className="font-medium text-green-600">Included</span>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Soft email setup warning */}
-          {emailSetup && !emailSetup.hasTemplate && !emailBannerDismissed && (
-            <Alert className="border-amber-500/30 bg-amber-500/5">
-              <AlertCircle className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-sm text-amber-800 flex items-center justify-between gap-2">
-                <span>No email template set up — create one to send certificates by email after generating.</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href={orgPath('/email-templates')} className="text-amber-700 underline underline-offset-2 whitespace-nowrap font-medium">Create template →</Link>
+              {/* Issue Date row */}
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <span className="text-[11px] text-muted-foreground shrink-0 w-10">Issue</span>
+                <div className="flex flex-wrap gap-1.5">
                   <button
-                    type="button"
-                    onClick={() => setEmailBannerDismissed(true)}
-                    className="text-amber-600/60 hover:text-amber-700 transition-colors"
-                    title="Dismiss"
+                    onClick={() => setUseCustomIssueDate(false)}
+                    className={`px-2.5 py-1 text-xs rounded-lg border transition-all ${!useCustomIssueDate ? 'bg-foreground text-background border-transparent font-semibold' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'}`}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    Today
                   </button>
+                  {/* Custom chip — doubles as the calendar trigger; date shows on the chip */}
+                  <Popover
+                    open={issueDatePickerOpen}
+                    onOpenChange={(open) => {
+                      setIssueDatePickerOpen(open);
+                      // If closed without picking a date, deactivate the chip so it doesn't show as selected with no value
+                      if (!open && !issueDate) setUseCustomIssueDate(false);
+                    }}
+                    modal={true}
+                  >
+                    <PopoverTrigger asChild>
+                      <button
+                        onClick={() => setUseCustomIssueDate(true)}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-all flex items-center gap-1 ${useCustomIssueDate ? 'bg-foreground text-background border-transparent font-semibold' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'}`}
+                      >
+                        <Calendar className="w-3 h-3 opacity-70" />
+                        {useCustomIssueDate && issueDate && isValid(new Date(issueDate))
+                          ? format(new Date(issueDate), 'MMM d, yyyy')
+                          : 'Custom…'}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start" sideOffset={8}>
+                      <SmartCalendar
+                        selected={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
+                        defaultMonth={issueDate && isValid(new Date(issueDate)) ? new Date(issueDate) : undefined}
+                        onSelect={d => { setIssueDate(d ? format(d, 'yyyy-MM-dd') : ''); setIssueDatePickerOpen(false); }}
+                        fromYear={2000}
+                        toYear={new Date().getFullYear() + 5}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              </AlertDescription>
-            </Alert>
-          )}
+              </div>
 
-          {/* Informational banner when a prior job is still running and data has changed */}
-          {generationJobId && overlayState === 'hidden' && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200">
-              <Bell className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-500" />
-              <span>A generation job is still processing. Starting a new one will not cancel it — check the notification bell for progress.</span>
+            </div>
+          </div>
+
+          {/* ── Unmapped field warning ── */}
+          {unmappedFields.length > 0 && (
+            <div className="flex gap-2.5 px-3 py-2.5 rounded-xl border border-destructive/30 bg-destructive/5">
+              <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-medium text-destructive">Unmapped fields</p>
+                <p className="text-destructive/80 mt-0.5">
+                  {unmappedFields.map(f => f.label).join(', ')} will be left empty.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Estimated time */}
-          {estimatedTime && overlayState === 'hidden' && (() => {
-            const rowCount = importedData?.rowCount ?? 0;
-            const CHUNK = 50;
-            const activeConfigs = allConfigs.filter(c => c.template?.id);
-            const chunksPerTemplate = Math.ceil(rowCount / CHUNK);
-            const totalChunks = chunksPerTemplate * activeConfigs.length;
-            const isMultiTemplate = activeConfigs.length > 1;
-            const showBreakdown = rowCount > CHUNK;
-            return (
-              <p className="text-xs text-muted-foreground text-center">
-                Estimated time:{' '}
-                <span className="font-medium text-foreground">{estimatedTime}</span>
-                {showBreakdown && (
-                  <>
-                    <span className="text-muted-foreground/60"> · runs in background</span>
-                    <span className="relative group inline-block ml-1 align-middle cursor-help">
-                      <Info className="w-3 h-3 text-muted-foreground/50 inline" />
-                      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 hidden group-hover:flex w-72 flex-col gap-1.5 rounded-lg bg-gray-900 px-3 py-2.5 text-left text-xs text-white shadow-xl">
-                        <strong className="text-white/90">Why does this take so long?</strong>
-                        <span className="text-white/70 leading-relaxed">
-                          Certificates are generated by a background job that runs once per minute and
-                          processes <strong className="text-white/90">up to 50 per run</strong>.
-                        </span>
-                        <span className="text-white/60 font-mono text-[10px] bg-white/5 rounded px-2 py-1">
-                          {rowCount.toLocaleString()} rows ÷ {CHUNK} per run = {chunksPerTemplate} runs
-                          {isMultiTemplate && <> × {activeConfigs.length} templates</>}
-                          {' '}= ~{totalChunks} min
-                        </span>
-                        <span className="text-white/50 leading-relaxed">
-                          You can close this page — you&apos;ll get a notification when it&apos;s done.
-                        </span>
-                      </span>
-                    </span>
-                  </>
-                )}
-              </p>
-            );
-          })()}
+          {/* ── Email setup nudge ── */}
+          {emailSetup && !emailSetup.hasTemplate && !emailBannerDismissed && (
+            <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <Mail className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 text-xs text-amber-800 dark:text-amber-300">
+                No email template — <Link href={orgPath('/email-templates')} className="underline underline-offset-2 font-medium">create one</Link> to send certificates by email after generating.
+              </div>
+              <button type="button" onClick={() => setEmailBannerDismissed(true)} className="text-amber-600/50 hover:text-amber-700 transition-colors shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
-          {/* Reason why generate is disabled */}
+          {/* ── Background job notice ── */}
+          {generationJobId && overlayState === 'hidden' && (
+            <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 text-xs text-blue-800 dark:text-blue-200">
+              <Bell className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-500" />
+              <span>A generation job is still processing — starting a new one won&apos;t cancel it. Check the bell for progress.</span>
+            </div>
+          )}
+
+          {/* ── Disabled reason ── */}
           {!canGenerate && overlayState === 'hidden' && (
-            <p className="text-xs text-center text-muted-foreground/70">
+            <p className="text-xs text-center text-muted-foreground/60">
               {!importedData
                 ? 'Import data in the Data step to enable generation'
                 : !template?.id
-                ? 'Template is still saving — please wait a moment'
+                ? 'Template is still being saved — if this persists, go back to Step 1 and re-upload'
                 : !allMappableFieldsMapped
                 ? 'Map all certificate fields to columns in the Data step'
                 : 'Complete all field mappings to enable generation'}
             </p>
           )}
 
-          {/* Generate + Preview row */}
-          <div className="flex gap-2">
+          {/* ── Generate CTA ── */}
+          <div className="flex gap-2 justify-center">
             {canGenerate && overlayState === 'hidden' && (
               <Button
                 variant="outline"
-                size="lg"
-                className="gap-2 shrink-0"
+                size="sm"
+                className="gap-1.5 shrink-0 rounded-lg"
                 disabled={isPreviewing}
                 onClick={handlePreviewFirstRow}
-                title="Generate a preview using the first data row"
+                title="Preview using first data row"
               >
-                {isPreviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                {isPreviewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
                 Preview
               </Button>
             )}
             <Button
-              className="flex-1"
-              size="lg"
+              className="rounded-lg gap-2"
+              size="sm"
               disabled={!canGenerate || overlayState !== 'hidden'}
               onClick={handleGenerate}
             >
               {overlayState !== 'hidden' ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generating…
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
               ) : (
                 <>
-                  <Download className="w-4 h-4 mr-2" />
-                  Generate {allConfigs.filter(c => c.template?.id).length > 1
-                    ? `${allConfigs.filter(c => c.template?.id).length} Certificate Types`
-                    : 'Certificates'}
+                  <Download className="w-4 h-4" />
+                  Generate{activeConfigCount > 1
+                    ? ` ${activeConfigCount} Templates`
+                    : ' Certificates'}
                 </>
               )}
             </Button>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── Generation error ── */}

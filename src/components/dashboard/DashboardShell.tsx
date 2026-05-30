@@ -452,10 +452,12 @@ function DashboardShellBody({
         setActiveCertJobsCount(count ?? 0);
       };
 
-      // Live updates — uses same channel name as AnalyticsDashboardClient so the
-      // Supabase client deduplicates to a single server-side Realtime subscription.
+      // Per-invocation ID prevents "cannot add postgres_changes callbacks after
+      // subscribe()" — Supabase caches channels by name; reusing a name while the
+      // old channel is still deregistering (async removeChannel) triggers the error.
+      const runId = Math.random().toString(36).slice(2, 8);
       channel = supabase
-        .channel(`org-stats:${org.id}`)
+        .channel(`org-stats:${org.id}-${runId}`)
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "organization_stats", filter: `organization_id=eq.${org.id}` },

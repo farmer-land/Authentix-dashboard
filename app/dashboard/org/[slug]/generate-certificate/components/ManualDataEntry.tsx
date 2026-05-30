@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, isValid } from 'date-fns';
@@ -237,26 +236,6 @@ export function ManualDataEntry({ fields, onDataSubmit, onDataChange, initialDat
 
   return (
     <div className={cn('space-y-6', className)}>
-      {/* Header */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <UserPlus className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h3 className="font-semibold">Manual Data Entry</h3>
-              <p className="text-sm text-muted-foreground">
-                Add recipients one by one instead of uploading a file
-              </p>
-            </div>
-          </div>
-          <Badge variant="secondary">
-            {rows.length} recipient{rows.length !== 1 ? 's' : ''}
-          </Badge>
-        </div>
-      </Card>
-
       {/* Data Table */}
       {rows.length > 0 && (
         <Card className="overflow-hidden">
@@ -415,11 +394,13 @@ export function ManualDataEntry({ fields, onDataSubmit, onDataChange, initialDat
         </Card>
       )}
 
-      {/* Add Row Button */}
-      <Button variant="outline" onClick={handleAddRow} className="w-full gap-2">
-        <Plus className="w-4 h-4" />
-        Add Recipient
-      </Button>
+      {/* Add Row Button — only when rows already exist (empty state has its own CTA) */}
+      {rows.length > 0 && (
+        <Button variant="outline" onClick={handleAddRow} className="w-full gap-2">
+          <Plus className="w-4 h-4" />
+          Add Recipient
+        </Button>
+      )}
 
       {/* Validation Message */}
       {rows.length > 0 && !allRowsValid && (

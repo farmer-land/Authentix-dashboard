@@ -103,6 +103,9 @@ export function createSafeHeaders(
     if (HOP_BY_HOP_HEADERS.has(lowerKey)) return;
     // Strip host (set by fetch automatically)
     if (lowerKey === "host") return;
+    // Strip origin — the proxy is a server-to-server hop; forwarding the browser's
+    // origin causes the backend CORS policy to reject localhost in production.
+    if (lowerKey === "origin") return;
     // Strip cookie (auth cookies forwarded separately as Authorization + Cookie)
     if (lowerKey === "cookie") return;
     // Preserve multipart Content-Type with boundary intact

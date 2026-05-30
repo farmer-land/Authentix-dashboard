@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { toast } from 'sonner';
 import { useGenerateCertificateState } from './state/useGenerateCertificateState';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
@@ -14,12 +15,16 @@ import {
   CheckCircle2, Layers, Palette, Database, Wand2,
   X, Eye, ChevronRight,
   SlidersHorizontal, Maximize2,
-  User, BookOpen, Calendar, Type, QrCode, AlertTriangle,
+  User, BookOpen, Calendar, Type, QrCode, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { TemplateBreadcrumb } from './components/TemplateBreadcrumb';
+import { useEditorEvents } from '@/lib/hooks/use-editor-events';
+import { FieldPropertiesGuide } from './components/FieldPropertiesGuide';
 
 // Heavy components lazy-loaded to reduce initial bundle and speed up first render
+const DesignLoadingOverlay = dynamic(() => import('./components/DesignLoadingOverlay').then(m => ({ default: m.DesignLoadingOverlay })), { ssr: false });
 const CertificateCanvas  = dynamic(() => import('./components/CertificateCanvas').then(m => ({ default: m.CertificateCanvas })),  { ssr: false });
 const InfiniteCanvas     = dynamic(() => import('./components/InfiniteCanvas').then(m => ({ default: m.InfiniteCanvas })),     { ssr: false });
 const RightPanel         = dynamic(() => import('./components/RightPanel').then(m => ({ default: m.RightPanel })),         { ssr: false });
@@ -29,7 +34,20 @@ const DataSelector       = dynamic(() => import('./components/DataSelector').the
 const FieldTypeSelector  = dynamic(() => import('./components/FieldTypeSelector').then(m => ({ default: m.FieldTypeSelector })),  { ssr: false });
 const FieldLayersList    = dynamic(() => import('./components/FieldLayersList').then(m => ({ default: m.FieldLayersList })),    { ssr: false });
 const ExportSection      = dynamic(() => import('./components/ExportSection').then(m => ({ default: m.ExportSection })),      { ssr: false });
-const CertificatePreview = dynamic(() => import('./components/CertificatePreview').then(m => ({ default: m.CertificatePreview })), { ssr: false });
+const CertificatePreview   = dynamic(() => import('./components/CertificatePreview').then(m => ({ default: m.CertificatePreview })),   { ssr: false });
+const NotAvailableOverlay  = dynamic(() => import('./components/NotAvailableOverlay').then(m => ({ default: m.NotAvailableOverlay })),  { ssr: false });
+
+// Module-level flag: survives client-side Next.js navigation (module cache), but is
+// reset to false on a hard page reload (module re-evaluated). When the component
+// unmounts due to client-side nav, cleanup sets this to true. On the next mount we
+// know it was a client-side nav back (not a reload) and should show the resume banner
+// instead of auto-restoring.
+let gencertWasClientSideUnmounted = false;
+
+// Generation counter: increments on unmount. loadSavedData captures the gen at
+// call time and bails if it changed — prevents stale async results from rapid
+// nav-away-and-back from clobbering fresh state on the new mount.
+let loadSavedDataGen = 0;
 
 export default function GenerateCertificatePage() {
   // Get query parameters
@@ -41,6 +59,8 @@ export default function GenerateCertificatePage() {
   const router = useRouter();
   const orgSlug = useOrgSlug();
 
+  // Always up-to-date ref for currentStep — used in realtime callbacks to avoid stale closures
+  const currentStepRef = useRef<string>('template');
   // Prevents the URL-param auto-select from re-firing when user deliberately goes back to template chooser
   const skipAutoSelectRef = useRef(false);
   // Tracks whether we've already loaded the ?import= param so we don't reload it repeatedly
@@ -49,6 +69,9 @@ export default function GenerateCertificatePage() {
   const sourceRefLoadedRef = useRef(false);
   // Tracks whether we've pushed a history entry for the design step (for browser-back interception)
   const designHistoryPushedRef = useRef(false);
+  // Always-fresh ref for loadSavedData so realtime callbacks never capture a stale version
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loadSavedDataRef = useRef<(isInitialMount?: boolean) => Promise<void>>(null as any);
 
   const {
     template, savedTemplates, templateVersionId,
@@ -76,6 +99,46 @@ export default function GenerateCertificatePage() {
   } = useGenerateCertificateState(templateIdFromUrl);
 
   const { organization } = useOrganization();
+  const { track: trackEvent } = useEditorEvents();
+
+  // Track session start once on mount
+  useEffect(() => {
+    trackEvent('session_start');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Mark when this component unmounts due to client-side navigation so the next
+  // mount (navigate-back) knows to show the resume banner instead of auto-restoring.
+  // Also increment the generation counter to invalidate any in-flight loadSavedData calls.
+  useEffect(() => {
+    // Do NOT reset the flag here — loadSavedData reads it first, then resets it.
+    return () => { gencertWasClientSideUnmounted = true; loadSavedDataGen++; };
+  }, []);
+
+  // Track step navigation
+  const prevStepRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevStepRef.current !== null && prevStepRef.current !== currentStep) {
+      trackEvent('step_changed', {
+        templateId: template?.id,
+        templateVersionId: templateVersionId ?? undefined,
+        data: { from: prevStepRef.current, to: currentStep },
+      });
+    }
+    prevStepRef.current = currentStep;
+    currentStepRef.current = currentStep;
+    // When the user returns to the template chooser, clear any pending remote-change banner
+    // and silently refresh so they always see fresh data
+    if (currentStep === 'template') {
+      setHasRemoteChanges(false);
+    }
+    // Immediately clear the design loading overlay when leaving the design step so it
+    // never bleeds through onto the data/export views.
+    if (currentStep !== 'design') {
+      if (overlayTimerRef.current) { clearTimeout(overlayTimerRef.current); overlayTimerRef.current = null; }
+      setShowDesignOverlay(false);
+    }
+  }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Seed org logo as the first logo asset when the page loads and org logo is available
   useEffect(() => {
@@ -91,6 +154,29 @@ export default function GenerateCertificatePage() {
   const [additionalRows, setAdditionalRows] = useState<Record<string, unknown>[]>([]);
   // True when the active template was uploaded without a category — show a soft prompt in design view
   const [templateNeedsCategory, setTemplateNeedsCategory] = useState(false);
+  // True until the first loadSavedData() completes — prevents step-1 skeleton flash on reload
+  const [pageInitializing, setPageInitializing] = useState(true);
+  // Set to true by realtime when template table changes while user is away from template chooser
+  const [hasRemoteChanges, setHasRemoteChanges] = useState(false);
+
+  // Design loading overlay: stay visible for at least 2.5 s after isTemplateLoading goes true,
+  // ensuring the template image and all fields are fully rendered before the overlay disappears.
+  const [showDesignOverlay, setShowDesignOverlay] = useState(false);
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayStartRef = useRef<number>(0);
+  useEffect(() => {
+    if (isTemplateLoading) {
+      if (overlayTimerRef.current) { clearTimeout(overlayTimerRef.current); overlayTimerRef.current = null; }
+      overlayStartRef.current = Date.now();
+      setShowDesignOverlay(true);
+    } else if (showDesignOverlay) {
+      const elapsed = Date.now() - overlayStartRef.current;
+      const remaining = Math.max(0, 2500 - elapsed);
+      overlayTimerRef.current = setTimeout(() => setShowDesignOverlay(false), remaining);
+    }
+    return () => { if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTemplateLoading]);
   // Data-fields panel state
   const [addMoreOpen, setAddMoreOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(true);
@@ -107,6 +193,15 @@ export default function GenerateCertificatePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     importedDataMeta: any;
     fieldMappings: FieldMapping[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    additionalCertConfigs?: any[];
+    // When true the session was found in sessionStorage (same-tab reload) and the
+    // step is data/export — skip the banner and restore immediately.
+    autoResume?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolvedTemplates?: any[];
+    categoryColor?: string | null;
+    subcategoryColor?: string | null;
   } | null>(null);
 
   // Tracks previous field IDs so we can detect when field composition changes
@@ -190,13 +285,20 @@ export default function GenerateCertificatePage() {
 
   // Race-condition guard: cancel stale handleTemplateSelect calls
   const selectRequestRef = useRef(0);
+  const isResumingRef = useRef(false);
+  // Captures the fields that were just loaded by handleTemplateSelect so that
+  // handleResumeSession can auto-map without relying on stale React state.
+  const loadedFieldsRef = useRef<CertificateField[]>([]);
 
   // ── Session persistence ────────────────────────────────────────────────────
-  // Clear sessionStorage on unmount so navigating away doesn't auto-restore the old design session.
-  useEffect(() => {
-    return () => { sessionStorage.removeItem(`gencert_session:${orgSlug}`); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // NOTE: We intentionally do NOT clear sessionStorage on unmount.
+  // On a same-tab reload (F5/Cmd+R), React's cleanup fires before the new page
+  // reads the session — clearing here would wipe it, causing the step to fall back
+  // to 'data' via the localStorage path regardless of where the user actually was.
+  // Sessions are cleared explicitly in the right places:
+  //   - line below (currentStep === 'template' branch) when user resets to chooser
+  //   - resume banner dismiss handler when user explicitly declines restore
+  //   - template-not-found guard when the template was deleted
 
   // Track whether initial mount has passed so we don't wipe the session on first render.
   const sessionInitRef = useRef(false);
@@ -212,7 +314,19 @@ export default function GenerateCertificatePage() {
           rowCount: importedData.rowCount,
           importId: importedData.importId,
           importIds: importedData.importIds,
+          // For manual entries (no server-backed importId), save the rows directly so
+          // they survive a same-tab reload without requiring the user to re-enter data.
+          rows: !importedData.importId ? importedData.rows : undefined,
         } : null;
+        // Serialize additionalCertConfigs — strip blob: image URLs (ephemeral) just like fields.
+        const persistedAdditionalConfigs = additionalCertConfigs.map(cfg => ({
+          ...cfg,
+          fields: cfg.fields.map(f => ({
+            ...f,
+            imageUrl: f.imageUrl?.startsWith('blob:') ? undefined : f.imageUrl,
+            qrLogoUrl: f.qrLogoUrl?.startsWith('blob:') ? undefined : f.qrLogoUrl,
+          })),
+        }));
         sessionStorage.setItem(`gencert_session:${orgSlug}`, JSON.stringify({
           templateId: template.id,
           fields,
@@ -221,6 +335,10 @@ export default function GenerateCertificatePage() {
           currentStep,
           importedDataMeta,
           fieldMappings,
+          additionalCertConfigs: persistedAdditionalConfigs,
+          categoryColor: templateMeta.categoryColor ?? null,
+          subcategoryColor: templateMeta.subcategoryColor ?? null,
+          savedAt: Date.now(),
         }));
       } catch { /* quota exceeded */ }
       // Persist template ID to localStorage so it survives browser close / system shutdown.
@@ -239,6 +357,7 @@ export default function GenerateCertificatePage() {
             fileName: importedData.fileName,
             headers: importedData.headers,
             rowCount: importedData.rowCount,
+            savedAt: Date.now(),
           }));
         }
       } catch { /* quota */ }
@@ -249,17 +368,27 @@ export default function GenerateCertificatePage() {
       try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, template?.id, fields, canvasScale, templateVersionId, importedData, fieldMappings]);
+  }, [currentStep, template?.id, fields, canvasScale, templateVersionId, importedData, fieldMappings, additionalCertConfigs, templateMeta]);
 
-  // Re-run auto-mapping whenever the field composition changes (IDs added/removed)
-  // so stale mappings referencing deleted fields are cleaned up automatically.
+  // Re-run auto-mapping whenever the field composition changes (IDs added/removed).
+  // Preserves mappings the user already set; only adds mappings for new fields and
+  // removes stale entries for deleted fields.
   useEffect(() => {
     const currentIds = fields.map(f => f.id).sort().join(',');
     if (prevFieldIdsRef.current && prevFieldIdsRef.current !== currentIds && importedData) {
       const allFields = templateMode === 'multi' && templateConfigs.length > 0
         ? templateConfigs.map((c, i) => i === activeTemplateIndex ? fields : c.fields).flat()
         : fields;
-      setFieldMappings(autoMapColumns(allFields, importedData.headers));
+      const currentFieldIdSet = new Set(allFields.map(f => f.id));
+      // Keep valid existing mappings; drop stale ones (for deleted fields)
+      const validExisting = fieldMappings.filter(m => currentFieldIdSet.has(m.fieldId));
+      const alreadyMappedIds = new Set(validExisting.map(m => m.fieldId));
+      // Auto-map only newly added fields that have no mapping yet
+      const unmapped = allFields.filter(
+        f => f.type !== 'qr_code' && f.type !== 'image' && !alreadyMappedIds.has(f.id)
+      );
+      const newMappings = autoMapColumns(unmapped, importedData.headers);
+      setFieldMappings([...validExisting, ...newMappings]);
     }
     prevFieldIdsRef.current = currentIds;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -380,6 +509,7 @@ export default function GenerateCertificatePage() {
         }
       } else if (currentStep === 'data') {
         setCurrentStep('design');
+        setFitTrigger(t => t + 1);
         history.pushState({ gencertStep: 'design' }, '');
       } else if (currentStep === 'export') {
         setCurrentStep('data');
@@ -393,21 +523,52 @@ export default function GenerateCertificatePage() {
 
   // Load saved templates and imports
   useEffect(() => {
+    // Read and consume the client-side-nav flag BEFORE any async work so no
+    // other effect can reset it underneath us. This is the only safe read point.
+    const wasClientSideNavBack = gencertWasClientSideUnmounted;
+    gencertWasClientSideUnmounted = false; // consumed — reset for the next unmount cycle
+
     // Use a window-level flag (survives HMR module re-evaluation, unlike module-level variables)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const isInitialMount = !(window as any).__gencertInitialLoadDone;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__gencertInitialLoadDone = true;
-    loadSavedData(isInitialMount);
-
-    // Refetch template list when tab regains focus — catches templates added/deleted in another tab
-    const onVisible = () => { if (document.visibilityState === "visible") loadSavedData(false); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    loadSavedData(isInitialMount, wasClientSideNavBack);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSavedData = async (_isInitialMount = false) => {
+  // Realtime: watch certificate_templates table for remote changes
+  useEffect(() => {
+    if (!organization?.id) return;
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`cert-templates:${organization.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'certificate_templates',
+          filter: `organization_id=eq.${organization.id}`,
+        },
+        () => {
+          // If on template chooser, silently refresh list; elsewhere show CTA
+          if (currentStepRef.current === 'template') {
+            loadSavedDataRef.current?.(false);
+          } else {
+            setHasRemoteChanges(true);
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organization?.id]);
+
+  const loadSavedData = async (_isInitialMount = false, isClientSideNavBack = false) => {
+    // Capture generation at call time — if this component unmounts while we're async,
+    // the gen will have incremented and we bail before touching any state.
+    const gen = loadSavedDataGen;
     try {
       // Load templates and recent usage in parallel
       const [templatesResponse, recentUsageResponse] = await Promise.all([
@@ -440,6 +601,9 @@ export default function GenerateCertificatePage() {
         })
       );
 
+      // Bail if component unmounted while we were fetching
+      if (gen !== loadSavedDataGen) return;
+
       console.log('[Generate] Templates with signed URLs:', templatesWithSignedUrls.length);
       setSavedTemplates(templatesWithSignedUrls);
 
@@ -468,27 +632,53 @@ export default function GenerateCertificatePage() {
       // In both cases fields are also in the DB via autosave, so loading from DB
       // is the ground-truth restore path.
       if (!new URLSearchParams(window.location.search).get('template')) {
+        // Session expiry thresholds
+        const SESSION_TTL_MS = 30 * 60 * 1000;  // 30 min — sessionStorage
+        const DRAFT_TTL_MS   =  8 * 60 * 60 * 1000; // 8 h — localStorage draft
+
+        // isClientSideNavBack is passed from the effect that read gencertWasClientSideUnmounted
+        // before any other effect could reset it. This correctly distinguishes a client-side
+        // nav-back (Settings → Playground) from a true browser reload (F5/Cmd+R).
+        const navEntry = (performance.getEntriesByType?.('navigation')?.[0] as PerformanceNavigationTiming | undefined);
+        const isPageReload = !isClientSideNavBack && navEntry?.type === 'reload';
+
         let templateIdToRestore: string | null = null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let sessionFields: any[] | null = null;
         let sessionScale: number | undefined;
         let sessionVersionId: string | null = null;
         let sessionStep: string | null = null;
-        let sessionImportMeta: { fileName: string; headers: string[]; rowCount: number; importId?: string; importIds?: string[] } | null = null;
+        let sessionImportMeta: { fileName: string; headers: string[]; rowCount: number; importId?: string; importIds?: string[]; rows?: Record<string, unknown>[] } | null = null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let sessionFieldMappings: any[] | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let sessionAdditionalCertConfigs: any[] | null = null;
+        let sessionCategoryColor: string | null = null;
+        let sessionSubcategoryColor: string | null = null;
+        // True when the session came from sessionStorage (not localStorage draft)
+        let restoredFromSessionStorage = false;
 
         try {
           const saved = sessionStorage.getItem(`gencert_session:${orgSlug}`);
           if (saved) {
             const parsed = JSON.parse(saved);
-            templateIdToRestore = parsed.templateId ?? null;
-            sessionFields = parsed.fields ?? null;
-            sessionScale = parsed.canvasScale;
-            sessionVersionId = parsed.templateVersionId ?? null;
-            sessionStep = parsed.currentStep ?? null;
-            sessionImportMeta = parsed.importedDataMeta ?? null;
-            sessionFieldMappings = parsed.fieldMappings ?? null;
+            // Expire old sessions so stale state isn't silently restored after a long break
+            const sessionAge = parsed.savedAt ? Date.now() - (parsed.savedAt as number) : 0;
+            if (sessionAge > SESSION_TTL_MS) {
+              sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+            } else {
+              templateIdToRestore = parsed.templateId ?? null;
+              sessionFields = parsed.fields ?? null;
+              sessionScale = parsed.canvasScale;
+              sessionVersionId = parsed.templateVersionId ?? null;
+              sessionStep = parsed.currentStep ?? null;
+              sessionImportMeta = parsed.importedDataMeta ?? null;
+              sessionFieldMappings = parsed.fieldMappings ?? null;
+              sessionAdditionalCertConfigs = parsed.additionalCertConfigs ?? null;
+              sessionCategoryColor = parsed.categoryColor ?? null;
+              sessionSubcategoryColor = parsed.subcategoryColor ?? null;
+              restoredFromSessionStorage = true;
+            }
           }
         } catch {
           sessionStorage.removeItem(`gencert_session:${orgSlug}`);
@@ -497,13 +687,16 @@ export default function GenerateCertificatePage() {
         // localStorage fallback: recover the import after a browser close.
         // sessionStorage is cleared on browser close; localStorage persists.
         // Fields are recovered from the DB (via autosave) — we only need the importId.
-        // We show a banner so the user chooses to restore, rather than auto-jumping.
+        // Always show a banner for localStorage restores (user must confirm).
         if (!templateIdToRestore) {
           try {
             const draftStr = localStorage.getItem(`gencert_draft:${orgSlug}`);
             if (draftStr) {
               const draft = JSON.parse(draftStr);
-              if (draft.templateId && draft.importId) {
+              const draftAge = draft.savedAt ? Date.now() - (draft.savedAt as number) : 0;
+              if (draftAge > DRAFT_TTL_MS) {
+                localStorage.removeItem(`gencert_draft:${orgSlug}`);
+              } else if (draft.templateId && draft.importId) {
                 templateIdToRestore = draft.templateId;
                 sessionImportMeta = {
                   fileName: draft.fileName ?? 'Previous import',
@@ -529,8 +722,12 @@ export default function GenerateCertificatePage() {
             sessionStorage.removeItem(`gencert_session:${orgSlug}`);
             try { localStorage.removeItem(`gencert_last_template_id:${orgSlug}`); } catch { /* ignore */ }
           } else try {
-            // Don't auto-jump — show a "Resume" prompt so the user can choose to
-            // continue or start fresh with a different template.
+            // autoResume: skip the banner and restore directly when the user reloaded the
+            // page (F5/Cmd+R) with a fresh sessionStorage session — so they land back on
+            // the exact step they were on. For client-side navigation back (switching
+            // sections and returning), always show the banner so the user can choose.
+            // localStorage drafts always show the banner regardless of reload.
+            const autoResume = isPageReload && restoredFromSessionStorage;
             setPendingResumeSession({
               templateId: templateIdToRestore!,
               templateName: templateObj.title || templateObj.name || 'Previous session',
@@ -540,10 +737,13 @@ export default function GenerateCertificatePage() {
               currentStep: sessionStep,
               importedDataMeta: sessionImportMeta,
               fieldMappings: sessionFieldMappings ?? [],
+              additionalCertConfigs: sessionAdditionalCertConfigs ?? undefined,
+              autoResume,
+              resolvedTemplates: templatesWithSignedUrls,
+              categoryColor: sessionCategoryColor,
+              subcategoryColor: sessionSubcategoryColor,
             });
           } catch {
-            // Don't clear the session on restore failure — a transient network error
-            // would wipe the user's work. Just fall back to template selection.
             setIsTemplateLoading(false);
             setCurrentStep('template');
           }
@@ -552,8 +752,12 @@ export default function GenerateCertificatePage() {
     } catch (error) {
       console.error('[Generate] Error loading saved data:', error);
       setRecentLoading(false);
+    } finally {
+      setPageInitializing(false);
     }
   };
+  // Keep ref always pointing to the latest version (for realtime callbacks)
+  loadSavedDataRef.current = loadSavedData;
 
   // Auto-select template from URL parameter
   useEffect(() => {
@@ -614,8 +818,15 @@ export default function GenerateCertificatePage() {
     const requestId = ++selectRequestRef.current;
 
     // Navigate to design immediately so the user isn't stuck on the template chooser
-    // while API calls load the template data.
-    setCurrentStep('design');
+    // while API calls load the template data. Suppressed during auto-resume (isResumingRef)
+    // so the session's saved step is applied directly without visible intermediate transitions.
+    // IMPORTANT: setShowDesignOverlay must fire in the same React batch as setCurrentStep
+    // so the overlay is already present on the very first design-step render (no 1-frame flash).
+    if (!isResumingRef.current) {
+      setShowDesignOverlay(true);
+      overlayStartRef.current = Date.now();
+      setCurrentStep('design');
+    }
     setIsTemplateLoading(true);
 
     // Reset state for new template to prevent stale data
@@ -697,10 +908,14 @@ export default function GenerateCertificatePage() {
 
     const fileType = 'image';
 
-    // Store version ID for autosave; expose via ref for session restore comparison
-    if (editorData?.version?.id) {
-      setTemplateVersionId(editorData.version.id);
-      lastLoadedVersionIdRef.current = editorData.version.id;
+    // Store version ID for autosave; expose via ref for session restore comparison.
+    // Fall back to template_version_id from the template list if getEditorData failed
+    // (e.g. source_file missing but version exists) so saves are never silently skipped.
+    const resolvedVersionId =
+      editorData?.version?.id ?? selectedTemplate.template_version_id ?? null;
+    if (resolvedVersionId) {
+      setTemplateVersionId(resolvedVersionId);
+      lastLoadedVersionIdRef.current = resolvedVersionId;
     } else {
       lastLoadedVersionIdRef.current = null;
     }
@@ -723,9 +938,25 @@ export default function GenerateCertificatePage() {
     setTemplateMeta({
       category: selectedTemplate.category_name || '',
       subcategory: selectedTemplate.subcategory_name || '',
+      categoryId: selectedTemplate.category_id || undefined,
+      subcategoryId: selectedTemplate.subcategory_id || undefined,
     });
     setFields(mappedFields);
+    loadedFieldsRef.current = mappedFields;
     setIsTemplateLoading(false);
+    // Fit new template to canvas — but not during session restore (which restores a saved scale).
+    if (!isResumingRef.current) {
+      setFitTrigger(t => t + 1);
+    }
+
+    trackEvent('template_selected', {
+      templateId: selectedTemplate.id,
+      templateVersionId: resolvedVersionId ?? undefined,
+      data: {
+        template_name: selectedTemplate.title || selectedTemplate.name,
+        existing_fields: mappedFields.length,
+      },
+    });
   };
 
   // Safety net: if handleTemplateSelect ever throws without resetting isTemplateLoading,
@@ -804,13 +1035,32 @@ export default function GenerateCertificatePage() {
     const session = pendingResumeSession;
     setPendingResumeSession(null);
 
+    // Prefer resolvedTemplates (fresh from API, set at session-detect time) to avoid
+    // stale-state reads when auto-resuming before the first savedTemplates re-render.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const templateObj = savedTemplates.find((t: any) => t.id === session.templateId);
+    const templatePool: any[] = session.resolvedTemplates ?? savedTemplates;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const templateObj = templatePool.find((t: any) => t.id === session.templateId);
     if (!templateObj) return;
 
     lastLoadedVersionIdRef.current = null;
+    isResumingRef.current = true;
     await handleTemplateSelectSafe(templateObj);
+    isResumingRef.current = false;
     const currentVersionId = lastLoadedVersionIdRef.current;
+
+    // Restore category/subcategory colors — handleTemplateSelectSafe sets templateMeta without
+    // colors, so we patch them back in here using the session-persisted values.
+    if (session.categoryColor != null || session.subcategoryColor != null) {
+      setTemplateMeta({
+        category: templateObj.category_name || templateObj.certificate_category || '',
+        subcategory: templateObj.subcategory_name || templateObj.certificate_subcategory || '',
+        categoryId: templateObj.category_id || undefined,
+        subcategoryId: templateObj.subcategory_id || undefined,
+        categoryColor: session.categoryColor ?? null,
+        subcategoryColor: session.subcategoryColor ?? null,
+      });
+    }
 
     // Detect template image change: if both versions are known and differ, warn the user.
     // Field positions are pixel-absolute, so a different image (possibly different dimensions)
@@ -844,10 +1094,11 @@ export default function GenerateCertificatePage() {
       if (lostLabels.length > 0) setImageLostFields(lostLabels);
     }
     if (session.canvasScale) setCanvasScale(session.canvasScale);
-    if (session.fieldMappings.length > 0) setFieldMappings(session.fieldMappings);
 
     const meta = session.importedDataMeta;
+    let importDataRestored = false;
     if (meta?.importId) {
+      // Server-backed import — re-fetch from the API so rows are always fresh.
       try {
         const [importJob, dataPage] = await Promise.all([
           api.imports.get(meta.importId),
@@ -863,19 +1114,58 @@ export default function GenerateCertificatePage() {
           importId: meta.importId,
           importIds: meta.importIds ?? [meta.importId],
         });
+        importDataRestored = true;
       } catch {
         setImportedData({ fileName: meta.fileName, headers: meta.headers, rows: [], rowCount: meta.rowCount, importId: meta.importId, importIds: meta.importIds });
+        importDataRestored = true;
       }
+    } else if (meta?.rows && meta.rows.length > 0) {
+      // Manual entry — rows were saved directly to sessionStorage on persist.
+      setImportedData({
+        fileName: meta.fileName,
+        headers: meta.headers,
+        rows: meta.rows as Record<string, unknown>[],
+        rowCount: meta.rowCount,
+        importId: undefined,
+        importIds: [],
+      });
+      importDataRestored = true;
     }
 
-    if (session.currentStep === 'data' || session.currentStep === 'export') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setCurrentStep(session.currentStep as any);
+    // Restore field mappings after importedData is set.
+    // If the session has no saved mappings (e.g. user uploaded but hadn't mapped yet),
+    // auto-map using the freshly-loaded fields — `loadedFieldsRef` holds the real field
+    // objects from handleTemplateSelect, bypassing the stale React state closure.
+    if (session.fieldMappings.length > 0) {
+      setFieldMappings(session.fieldMappings);
+    } else if (meta?.headers && loadedFieldsRef.current.length > 0) {
+      const autoMapped = autoMapColumns(loadedFieldsRef.current, meta.headers);
+      if (autoMapped.length > 0) setFieldMappings(autoMapped);
     }
+
+    // Restore additional certificate configs (extra templates added in step 4).
+    if (session.additionalCertConfigs && session.additionalCertConfigs.length > 0) {
+      setAdditionalCertConfigs(session.additionalCertConfigs);
+    }
+
+    // Navigate to the saved step (design / data / export).
+    // If no step was saved, fall through to design.
+    // If export had no import data, fall back to data.
+    const savedStep = session.currentStep;
+    const targetStep =
+      savedStep === 'export' && !importDataRestored ? 'data'
+      : savedStep === 'data' ? 'data'
+      : savedStep === 'design' ? 'design'
+      : 'design'; // null / 'template' / anything else → open on design canvas
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setCurrentStep(targetStep as any);
+    if (targetStep === 'design') setFitTrigger(t => t + 1);
   };
 
-  // Auto-resume intentionally removed — the banner at the template chooser lets the
-  // user choose between resuming or starting fresh without being silently redirected.
+  // Auto-resume: when the session came from a same-tab reload on the data/export step,
+  // skip the banner and restore immediately so the user lands back where they were.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (pendingResumeSession?.autoResume) handleResumeSession(); }, [pendingResumeSession?.autoResume]);
 
   // Multi-mode: load all selected templates in parallel, navigate to design
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -908,6 +1198,12 @@ export default function GenerateCertificatePage() {
     futureRef.current = [];
     setCanUndo(false);
     setCanRedo(false);
+    trackEvent('batch_selected', {
+      data: {
+        template_count: results.length,
+        template_ids: results.map(r => r.template.id),
+      },
+    });
   };
 
   // Multi-mode: switch the active template in the design canvas
@@ -1026,20 +1322,30 @@ export default function GenerateCertificatePage() {
           subcategory_id: subcategoryId,
         }, onProgress);
         setSavedTemplates((prev) => [templateData, ...prev]);
-        if (templateData.version?.id) {
-          setTemplateVersionId(templateData.version.id);
+        // Fetch preview URL in background so the card shows a thumbnail when the user navigates back
+        if (templateData.id) {
+          api.templates.getPreviewUrl(templateData.id).then(previewUrl => {
+            setSavedTemplates(prev => prev.map(t => t.id === templateData.id ? { ...t, preview_url: previewUrl } : t));
+          }).catch(() => { /* preview not critical */ });
         }
+        const versionId = templateData.template_version_id ?? templateData.version?.id;
+        if (versionId) setTemplateVersionId(versionId);
         setTemplate((prev) => prev ? { ...prev, id: templateData.id } : null);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         console.error('Error saving template:', error);
+        // Clear the unsaved template so the user isn't stuck with a templateless state.
+        // Navigate back to template selection so they can re-upload.
+        setTemplate(null);
+        setFields([]);
+        setCurrentStep('template');
         if (error?.message?.includes('Bucket not found') || error?.message?.includes('bucket') || error?.statusCode === 404) {
           toast.error('Storage Bucket Error', {
             description: `The storage bucket "authentix" might not exist or you don't have access. Check that the bucket exists in Supabase Storage, storage policies allow uploads, and your user has organization_id set. (${error?.message})`,
           });
         } else {
-          toast.error('Failed to save template', {
-            description: `${error?.message || 'Unknown error'} — you can still use it for this session.`,
+          toast.error('Failed to save template — please re-upload', {
+            description: error?.message || 'Unknown error',
           });
         }
       }
@@ -1155,6 +1461,11 @@ export default function GenerateCertificatePage() {
     });
     setSelectedFieldId(field.id);
     setRightPanelVisible(true);
+    trackEvent('field_added', {
+      templateId: template?.id,
+      templateVersionId: templateVersionId ?? undefined,
+      data: { field_type: field.type, field_count: fields.length + 1 },
+    });
   };
 
   const handleUpdateField = useCallback((fieldId: string, updates: Partial<CertificateField>) => {
@@ -1166,6 +1477,17 @@ export default function GenerateCertificatePage() {
       ref.fieldId = fieldId;
       ref.pushed = true;
       ref.timer = setTimeout(() => { ref.pushed = false; ref.timer = null; }, 500);
+      // Track the first update in each interaction group (avoids flooding on drag)
+      const updateKeys = Object.keys(updates);
+      const isMove = updateKeys.some(k => k === 'x' || k === 'y') && !updateKeys.some(k => k === 'width' || k === 'height');
+      const isResize = updateKeys.some(k => k === 'width' || k === 'height');
+      const eventType = isMove ? 'field_moved' : isResize ? 'field_resized' : 'field_style_changed';
+      const field = fields.find(f => f.id === fieldId);
+      trackEvent(eventType, {
+        templateId: template?.id,
+        templateVersionId: templateVersionId ?? undefined,
+        data: { field_type: field?.type, updated_keys: updateKeys },
+      });
     }
     setFields((prev) =>
       prev.map((field) => (field.id === fieldId ? { ...field, ...updates } : field))
@@ -1175,8 +1497,14 @@ export default function GenerateCertificatePage() {
 
   const handleDeleteField = (fieldId: string) => {
     pushToHistory(fields);
+    const deletedField = fields.find(f => f.id === fieldId);
     setFields((prev) => prev.filter((field) => field.id !== fieldId));
     if (selectedFieldId === fieldId) setSelectedFieldId(null);
+    trackEvent('field_deleted', {
+      templateId: template?.id,
+      templateVersionId: templateVersionId ?? undefined,
+      data: { field_type: deletedField?.type, field_count: fields.length - 1 },
+    });
   };
 
   const handleFieldsDelete = (fieldIds: string[]) => {
@@ -1530,6 +1858,11 @@ export default function GenerateCertificatePage() {
         await api.templates.saveFields(templateId, versionId, fieldsToSave);
         setSaveStatus('saved');
         setLastSavedAt(new Date());
+        trackEvent('templates_saved', {
+          templateId,
+          templateVersionId: versionId,
+          data: { field_count: fieldsToSave.length },
+        });
         console.log('[Generate] Fields auto-saved to certificate_template_fields', {
           templateId,
           versionId,
@@ -1568,6 +1901,12 @@ export default function GenerateCertificatePage() {
     return () => clearTimeout(timeoutId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields, template?.id, templateVersionId]);
+
+  // Flush any pending save immediately when the component unmounts (e.g. user navigates away
+  // before the 1-second debounce fires). saveNowRef always holds the latest doSave closure.
+  useEffect(() => {
+    return () => { saveNowRef.current?.(); };
+  }, []);
 
   const handleToggleVisibility = (fieldId: string) => {
     setHiddenFields(prev => {
@@ -1614,7 +1953,16 @@ export default function GenerateCertificatePage() {
   };
 
   const handleContinueToGenerate = () => {
+    if (!template?.id) {
+      toast.error('Template is still saving — please wait a moment before continuing');
+      return;
+    }
     if (importedData) {
+      trackEvent('recipients_set', {
+        templateId: template.id,
+        templateVersionId: templateVersionId ?? undefined,
+        data: { row_count: importedData.rowCount, mapped_fields: fieldMappings.length },
+      });
       setCurrentStep('export');
     }
   };
@@ -1729,6 +2077,9 @@ export default function GenerateCertificatePage() {
                   setPanelReady(false);
                   router.replace(pathname);
                 }
+                if (step.id === 'design' && currentStep !== 'design') {
+                  setFitTrigger(t => t + 1);
+                }
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 setCurrentStep(step.id as any);
               }}
@@ -1777,8 +2128,48 @@ export default function GenerateCertificatePage() {
     document.addEventListener('mouseup', onUp);
   };
 
+  // Headers from the imported file that don't already have a matching template field.
+  // Used by "From your file" in the left panel to avoid offering already-added columns.
+  const existingFieldTypeSet = new Set(fields.map(f => f.type));
+  const existingFieldLabelLower = new Set(fields.map(f => f.label.toLowerCase().trim()));
+  const unaddedImportHeaders = importedData
+    ? importedData.headers.filter(h => {
+        const fieldType = headerToFieldType(h);
+        const displayLabelLower = h.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).toLowerCase();
+        if (fieldType !== 'custom_text' && existingFieldTypeSet.has(fieldType)) return false;
+        if (existingFieldLabelLower.has(displayLabelLower)) return false;
+        if (existingFieldLabelLower.has(h.toLowerCase().trim())) return false;
+        return true;
+      })
+    : [];
+
   return (
     <>
+      {/* Small-screen gate — covers entire page below lg breakpoint */}
+      <NotAvailableOverlay />
+
+      {/* Full-page initializing skeleton — prevents step-1 flash on reload */}
+      {pageInitializing && (
+        <div className="fixed top-0 left-14 right-0 bottom-0 z-150 bg-background flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 opacity-40">
+            <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        </div>
+      )}
+
+      {/* Remote-changes CTA — floats bottom-right when template list changed remotely */}
+      {hasRemoteChanges && !pageInitializing && (
+        <div className="fixed bottom-6 right-6 z-120">
+          <button
+            onClick={() => { setHasRemoteChanges(false); loadSavedDataRef.current?.(false); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card border border-primary/30 shadow-lg text-sm font-medium text-foreground hover:bg-primary/5 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4 text-primary" />
+            New changes — click to refresh
+          </button>
+        </div>
+      )}
+
       {/* Normal flow layout (template / data / export steps) */}
       <div className="flex flex-col h-[calc(100vh-3rem)]">
 
@@ -1807,6 +2198,18 @@ export default function GenerateCertificatePage() {
                   setPendingResumeSession(null);
                   sessionStorage.removeItem(`gencert_session:${orgSlug}`);
                   try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
+                }}
+                onStartFresh={() => {
+                  const tid = pendingResumeSession?.templateId;
+                  // Clear saved session so it doesn't re-appear
+                  sessionStorage.removeItem(`gencert_session:${orgSlug}`);
+                  try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
+                  setPendingResumeSession(null);
+                  const templateObj = savedTemplates.find(t => t.id === tid);
+                  if (templateObj) {
+                    setTemplateMode('single');
+                    handleTemplateSelect(templateObj);
+                  }
                 }}
               />
             </div>
@@ -1838,6 +2241,7 @@ export default function GenerateCertificatePage() {
                     onContinueToGenerate={handleContinueToGenerate}
                     onAdditionalRows={setAdditionalRows}
                     additionalRows={additionalRows}
+                    onGoToDesign={() => { setCurrentStep('design'); setFitTrigger(t => t + 1); }}
                   />
                 );
               })()}
@@ -1869,11 +2273,13 @@ export default function GenerateCertificatePage() {
                       fields={primaryFields}
                       importedData={importedData}
                       fieldMappings={primaryMappings}
+                      onFieldMappingsChange={setFieldMappings}
                       subcategoryName={templateMeta.subcategory || undefined}
                       savedTemplates={savedTemplates}
                       additionalConfigs={multiAdditional}
                       onAdditionalConfigsChange={undefined}
                       additionalRows={additionalRows}
+                      onTrackEvent={(eventType, data) => trackEvent(eventType as Parameters<typeof trackEvent>[0], { templateVersionId: templateVersionId ?? undefined, ...data })}
                     />
                   );
                 }
@@ -1883,11 +2289,13 @@ export default function GenerateCertificatePage() {
                     fields={fields}
                     importedData={importedData}
                     fieldMappings={fieldMappings}
+                    onFieldMappingsChange={setFieldMappings}
                     subcategoryName={templateMeta.subcategory || undefined}
                     savedTemplates={savedTemplates}
                     additionalConfigs={additionalCertConfigs}
                     onAdditionalConfigsChange={setAdditionalCertConfigs}
                     additionalRows={additionalRows}
+                    onTrackEvent={(eventType, data) => trackEvent(eventType as Parameters<typeof trackEvent>[0], { templateVersionId: templateVersionId ?? undefined, ...data })}
                   />
                 );
               })()}
@@ -1897,53 +2305,23 @@ export default function GenerateCertificatePage() {
           {/* Floating stepper overlay — shown on data / export steps only (not template or design) */}
           {currentStep !== 'design' && currentStep !== 'template' && (
             <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center items-center pointer-events-none">
-              <div
-                className="pointer-events-auto relative"
-                onMouseEnter={() => setStepperExpanded(true)}
-                onMouseLeave={() => setStepperExpanded(false)}
-              >
-                {/* Expanded stepper — in flow when active (sizes the container) */}
-                <div
-                  className={['transition-all duration-300', stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
-                  style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
-                >
-                  {stepperContent}
-                </div>
-                {/* Collapsed pill — icon only, brand color border */}
-                {(() => {
-                  const stepDef = steps.find(s => s.id === currentStep);
-                  const StepIcon = stepDef?.icon;
-                  return (
-                    <div
-                      className={['transition-all duration-300 bg-card/90 backdrop-blur-xl border border-primary/50 rounded-md shadow-lg px-2.5 py-2.5 flex items-center justify-center', !stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
-                      style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
-                    >
-                      {StepIcon && <StepIcon className="w-4 h-4 text-primary shrink-0" />}
-                    </div>
-                  );
-                })()}
+              <div className="pointer-events-auto">
+                {stepperContent}
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Template loading overlay (shown while handleTemplateSelect fetches data) ── */}
-      {currentStep === 'design' && !template && isTemplateLoading && (
-        <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-background flex flex-col items-center justify-center gap-4">
-          <div className="relative w-20 h-20">
-            <span className="absolute inset-0 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: '1.6s' }} />
-            <div className="absolute inset-3 rounded-full bg-primary/15 flex items-center justify-center">
-              <Wand2 className="w-8 h-8 text-primary animate-pulse" />
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground font-medium">Loading template…</p>
-        </div>
+      {/* ── Template loading overlay — shown while template loads, min 2.5 s so canvas is fully ready ── */}
+      {/* Only render on the design step — prevents the fixed overlay from covering data/export steps */}
+      {showDesignOverlay && currentStep === 'design' && (
+        <DesignLoadingOverlay message="Loading template…" />
       )}
 
       {/* ── Full-screen design overlay ── */}
-      {currentStep === 'design' && template && (
-        <div className="fixed top-0 left-14 right-0 bottom-0 z-50 bg-[#0A0A0A] flex flex-col">
+      {template && (
+        <div className={`fixed top-0 left-14 right-0 bottom-0 z-50 bg-[#0A0A0A] flex flex-col${currentStep !== 'design' ? ' hidden' : ''}`}>
 
           {/* ── Version-change warning banner ── */}
           {versionChangedWarning && (
@@ -1999,9 +2377,9 @@ export default function GenerateCertificatePage() {
             {/* ── Left panel — absolute overlay, never shifts canvas layout ── */}
             {!previewOpen && (
               !leftPanelVisible ? (
-                <div className="absolute top-3 left-3 z-40 pointer-events-auto">
+                <div className="absolute top-1/2 -translate-y-1/2 left-5 z-40 pointer-events-auto">
                   <div
-                    className="flex flex-col items-center gap-3 bg-[#141414] border border-white/6 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-white/5 transition-colors select-none"
+                    className="flex flex-col items-center gap-3 bg-card dark:bg-[#141414] border border-border rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
                     onClick={() => setLeftPanelVisible(true)}
                     title="Expand layers panel"
@@ -2017,14 +2395,14 @@ export default function GenerateCertificatePage() {
                   </div>
                 </div>
               ) : (
-                <div className="absolute top-3 left-3 bottom-12 z-40 w-72 flex flex-col bg-[#141414] border border-white/6 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
+                <div className="absolute top-5 left-5 bottom-12 z-40 w-72 flex flex-col bg-card dark:bg-[#141414] border border-border rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
                   {/* Panel header */}
-                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/6 shrink-0">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                    <span className="text-xs font-semibold text-zinc-200 flex-1">Design</span>
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-semibold text-foreground flex-1">Design</span>
                     <button
                       onClick={() => setLeftPanelVisible(false)}
-                      className="text-zinc-500 hover:text-zinc-200 rounded p-0.5 hover:bg-white/5 transition-colors"
+                      className="text-muted-foreground/60 hover:text-foreground rounded p-0.5 hover:bg-muted/50 transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -2088,24 +2466,31 @@ export default function GenerateCertificatePage() {
                         {importedData && importedData.headers.length > 0 && (
                           <div className="px-3 pt-3 pb-2">
                             <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">From your file</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              {importedData.headers.map((h) => {
-                                const fieldType = headerToFieldType(h);
-                                const Icon = FIELD_ICONS[fieldType];
-                                const displayLabel = h.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                                return (
-                                  <button
-                                    key={h}
-                                    onClick={() => handleAddDataFields([h])}
-                                    className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-center group select-none"
-                                  >
-                                    <Icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                                    <span className="text-[11px] font-medium leading-tight line-clamp-2 w-full">{displayLabel}</span>
-                                    <span className="text-[9px] text-muted-foreground/50 group-hover:text-primary/60 transition-colors mt-auto">Add to template</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            {unaddedImportHeaders.length > 0 ? (
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {unaddedImportHeaders.map((h) => {
+                                  const fieldType = headerToFieldType(h);
+                                  const Icon = FIELD_ICONS[fieldType];
+                                  const displayLabel = h.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                  return (
+                                    <button
+                                      key={h}
+                                      onClick={() => handleAddDataFields([h])}
+                                      className="flex flex-col items-center gap-1 py-2.5 px-2 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-center group select-none"
+                                    >
+                                      <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                                      <span className="text-[11px] font-medium leading-tight line-clamp-2 w-full">{displayLabel}</span>
+                                      <span className="text-[9px] text-muted-foreground/50 group-hover:text-primary/60 transition-colors">+ Add</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 py-1 text-xs text-green-700 dark:text-green-400">
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                All file columns are in your template
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -2206,12 +2591,36 @@ export default function GenerateCertificatePage() {
               )
             )}
 
-            {/* Category nudge — transparent, non-blocking top-center prompt */}
-            {templateNeedsCategory && (
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none">
-                <span className="text-[11px] text-muted-foreground/70">
-                  No category set — you can add one before the Data step
-                </span>
+            {/* Template breadcrumb — transparent overlay, top-center of canvas */}
+            {template && (
+              <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50">
+                <TemplateBreadcrumb
+                  templateId={template.id ?? ''}
+                  templateName={template.templateName}
+                  categoryId={templateMeta.categoryId}
+                  categoryName={templateMeta.category || undefined}
+                  categoryColor={templateMeta.categoryColor}
+                  subcategoryId={templateMeta.subcategoryId}
+                  subcategoryName={templateMeta.subcategory || undefined}
+                  subcategoryColor={templateMeta.subcategoryColor}
+                  onChanged={({ categoryId, categoryName, categoryColor, subcategoryId, subcategoryName, subcategoryColor }) => {
+                    setTemplateMeta({
+                      category: categoryName,
+                      subcategory: subcategoryName,
+                      categoryId: categoryId ?? undefined,
+                      subcategoryId: subcategoryId ?? undefined,
+                      categoryColor,
+                      subcategoryColor,
+                    });
+                    if (template?.id) {
+                      setSavedTemplates(prev => prev.map(t => t.id === template.id
+                        ? { ...t, category_id: categoryId, category_name: categoryName, subcategory_id: subcategoryId, subcategory_name: subcategoryName }
+                        : t
+                      ));
+                    }
+                  }}
+                  onTemplateRenamed={(name) => setTemplate(prev => prev ? { ...prev, templateName: name } : null)}
+                />
               </div>
             )}
             {useInfiniteCanvas ? (
@@ -2260,8 +2669,10 @@ export default function GenerateCertificatePage() {
                 fitTrigger={fitTrigger}
                 footerHeight={40}
                 leftPanelOpen={leftPanelVisible}
-                leftPanelWidth={leftPanelVisible ? 300 : 52}
-                rightPanelWidth={selectedField ? (rightPanelVisible ? 332 : 52) : 0}
+                rightPanelOpen={rightPanelVisible}
+                leftPanelWidth={leftPanelVisible ? 308 : 60}
+                rightPanelWidth={rightPanelVisible ? 340 : 60}
+                revealContent={!showDesignOverlay}
               />
               </ErrorBoundary>
             ) : (
@@ -2283,44 +2694,28 @@ export default function GenerateCertificatePage() {
               </div>
             )}
 
-            {/* ── Stepper — floating glass overlay at bottom of canvas ── */}
-            <div className="absolute bottom-4 left-0 right-0 z-30 flex justify-center items-center pointer-events-none">
-              <div
-                className="pointer-events-auto relative"
-                onMouseEnter={() => setStepperExpanded(true)}
-                onMouseLeave={() => setStepperExpanded(false)}
-              >
-                {/* Expanded stepper — in flow when active (sizes the container) */}
-                <div
-                  className={['transition-all duration-300', stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
-                  style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
-                >
-                  {stepperContent}
-                </div>
-                {/* Collapsed pill — icon only, brand color border */}
-                {(() => {
-                  const stepDef = steps.find(s => s.id === currentStep);
-                  const StepIcon = stepDef?.icon;
-                  return (
-                    <div
-                      className={['transition-all duration-300 bg-card/90 backdrop-blur-xl border border-primary/50 rounded-md shadow-lg px-2.5 py-2.5 flex items-center justify-center', !stepperExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute inset-0'].join(' ')}
-                      style={{ transitionTimingFunction: 'cubic-bezier(0.34,1.56,0.64,1)' }}
-                    >
-                      {StepIcon && <StepIcon className="w-4 h-4 text-primary shrink-0" />}
-                    </div>
-                  );
-                })()}
+            {/* ── Stepper — floating glass overlay at bottom of canvas, centered between panels ── */}
+            <div
+              className="absolute bottom-4 z-30 flex justify-center items-center pointer-events-none"
+              style={{
+                left: leftPanelVisible ? 308 : 60,
+                right: rightPanelVisible ? 340 : 60,
+              }}
+            >
+              <div className="pointer-events-auto">
+                {stepperContent}
               </div>
             </div>
             {/* ── Right panel — overlay inside canvas, never pushes template ── */}
             {!previewOpen && selectedField && (
               rightPanelVisible ? (
-                <div className="absolute top-3 right-3 bottom-12 z-40 w-80 flex flex-col bg-[#141414] border border-white/6 rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
-                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/6 shrink-0">
-                    <Palette className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                    <span className="text-xs font-semibold text-zinc-200 flex-1">Properties</span>
+                <div className="absolute top-5 right-5 bottom-12 z-40 w-80 flex flex-col bg-card dark:bg-[#141414] border border-border rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
+                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <FieldPropertiesGuide fieldType={selectedField.type} />
+                    <span className="text-xs font-semibold text-foreground flex-1">Properties</span>
                     <button
-                      onClick={() => setRightPanelVisible(false)}
+                      onClick={() => { setRightPanelVisible(false); setFitTrigger(t => t + 1); }}
                       className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors"
                       title="Hide panel"
                     >
@@ -2361,11 +2756,11 @@ export default function GenerateCertificatePage() {
                   </div>
                 </div>
               ) : (
-                <div className="absolute top-1/2 right-3 -translate-y-1/2 z-40 pointer-events-auto">
+                <div className="absolute top-1/2 right-5 -translate-y-1/2 z-40 pointer-events-auto">
                   <div
-                    className="flex flex-col items-center gap-3 bg-[#141414] border border-white/6 rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-white/5 transition-colors select-none"
+                    className="flex flex-col items-center gap-3 bg-card dark:bg-[#141414] border border-border rounded-xl shadow-md py-3 px-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     style={{ width: 40 }}
-                    onClick={() => setRightPanelVisible(true)}
+                    onClick={() => { setRightPanelVisible(true); setFitTrigger(t => t + 1); }}
                     title="Expand properties panel"
                   >
                     <Palette className="w-4 h-4 text-muted-foreground/70" />
@@ -2390,7 +2785,6 @@ export default function GenerateCertificatePage() {
                 <div className="flex items-center gap-2">
                   <Eye className="w-3.5 h-3.5 text-primary" />
                   <span className="text-xs font-semibold">Preview</span>
-                  <span className="text-[10px] text-muted-foreground/60">· sample values</span>
                 </div>
                 <button
                   onClick={() => { setPreviewOpen(false); setFitTrigger(t => t + 1); }}

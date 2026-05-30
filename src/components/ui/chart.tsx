@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ResponsiveContainer, Tooltip } from "recharts"
+import { Tooltip } from "recharts"
 
 import { cn } from "@/lib/utils"
 
@@ -28,41 +28,51 @@ export function ChartContainer({
   children: React.ReactNode
   className?: string
 }) {
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => { setMounted(true) }, [])
+  const divRef = React.useRef<HTMLDivElement>(null)
+  // Null = not yet measured. Charts only render once we have real pixel dimensions,
+  // eliminating Recharts' width(-1)/height(-1) warning that fires during its own
+  // ResizeObserver setup cycle inside ResponsiveContainer.
+  const [dims, setDims] = React.useState<{ width: number; height: number } | null>(null)
+
+  React.useLayoutEffect(() => {
+    const el = divRef.current
+    if (!el) return
+    const obs = new ResizeObserver((entries) => {
+      const e = entries[0]
+      if (!e) return
+      const { width, height } = e.contentRect
+      if (width > 0 && height > 0) {
+        setDims((prev) =>
+          prev?.width === Math.floor(width) && prev?.height === Math.floor(height)
+            ? prev
+            : { width: Math.floor(width), height: Math.floor(height) }
+        )
+      }
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
 
   const style = React.useMemo(() => {
     const cssVars: Record<string, string> = {}
-
     for (const [key, value] of Object.entries(config)) {
-      const color = value.color ?? "var(--chart-1)"
-      cssVars[`--color-${key}`] = color
+      cssVars[`--color-${key}`] = value.color ?? "var(--chart-1)"
     }
-
     return cssVars as React.CSSProperties
   }, [config])
 
   return (
     <ChartContext.Provider value={{ config }}>
-      {/*
-        Recharts 3 ResponsiveContainer uses ResizeObserver to measure the parent div.
-        During SSR and the initial paint the DOM has no real dimensions, so Recharts
-        reports width/height = -1 and emits a console warning. We gate the
-        ResponsiveContainer behind a `mounted` flag so it only renders after the
-        browser has laid out the container and the measurement is valid.
-      */}
       <div
-        className={cn(
-          "chart-container relative w-full min-h-[280px] h-[280px] sm:h-[300px] sm:min-h-[300px]",
-          className
-        )}
+        ref={divRef}
+        className={cn("chart-container relative w-full min-h-60", className)}
         style={style}
       >
-        {mounted && (
-          <ResponsiveContainer width="100%" height="100%" minHeight={240}>
-            {children}
-          </ResponsiveContainer>
-        )}
+        {dims &&
+          React.cloneElement(
+            children as React.ReactElement<{ width?: number; height?: number }>,
+            { width: dims.width, height: dims.height },
+          )}
       </div>
     </ChartContext.Provider>
   )

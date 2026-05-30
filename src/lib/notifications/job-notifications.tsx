@@ -217,6 +217,7 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
     const supabase = createSupabaseBrowserClient();
     let bgChannel: ReturnType<typeof supabase.channel> | null = null;
     let certChannel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
 
     const triggerPoll = () => {
       const pending = jobsRef.current.filter(
@@ -225,14 +226,15 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
       void Promise.allSettled(pending.map(pollJob));
     };
 
-    // Resolve org_id from slug so we can add an explicit server-side filter
-    // on certificate_generation_jobs (which has organization_id but no org_slug).
-    // This reduces Supabase Realtime server fanout — instead of evaluating RLS
-    // for every org's cert-gen rows, the filter prunes upstream before delivery.
+    // Use a per-invocation ID so channel names are unique across StrictMode
+    // double-invoke and remounts. Supabase caches channels by name — reusing a
+    // name while the old channel is still deregistering causes "cannot add
+    // postgres_changes callbacks after subscribe()" errors.
+    const runId = Math.random().toString(36).slice(2, 8);
+
     void (async () => {
-      // background_jobs — org_slug column available, filter directly
       bgChannel = supabase
-        .channel(`bg-jobs-${slug}`)
+        .channel(`bg-jobs-${slug}-${runId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `org_slug=eq.${slug}` }, triggerPoll)
         .subscribe();
 
@@ -242,15 +244,16 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
         .eq('slug', slug)
         .maybeSingle();
 
-      if (!org?.id) return;
+      if (cancelled || !org?.id) return;
 
       certChannel = supabase
-        .channel(`cert-gen-jobs-${org.id}`)
+        .channel(`cert-gen-jobs-${org.id}-${runId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'certificate_generation_jobs', filter: `organization_id=eq.${org.id}` }, triggerPoll)
         .subscribe();
     })();
 
     return () => {
+      cancelled = true;
       if (bgChannel) void supabase.removeChannel(bgChannel);
       if (certChannel) void supabase.removeChannel(certChannel);
     };

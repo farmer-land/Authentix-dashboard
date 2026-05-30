@@ -37,6 +37,10 @@ export interface TemplateConfig {
 export interface TemplateMeta {
   category: string;
   subcategory: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  categoryColor?: string | null;
+  subcategoryColor?: string | null;
 }
 
 // ── Panel position ────────────────────────────────────────────────────────────
@@ -148,7 +152,7 @@ export function createInitialState(templateIdFromUrl: string | null): GenerateCe
     canUndo: false,
     canRedo: false,
     saveStatus: "idle",
-    canvasScale: 0.5,
+    canvasScale: 0.31,
     activeTab: "fields",
     useInfiniteCanvas: true,
     leftPanelVisible: false,

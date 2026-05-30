@@ -133,14 +133,17 @@ export function DataImporter({
     const allKeys = new Set<string>();
     contacts.forEach(c => {
       allKeys.add('email');
-      allKeys.add('first_name');
-      allKeys.add('last_name');
+      if (c.first_name != null) allKeys.add('first_name');
+      if (c.last_name != null) allKeys.add('last_name');
       Object.keys(c.custom_properties ?? {}).forEach(k => allKeys.add(k));
     });
-    const headers = [...allKeys].filter(k => {
-      const v = contacts[0]?.[k as keyof typeof contacts[0]] ?? contacts[0]?.custom_properties?.[k];
-      return v !== undefined && v !== null;
-    });
+    // Keep a column if ANY contact has a non-empty value for it
+    const headers = [...allKeys].filter(k =>
+      contacts.some(c => {
+        const v = (c as unknown as Record<string, unknown>)[k] ?? c.custom_properties?.[k];
+        return v !== undefined && v !== null && v !== '';
+      })
+    );
 
     const rows = contacts.map(c => {
       const row: Record<string, string> = {
@@ -469,17 +472,38 @@ export function DataImporter({
               </Button>
               <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
                 {contacts.slice(0, 10).map(c => {
-                  const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
+                  // Resolve display name: first+last, or a custom name-like field
+                  const name = [c.first_name, c.last_name].filter(Boolean).join(' ')
+                    || (Object.entries(c.custom_properties ?? {}).find(([k]) =>
+                        /recipient.?name|full.?name|name/i.test(k)
+                      )?.[1] as string | undefined)
+                    || '';
+                  // Custom property keys that have values (for summary chips)
+                  const customKeys = Object.entries(c.custom_properties ?? {})
+                    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+                    .map(([k]) => k);
                   return (
-                    <div key={c.id} className="flex items-center gap-2 px-3 py-2 border-b last:border-0 text-xs">
-                      <span className="font-mono truncate flex-1">{c.email}</span>
-                      {name && <span className="text-muted-foreground shrink-0">{name}</span>}
+                    <div key={c.id} className="px-3 py-2 border-b last:border-0 text-xs space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate flex-1">{name || <span className="text-muted-foreground italic">No name</span>}</span>
+                        <span className="font-mono text-muted-foreground shrink-0 truncate max-w-36">{c.email}</span>
+                      </div>
+                      {customKeys.length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {customKeys.slice(0, 4).map(k => (
+                            <span key={k} className="px-1 py-0.5 rounded bg-muted text-muted-foreground text-[10px]">{k}</span>
+                          ))}
+                          {customKeys.length > 4 && (
+                            <span className="text-muted-foreground text-[10px]">+{customKeys.length - 4} more</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
                 {contacts.length > 10 && (
                   <div className="px-3 py-2 text-xs text-muted-foreground border-t">
-                    +{contacts.length - 10} more
+                    +{contacts.length - 10} more contacts
                   </div>
                 )}
               </div>

@@ -2,9 +2,34 @@
  * DASHBOARD DOMAIN API
  *
  * Dashboard stats and analytics — fetched directly from Supabase.
+ * Also: certificate editor event ingestion (AI training data).
  */
 
+import { apiRequest } from "@/lib/api/core";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+
+export interface EditorEvent {
+  session_id: string;
+  template_id?: string | null;
+  template_version_id?: string | null;
+  event_type: string;
+  event_data?: Record<string, unknown>;
+  ts?: string;
+}
+
+export const editorEventsApi = {
+  /**
+   * Batch-insert editor lifecycle events. Fire-and-forget — errors are silently swallowed
+   * so tracking never blocks the user experience.
+   */
+  track: async (events: EditorEvent[]): Promise<void> => {
+    if (events.length === 0) return;
+    await apiRequest('/dashboard/editor-events', {
+      method: 'POST',
+      body: JSON.stringify({ events }),
+    });
+  },
+};
 
 export const dashboardApi = {
   getStats: async (orgId: string) => {

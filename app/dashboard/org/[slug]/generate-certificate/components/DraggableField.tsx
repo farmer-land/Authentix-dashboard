@@ -150,6 +150,8 @@ function QRCodePreview({
   );
 }
 
+type ResizeHandle = 'se' | 'sw' | 'ne' | 'nw' | 'n' | 's' | 'e' | 'w';
+
 interface DraggableFieldProps {
   field: CertificateField;
   scale: number;
@@ -157,7 +159,12 @@ interface DraggableFieldProps {
   isMultiSelected?: boolean;
   onDrag: (deltaX: number, deltaY: number) => void;
   onDragStart?: () => void;
-  onResize: (width: number, height: number, initialCanvasWidth: number, initialFontSize: number) => void;
+  /**
+   * width/height are in screen pixels; InfiniteCanvas converts to canvas units.
+   * newCanvasX/newCanvasY are already in canvas units (for left/top-edge handles that shift position).
+   */
+  onResize: (width: number, height: number, initialCanvasWidth: number, initialFontSize: number, newCanvasX?: number, newCanvasY?: number) => void;
+  onRotate?: (rotation: number) => void;
   onSelect: (e: React.MouseEvent) => void;
   /** Live value from row 1 of imported data — overrides sampleValue when present */
   previewValue?: string;
@@ -171,17 +178,24 @@ export function DraggableField({
   onDrag,
   onDragStart,
   onResize,
+  onRotate,
   onSelect,
   previewValue,
 }: DraggableFieldProps) {
   const fieldRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<ResizeHandle | null>(null);
+  const [isRotating, setIsRotating] = useState(false);
+
   // Refs for coordinates — synchronous updates prevent stale reads between mousemove events.
   const dragStartRef = useRef({ x: 0, y: 0 });
   const initialDimsRef = useRef({ width: 0, height: 0 });
-  // Canvas-unit field dimensions captured at the start of a resize gesture
-  const initialFieldRef = useRef({ width: 0, fontSize: 0 });
+  // Canvas-unit field dimensions + position captured at the start of a resize/rotate gesture
+  const initialFieldRef = useRef({ width: 0, fontSize: 0, x: 0, y: 0 });
+  // Screen-coord center of field at rotation start; initial cursor angle
+  const fieldCenterRef = useRef({ x: 0, y: 0 });
+  const initialRotationRef = useRef(0);
+  const initialAngleRef = useRef(0);
 
   // Keep latest callbacks in refs so the mousemove/mouseup effect below never needs
   // to be re-registered just because the parent re-rendered with new function references.
@@ -190,8 +204,10 @@ export function DraggableField({
   // with no listeners → lost mousemove events → sticky/jittery drag.
   const onDragRef = useRef(onDrag);
   const onResizeRef = useRef(onResize);
+  const onRotateRef = useRef(onRotate);
   useLayoutEffect(() => { onDragRef.current = onDrag; }, [onDrag]);
   useLayoutEffect(() => { onResizeRef.current = onResize; }, [onResize]);
+  useLayoutEffect(() => { onRotateRef.current = onRotate; }, [onRotate]);
 
   // rAF handle — throttles state updates to one per animation frame to prevent jitter
   const rafRef = useRef<number>(0);
@@ -211,27 +227,58 @@ export function DraggableField({
         dragStartRef.current = { x: e.clientX, y: e.clientY };
         cancelAnimationFrame(rafRef.current);
         rafRef.current = requestAnimationFrame(() => onDragRef.current(deltaX, deltaY));
-      } else if (isResizing) {
+      } else if (resizeHandle) {
         const deltaX = e.clientX - dragStartRef.current.x;
         const deltaY = e.clientY - dragStartRef.current.y;
-        const newWidth = initialDimsRef.current.width + deltaX;
-        const newHeight = initialDimsRef.current.height + deltaY;
+        const iw = initialDimsRef.current.width;
+        const ih = initialDimsRef.current.height;
+        const ix = initialFieldRef.current.x;
+        const iy = initialFieldRef.current.y;
+
+        let newWidth: number;
+        let newHeight: number;
+        // Canvas-unit position — only set when the left or top edge moves
+        let newCanvasX: number | undefined;
+        let newCanvasY: number | undefined;
+
+        switch (resizeHandle) {
+          case 'se': newWidth = iw + deltaX; newHeight = ih + deltaY; break;
+          case 'sw': newWidth = iw - deltaX; newHeight = ih + deltaY; newCanvasX = ix + deltaX / scale; break;
+          case 'ne': newWidth = iw + deltaX; newHeight = ih - deltaY; newCanvasY = iy + deltaY / scale; break;
+          case 'nw': newWidth = iw - deltaX; newHeight = ih - deltaY; newCanvasX = ix + deltaX / scale; newCanvasY = iy + deltaY / scale; break;
+          case 'n':  newWidth = iw;          newHeight = ih - deltaY; newCanvasY = iy + deltaY / scale; break;
+          case 's':  newWidth = iw;          newHeight = ih + deltaY; break;
+          case 'e':  newWidth = iw + deltaX; newHeight = ih;          break;
+          case 'w':  newWidth = iw - deltaX; newHeight = ih;          newCanvasX = ix + deltaX / scale; break;
+          default: return;
+        }
+
         if (newWidth > 20 && newHeight > 20) {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = requestAnimationFrame(() =>
-            onResizeRef.current(newWidth, newHeight, initialFieldRef.current.width, initialFieldRef.current.fontSize)
+            onResizeRef.current(newWidth, newHeight, initialFieldRef.current.width, initialFieldRef.current.fontSize, newCanvasX, newCanvasY)
           );
         }
+      } else if (isRotating) {
+        const dx = e.clientX - fieldCenterRef.current.x;
+        const dy = e.clientY - fieldCenterRef.current.y;
+        const currentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+        const angleDelta = currentAngle - initialAngleRef.current;
+        let newRotation = (initialRotationRef.current + angleDelta) % 360;
+        if (newRotation < 0) newRotation += 360;
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => onRotateRef.current?.(newRotation));
       }
     };
 
     const handleMouseUp = () => {
       cancelAnimationFrame(rafRef.current);
       setIsDragging(false);
-      setIsResizing(false);
+      setResizeHandle(null);
+      setIsRotating(false);
     };
 
-    if (isDragging || isResizing) {
+    if (isDragging || resizeHandle !== null || isRotating) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
 
@@ -240,8 +287,8 @@ export function DraggableField({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  // Intentionally omits onDrag/onResize — latest versions are accessed via refs above.
-  }, [isDragging, isResizing]);
+  // Intentionally omits onDrag/onResize/onRotate — latest versions are accessed via refs above.
+  }, [isDragging, resizeHandle, isRotating, scale]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -252,14 +299,29 @@ export function DraggableField({
     setIsDragging(true);
   };
 
-  const handleResizeStart = (e: React.MouseEvent) => {
+  const handleResizeStart = (e: React.MouseEvent, handle: ResizeHandle) => {
     if (field.locked) return;
     e.stopPropagation();
+    e.preventDefault();
     onDragStart?.();
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     initialDimsRef.current = { width: scaledWidth, height: scaledHeight };
-    initialFieldRef.current = { width: field.width, fontSize: field.fontSize };
-    setIsResizing(true);
+    initialFieldRef.current = { width: field.width, fontSize: field.fontSize, x: field.x, y: field.y };
+    setResizeHandle(handle);
+  };
+
+  const handleRotationStart = (e: React.MouseEvent) => {
+    if (field.locked) return;
+    e.stopPropagation();
+    e.preventDefault();
+    onDragStart?.();
+    const rect = fieldRef.current!.getBoundingClientRect();
+    fieldCenterRef.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    initialRotationRef.current = field.rotation ?? 0;
+    const dx = e.clientX - fieldCenterRef.current.x;
+    const dy = e.clientY - fieldCenterRef.current.y;
+    initialAngleRef.current = Math.atan2(dy, dx) * (180 / Math.PI);
+    setIsRotating(true);
   };
 
   const TYPE_SAMPLE_DEFAULTS: Record<string, string> = {
@@ -290,6 +352,27 @@ export function DraggableField({
     ...(isGradient ? { background: gradientBg } : {}),
   };
 
+  // Scale handle sizes proportionally. Minimum 8px so they're always clickable.
+  const hSize = Math.max(8, Math.min(12, Math.round(12 * scale)));
+  // Hide mid-edge handles when the field is too small to fit them without overlapping
+  const showMidHandles = scaledWidth > hSize * 3 && scaledHeight > hSize * 3;
+
+  // Handles are centered on the field's corner/edge points using transform.
+  // This keeps 50% inside the field boundary (always hittable even if the canvas
+  // container clips overflow) while still appearing on the field edge.
+  const RESIZE_HANDLES: { id: ResizeHandle; cursor: string; style: React.CSSProperties }[] = [
+    { id: 'nw', cursor: 'nwse-resize', style: { top: 0, left: 0, transform: 'translate(-50%, -50%)' } },
+    { id: 'ne', cursor: 'nesw-resize', style: { top: 0, right: 0, transform: 'translate(50%, -50%)' } },
+    { id: 'sw', cursor: 'nesw-resize', style: { bottom: 0, left: 0, transform: 'translate(-50%, 50%)' } },
+    { id: 'se', cursor: 'nwse-resize', style: { bottom: 0, right: 0, transform: 'translate(50%, 50%)' } },
+    ...(showMidHandles ? [
+      { id: 'n' as ResizeHandle, cursor: 'ns-resize', style: { top: 0, left: '50%', transform: 'translate(-50%, -50%)' } as React.CSSProperties },
+      { id: 's' as ResizeHandle, cursor: 'ns-resize', style: { bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' } as React.CSSProperties },
+      { id: 'w' as ResizeHandle, cursor: 'ew-resize', style: { top: '50%', left: 0, transform: 'translate(-50%, -50%)' } as React.CSSProperties },
+      { id: 'e' as ResizeHandle, cursor: 'ew-resize', style: { top: '50%', right: 0, transform: 'translate(50%, -50%)' } as React.CSSProperties },
+    ] : []),
+  ];
+
   return (
     <div
       ref={fieldRef}
@@ -301,8 +384,8 @@ export function DraggableField({
       style={{
         left: scaledX,
         top: scaledY,
-        width: scaledWidth,
-        height: scaledHeight,
+        width: (field.type === 'image' || field.type === 'qr_code') ? scaledWidth : 'max-content',
+        height: (field.type === 'image' || field.type === 'qr_code') ? scaledHeight : 'auto',
         transform: field.rotation ? `rotate(${field.rotation}deg)` : undefined,
         transformOrigin: 'center',
         ...(field.type !== 'image' ? {
@@ -312,18 +395,25 @@ export function DraggableField({
           fontWeight: field.fontWeight,
           fontStyle: field.fontStyle,
           textAlign: field.textAlign,
-          padding: `${(field.bgPaddingV ?? 4) * scale}px ${(field.bgPaddingH ?? 8) * scale}px`,
+          // +4 px constant on every side so there's always breathing room between
+          // the rendered content and the selection ring, regardless of bgPadding.
+          padding: `${(field.bgPaddingV ?? 4) * scale + 4}px ${(field.bgPaddingH ?? 8) * scale + 4}px`,
           backgroundColor: field.backgroundColor || undefined,
         } : {}),
         display: 'flex',
-        alignItems: 'center',
+        alignItems: field.type === 'image' ? 'center' : (
+          field.textVerticalAlign === 'bottom' ? 'flex-end' :
+          field.textVerticalAlign === 'middle' ? 'center' : 'flex-start'
+        ),
         justifyContent: field.type === 'image' ? 'center' : (field.textAlign === 'center' ? 'center' : field.textAlign === 'right' ? 'flex-end' : 'flex-start'),
-        outline: isSelected
-          ? '1.5px dashed var(--primary)'
+        // box-shadow draws right at the element edge with no layout impact.
+        // outline with outlineOffset added invisible horizontal gap and was
+        // clipped by overflow:hidden on ancestor canvas containers.
+        boxShadow: isSelected
+          ? '0 0 0 1.5px var(--primary), 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent)'
           : isMultiSelected
-          ? '2px solid var(--primary)'
+          ? '0 0 0 1px var(--primary)'
           : undefined,
-        outlineOffset: (isSelected || isMultiSelected) ? '1px' : '0px',
         borderRadius: field.type === 'image'
           ? (field.cornerRadius ? `${field.cornerRadius}px` : '2px')
           : (field.bgCornerRadius ? `${field.bgCornerRadius * scale}px` : '2px'),
@@ -349,7 +439,16 @@ export function DraggableField({
       ) : field.type === 'image' ? (
         <div className="w-full h-full overflow-hidden" style={{ opacity: (field.opacity ?? 100) / 100, borderRadius: field.cornerRadius ? `${field.cornerRadius}px` : undefined }}>
           {field.imageUrl ? (
-            <img src={field.imageUrl} alt={field.label} className="w-full h-full object-contain" draggable={false} />
+            <img
+            src={field.imageUrl}
+            alt={field.label}
+            draggable={false}
+            style={{
+              width: '100%', height: '100%',
+              objectFit: (field.objectFit ?? 'contain') as React.CSSProperties['objectFit'],
+              transform: [field.flipHorizontal ? 'scaleX(-1)' : '', field.flipVertical ? 'scaleY(-1)' : ''].filter(Boolean).join(' ') || undefined,
+            }}
+          />
           ) : (
             <div
               className="w-full h-full flex flex-col items-center justify-center gap-1"
@@ -369,20 +468,80 @@ export function DraggableField({
         </div>
       ) : (
         <div
-          className={isGradient ? 'gradient-clip-text w-full select-none' : 'truncate w-full select-none'}
+          className={isGradient ? 'gradient-clip-text select-none' : 'whitespace-nowrap select-none'}
           style={textContentStyle}
         >
           {field.prefix}{displayValue}{field.suffix}
         </div>
       )}
 
-      {/* Resize Handles (when selected) — larger hit area via padding trick */}
-      {isSelected && (
-        <div
-          className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 rounded-sm cursor-nwse-resize shadow-md hover:scale-125 transition-transform"
-          style={{ borderColor: 'var(--primary)' }}
-          onMouseDown={handleResizeStart}
-        />
+      {/* Selection handles — resize (4–8 handles) + rotation */}
+      {isSelected && !field.locked && (
+        <>
+          {/* Rotation handle: circle above top-center with connecting stem.
+              Positioned at top:0 then translated up by its own height so the
+              stem bottom is flush with the field's top edge — this keeps the
+              layout anchor inside the field (overflow-safe). */}
+          {scaledHeight > hSize * 2 && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: 0,
+                left: '50%',
+                transform: `translate(-50%, calc(-100% - 2px))`,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}
+            >
+              <div
+                className="rounded-full pointer-events-auto hover:scale-125 transition-transform shadow-sm"
+                style={{
+                  width: hSize,
+                  height: hSize,
+                  backgroundColor: 'white',
+                  border: `${Math.max(1, Math.round(2 * scale))}px solid var(--primary)`,
+                  cursor: isRotating ? 'grabbing' : 'crosshair',
+                  flexShrink: 0,
+                }}
+                onMouseDown={handleRotationStart}
+                title="Drag to rotate"
+              />
+              <div style={{ width: 1, height: Math.max(8, Math.round(22 * scale)), backgroundColor: 'var(--primary)', opacity: 0.4 }} />
+            </div>
+          )}
+
+          {/* Resize handles — all field types; text fields scale font size via resize logic.
+              Outer div is a transparent 24px hit zone (centered on corner/edge via the same
+              translate as before) so the click target is easy to hit on a trackpad. */}
+          {RESIZE_HANDLES.map(({ id, cursor, style }) => (
+            <div
+              key={id}
+              className="absolute group/handle"
+              style={{
+                width: 24,
+                height: 24,
+                cursor,
+                ...style,
+              }}
+              onMouseDown={(e) => handleResizeStart(e, id)}
+            >
+              <div
+                className="absolute rounded-sm shadow-sm group-hover/handle:scale-125 transition-transform"
+                style={{
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: hSize,
+                  height: hSize,
+                  backgroundColor: 'white',
+                  border: `${Math.max(1, Math.round(2 * scale))}px solid var(--primary)`,
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+          ))}
+        </>
       )}
     </div>
   );

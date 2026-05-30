@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { CertificateField, FontWeight, CERTIFICATE_FONTS, PRESET_COLORS, DATE_FORMATS } from '@/lib/types/certificate';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, ChevronRight, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough, HelpCircle, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, BringToFront, SendToBack } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Italic, GripHorizontal, X, ChevronDown, MoveHorizontal, MoveVertical, ArrowLeftRight, ArrowUpDown, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize2, Magnet, MousePointer2, Lock, Unlock, RefreshCw, Trash2, Search, Underline, Strikethrough, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, BringToFront, SendToBack, FlipHorizontal2, FlipVertical2, AlignStartVertical, AlignCenterVertical, AlignEndVertical, RotateCcw, RotateCw } from 'lucide-react';
 import { RgbaColorPicker } from 'react-colorful';
 import React, { useState, useRef, useEffect, useCallback, useMemo, startTransition, createContext, useContext } from 'react';
 import { api } from '@/lib/api/client';
@@ -34,7 +34,7 @@ function normalizeFontWeight(w: string): FontWeight {
 }
 
 const CHECKER = 'repeating-conic-gradient(#c0c0c0 0% 25%, #fff 0% 50%) 0 0 / 8px 8px';
-const INP = 'bg-[#0A0A0A] border border-white/8 rounded text-xs text-zinc-200';
+const INP = 'bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded text-xs text-foreground';
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 
@@ -65,15 +65,21 @@ function Section({ label, children, defaultOpen = true }: { label: string; child
     else setLocalOpen(v => !v);
   };
   return (
-    <div className="border-t border-zinc-800">
+    <div className="border-t border-border">
       <button
         onClick={toggle}
-        className="w-full flex items-center justify-between px-5 py-2.5 text-left hover:bg-zinc-800/30 transition-colors"
+        className="w-full flex items-center px-5 py-2.5 text-left hover:bg-muted/40 transition-colors"
       >
-        <p className="text-xs font-semibold text-zinc-300 select-none">{label}</p>
-        <ChevronRight className={`w-3.5 h-3.5 text-zinc-600 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
+        <p className="text-xs font-semibold text-foreground/80 select-none flex-1">{label}</p>
       </button>
-      {open && <div className="px-5 pt-2 pb-6 space-y-4">{children}</div>}
+      <div
+        style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr' }}
+        className="transition-[grid-template-rows] duration-200 ease-in-out"
+      >
+        <div className="overflow-hidden">
+          <div className="px-5 pt-2 pb-6 space-y-4">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -86,16 +92,16 @@ function NumBox({
   icon?: React.ReactNode; className?: string;
 }) {
   return (
-    <div className={`flex items-center bg-[#0A0A0A] border border-white/8 rounded px-3 gap-2 h-9 ${className}`}>
-      {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}
-      <span className="text-xs text-zinc-500 shrink-0 select-none">{label}</span>
+    <div className={`flex items-center bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded px-3 gap-2 h-9 ${className}`}>
+      {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
+      <span className="text-xs text-muted-foreground shrink-0 select-none">{label}</span>
       <input
         type="number" value={Math.round(value * 100) / 100}
         min={min} max={max} step={step}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="flex-1 min-w-0 bg-transparent text-xs text-zinc-200 outline-none"
+        className="flex-1 min-w-0 bg-transparent text-xs text-foreground outline-none"
       />
-      {unit && <span className="text-xs text-zinc-500 shrink-0 select-none">{unit}</span>}
+      {unit && <span className="text-xs text-muted-foreground shrink-0 select-none">{unit}</span>}
     </div>
   );
 }
@@ -212,8 +218,8 @@ function FloatingColorPicker({
       <div className="p-3 cp-compact">
         <RgbaColorPicker color={color} onChange={onChange} style={{ width: '100%' }} />
       </div>
-      <div className="px-3 pb-3 pt-0.5 border-t border-zinc-800">
-        <p className="text-[9px] text-zinc-500 mb-1.5 select-none pt-2">Presets</p>
+      <div className="px-3 pb-3 pt-0.5 border-t border-border">
+        <p className="text-[9px] text-muted-foreground mb-1.5 select-none pt-2">Presets</p>
         <div className="flex flex-wrap gap-1.5">
           {PRESET_COLORS.map((preset) => (
             <button key={preset.value} title={preset.name}
@@ -642,15 +648,15 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
   // Always-visible canvas controls (zoom + snap + template dims)
   const canvasControls = (
     <>
-      <div className="px-5 py-3.5 border-t border-zinc-800">
-        <p className="text-xs font-semibold text-zinc-300 mb-3 select-none">Canvas</p>
+      <div className="px-5 py-3.5 border-t border-border">
+        <p className="text-xs font-semibold text-foreground mb-3 select-none">Canvas</p>
         <div className="space-y-3">
           {/* Zoom controls */}
           <div>
-            <p className="text-xs text-zinc-500 mb-2 select-none">Zoom</p>
+            <p className="text-xs text-muted-foreground mb-2 select-none">Zoom</p>
             <div className="flex items-center gap-2">
               <button
-                className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded border border-border bg-background dark:bg-[#0A0A0A] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) - 0.1))}
                 title="Zoom out"
               >
@@ -660,7 +666,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 <select
                   value={ZOOM_STEPS.includes(scale ?? 1) ? (scale ?? 1) : ''}
                   onChange={(e) => e.target.value && onScaleChange?.(parseFloat(e.target.value))}
-                  className="w-full h-9 bg-[#0A0A0A] border border-white/8 rounded text-xs text-zinc-200 text-center outline-none cursor-pointer appearance-none"
+                  className="w-full h-9 bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded text-xs text-foreground text-center outline-none cursor-pointer appearance-none"
                   title="Zoom presets"
                 >
                   {!ZOOM_STEPS.includes(scale ?? 1) && (
@@ -675,14 +681,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </span>
               </div>
               <button
-                className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded border border-border bg-background dark:bg-[#0A0A0A] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={() => onScaleChange?.(clampScale((scale ?? 1) + 0.1))}
                 title="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
-                className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded border border-border bg-background dark:bg-[#0A0A0A] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={onFitToScreen}
                 title="Fit to screen"
               >
@@ -695,7 +701,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Magnet className="w-3.5 h-3.5 text-muted-foreground/50" />
-              <p className="text-xs text-zinc-400 select-none">Snap to Grid</p>
+              <p className="text-xs text-muted-foreground select-none">Snap to Grid</p>
             </div>
             <button
               className="relative rounded-full transition-colors shrink-0"
@@ -711,15 +717,15 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
 
       {/* Template dimensions */}
       {(pdfWidth || pdfHeight) && (
-        <div className="px-5 py-3.5 border-t border-zinc-800">
-          <p className="text-xs font-semibold text-zinc-300 mb-2 select-none">Template</p>
+        <div className="px-5 py-3.5 border-t border-border">
+          <p className="text-xs font-semibold text-foreground mb-2 select-none">Template</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center bg-[#0A0A0A] border border-white/8 rounded h-9 px-3 gap-2">
+            <div className="flex items-center bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded h-9 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">W</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfWidth ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
-            <div className="flex items-center bg-[#0A0A0A] border border-white/8 rounded h-9 px-3 gap-2">
+            <div className="flex items-center bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded h-9 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">H</span>
               <span className="flex-1 text-xs text-foreground">{Math.round(pdfHeight ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
@@ -736,10 +742,10 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         {canvasControls}
         {/* Tip */}
         <div className="px-4 py-6 flex flex-col items-center gap-2 text-center">
-          <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-            <MousePointer2 className="w-4 h-4 text-zinc-600" />
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+            <MousePointer2 className="w-4 h-4 text-muted-foreground/40" />
           </div>
-          <p className="text-[11px] text-zinc-600 leading-relaxed max-w-40">
+          <p className="text-[11px] text-muted-foreground/50 leading-relaxed max-w-40">
             Click a field on the canvas to edit its properties
           </p>
         </div>
@@ -789,7 +795,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
 
   const selCls = `h-9 ${INP}`;
   const activeBtn = 'bg-[#3ECF8E] text-white border-transparent';
-  const inactiveBtn = `bg-[#0A0A0A] border-white/8 text-zinc-400 hover:text-zinc-200`;
+  const inactiveBtn = `bg-background dark:bg-[#0A0A0A] border-border dark:border-white/8 text-muted-foreground hover:text-foreground`;
   const btn = (active: boolean) => `h-9 flex items-center justify-center rounded border transition-colors ${active ? activeBtn : inactiveBtn}`;
 
   return (
@@ -801,83 +807,6 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         <span className="text-[9px] font-bold uppercase tracking-widest bg-[#3ECF8E]/10 text-[#3ECF8E]/80 px-2 py-0.5 rounded select-none shrink-0">
           {typeLabel}
         </span>
-        {/* Help popover — explains panel icons and sections */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors" title="Panel guide">
-              <HelpCircle className="w-3.5 h-3.5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent side="left" align="start" className="w-72 p-0 bg-zinc-900 border-zinc-700/60 text-zinc-200 shadow-2xl">
-            <div className="px-4 py-3 border-b border-zinc-800">
-              <p className="text-xs font-semibold text-zinc-100">Field Properties Guide</p>
-              <p className="text-[10px] text-zinc-400 mt-0.5">Quick reference for icons and controls in this panel.</p>
-            </div>
-            <div className="px-4 py-3 space-y-3 max-h-[480px] overflow-y-auto text-[11px]">
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">Align to Canvas</p>
-                <div className="space-y-1 text-zinc-400">
-                  <div className="flex items-start gap-2"><AlignHorizontalJustifyStart className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap left edge of field to canvas left</span></div>
-                  <div className="flex items-start gap-2"><AlignHorizontalJustifyCenter className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Center field horizontally on canvas</span></div>
-                  <div className="flex items-start gap-2"><AlignHorizontalJustifyEnd className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap right edge of field to canvas right</span></div>
-                  <div className="flex items-start gap-2"><AlignVerticalJustifyStart className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap top edge of field to canvas top</span></div>
-                  <div className="flex items-start gap-2"><AlignVerticalJustifyCenter className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Center field vertically on canvas</span></div>
-                  <div className="flex items-start gap-2"><AlignVerticalJustifyEnd className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap bottom edge of field to canvas bottom</span></div>
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">Arrange</p>
-                <div className="space-y-1 text-zinc-400">
-                  <div className="flex items-start gap-2"><BringToFront className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Bring Forward — move one layer up</span></div>
-                  <div className="flex items-start gap-2"><SendToBack className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Send Backward — move one layer down</span></div>
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">Text Alignment</p>
-                <div className="space-y-1 text-zinc-400">
-                  <div className="flex items-start gap-2"><AlignLeft className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Align text to the left</span></div>
-                  <div className="flex items-start gap-2"><AlignCenter className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Center text horizontally</span></div>
-                  <div className="flex items-start gap-2"><AlignRight className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Align text to the right</span></div>
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">Typography</p>
-                <div className="space-y-1 text-zinc-400">
-                  <div className="flex items-start gap-2"><span className="text-[10px] font-bold text-zinc-300 shrink-0 mt-0.5">B</span><span>Bold — increases font weight</span></div>
-                  <div className="flex items-start gap-2"><Italic className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Italic — slants text</span></div>
-                  <div className="flex items-start gap-2"><Underline className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Underline — adds line below text</span></div>
-                  <div className="flex items-start gap-2"><Strikethrough className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Strikethrough — draws line through text</span></div>
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">QR Code Styles</p>
-                <div className="space-y-1 text-zinc-400">
-                  <p><span className="text-zinc-300">Module style</span> — shape of each QR dot (square, rounded, dots, etc.)</p>
-                  <p><span className="text-zinc-300">Finder / Eye</span> — the three corner squares that scanners use to locate the code</p>
-                  <p><span className="text-zinc-300">Error correction</span> — L (7%) / M (15%) / Q (25%) / H (30%) — higher = more resilient but denser</p>
-                  <p><span className="text-zinc-300">Quiet zone</span> — white border around the QR code (0–10 tiles)</p>
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">Color Modes</p>
-                <div className="space-y-1 text-zinc-400">
-                  <p><span className="text-zinc-300">Solid</span> — flat single color</p>
-                  <p><span className="text-zinc-300">Linear gradient</span> — color transitions in a straight line at a set angle</p>
-                  <p><span className="text-zinc-300">Radial gradient</span> — color radiates outward from center</p>
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-300 mb-1">Canvas Icons (toolbar)</p>
-                <div className="space-y-1 text-zinc-400">
-                  <div className="flex items-start gap-2"><Magnet className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Snap to grid — fields snap to grid lines while dragging</span></div>
-                  <div className="flex items-start gap-2"><Maximize2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Fit to screen — zoom to show full template</span></div>
-                  <div className="flex items-start gap-2"><Lock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Lock field — prevents accidental drag or resize</span></div>
-                  <div className="flex items-start gap-2"><RefreshCw className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-300" /><span>Reset rotation to 0°</span></div>
-                </div>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
         <input
           ref={labelInputRef}
           value={labelDraft}
@@ -899,7 +828,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           className={`flex-1 bg-transparent text-xs font-medium outline-none min-w-0 ${
             (allFieldLabels ?? []).some(l => l.toLowerCase() === labelDraft.trim().toLowerCase())
               ? 'text-red-400'
-              : 'text-zinc-200'
+              : 'text-foreground'
           }`}
           placeholder="Field label"
         />
@@ -916,14 +845,19 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
           <NumBox label="X" value={selectedField.x} onChange={(v) => onFieldUpdate({ x: v })} icon={<MoveHorizontal className="w-3.5 h-3.5" />} />
           <NumBox label="Y" value={selectedField.y} onChange={(v) => onFieldUpdate({ y: v })} icon={<MoveVertical className="w-3.5 h-3.5" />} />
         </div>
-        <div className="flex items-center gap-2">
-          <NumBox label="Rotation" value={selectedField.rotation ?? 0} min={-360} max={360} unit="°"
-            onChange={(v) => onFieldUpdate({ rotation: ((v % 360) + 360) % 360 })} className="flex-1" />
-          <button title="Rotate -90°" className="h-9 px-2.5 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors text-xs font-mono shrink-0"
-            onClick={() => onFieldUpdate({ rotation: (((selectedField.rotation ?? 0) - 90) % 360 + 360) % 360 })}>-90°</button>
-          <button title="Rotate +90°" className="h-9 px-2.5 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors text-xs font-mono shrink-0"
-            onClick={() => onFieldUpdate({ rotation: ((selectedField.rotation ?? 0) + 90) % 360 })}>+90°</button>
-          <button title="Reset rotation" className="w-9 h-9 flex items-center justify-center rounded border border-white/8 bg-[#0A0A0A] text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
+        <NumBox label="Rotation" value={selectedField.rotation ?? 0} min={-360} max={360} unit=" °"
+          onChange={(v) => onFieldUpdate({ rotation: ((v % 360) + 360) % 360 })}
+          icon={<RotateCw className="w-3.5 h-3.5" />} />
+        <div className="grid grid-cols-3 gap-1.5">
+          <button title="Rotate -90°" className="h-8 flex items-center justify-center gap-1 rounded border border-border dark:border-white/8 bg-background dark:bg-[#0A0A0A] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-[10px] font-mono"
+            onClick={() => onFieldUpdate({ rotation: (((selectedField.rotation ?? 0) - 90) % 360 + 360) % 360 })}>
+            <RotateCcw className="w-3 h-3" />-90°
+          </button>
+          <button title="Rotate +90°" className="h-8 flex items-center justify-center gap-1 rounded border border-border dark:border-white/8 bg-background dark:bg-[#0A0A0A] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-[10px] font-mono"
+            onClick={() => onFieldUpdate({ rotation: ((selectedField.rotation ?? 0) + 90) % 360 })}>
+            <RotateCw className="w-3 h-3" />+90°
+          </button>
+          <button title="Reset rotation" className="h-8 flex items-center justify-center rounded border border-border bg-background dark:bg-[#0A0A0A] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             onClick={() => onFieldUpdate({ rotation: 0 })}>
             <RefreshCw className="w-3 h-3" />
           </button>
@@ -933,8 +867,7 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       {/* ── Align to Canvas ── */}
       {selectedField && (
         <Section label="Align to Canvas" defaultOpen={false}>
-          <div className="space-y-2">
-            <p className="text-[9px] text-muted-foreground/50 select-none">Horizontal</p>
+          <div className="space-y-1.5">
             <div className="grid grid-cols-3 gap-1.5">
               {([
                 { alignment: 'left' as const, Icon: AlignHorizontalJustifyStart, title: 'Align left edge to canvas' },
@@ -946,7 +879,6 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
                 </button>
               ))}
             </div>
-            <p className="text-[9px] text-muted-foreground/50 select-none">Vertical</p>
             <div className="grid grid-cols-3 gap-1.5">
               {([
                 { alignment: 'top' as const, Icon: AlignVerticalJustifyStart, title: 'Align top edge to canvas' },
@@ -967,14 +899,14 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
         <Section label="Arrange" defaultOpen={false}>
           <div className="flex items-center gap-2">
             <button title="Bring forward (one layer up)"
-              className={`${btn(false)} flex-1 gap-1.5 flex items-center justify-center text-xs`}
+              className={`${btn(false)} flex-1 flex items-center justify-center`}
               onClick={onBringForward}>
-              <BringToFront className="w-3.5 h-3.5" /> Forward
+              <BringToFront className="w-3.5 h-3.5" />
             </button>
             <button title="Send backward (one layer down)"
-              className={`${btn(false)} flex-1 gap-1.5 flex items-center justify-center text-xs`}
+              className={`${btn(false)} flex-1 flex items-center justify-center`}
               onClick={onSendBackward}>
-              <SendToBack className="w-3.5 h-3.5" /> Backward
+              <SendToBack className="w-3.5 h-3.5" />
             </button>
           </div>
         </Section>
@@ -1106,25 +1038,41 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
 
             {/* Letter spacing + Line height */}
             <div className="grid grid-cols-2 gap-2.5">
-              <NumBox label="Letter Space" value={selectedField.letterSpacing ?? 0}
-                onChange={(v) => onFieldUpdate({ letterSpacing: v })} unit="px" step={0.5} />
-              <NumBox label="Line Height" value={selectedField.lineHeight ?? 1.2}
-                onChange={(v) => onFieldUpdate({ lineHeight: Math.max(0.5, v) })} step={0.1} />
+              <NumBox label="" value={selectedField.letterSpacing ?? 0}
+                onChange={(v) => onFieldUpdate({ letterSpacing: v })} unit="px" step={0.5}
+                icon={<ArrowLeftRight className="w-3.5 h-3.5" />} />
+              <NumBox label="" value={selectedField.lineHeight ?? 1.2}
+                onChange={(v) => onFieldUpdate({ lineHeight: Math.max(0.5, v) })} step={0.1}
+                icon={<ArrowUpDown className="w-3.5 h-3.5" />} />
             </div>
 
             {/* Alignment + Text transform */}
             <div className="space-y-2">
-              <p className="text-[10px] text-muted-foreground/50 select-none">Alignment</p>
-              <div className="flex items-center gap-2">
-                {(['left', 'center', 'right'] as const).map((align) => {
-                  const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight;
-                  return (
-                    <button key={align} title={`Align ${align}`} className={`${btn(selectedField.textAlign === align)} flex-1`}
-                      onClick={() => onFieldUpdate({ textAlign: align })}>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  {(['left', 'center', 'right'] as const).map((align) => {
+                    const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight;
+                    return (
+                      <button key={align} title={`Align ${align}`} className={`${btn(selectedField.textAlign === align)} flex-1 h-9`}
+                        onClick={() => onFieldUpdate({ textAlign: align })}>
+                        <Icon className="w-3.5 h-3.5" />
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {([
+                    { v: 'top' as const, Icon: AlignStartVertical, title: 'Align text to top' },
+                    { v: 'middle' as const, Icon: AlignCenterVertical, title: 'Center text vertically' },
+                    { v: 'bottom' as const, Icon: AlignEndVertical, title: 'Align text to bottom' },
+                  ]).map(({ v, Icon, title }) => (
+                    <button key={v} title={title}
+                      className={`${btn((selectedField.textVerticalAlign ?? 'top') === v)} flex-1 h-9`}
+                      onClick={() => onFieldUpdate({ textVerticalAlign: v })}>
                       <Icon className="w-3.5 h-3.5" />
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
               <p className="text-[10px] text-muted-foreground/50 select-none">Transform</p>
               <div className="flex items-center gap-2">
@@ -1174,6 +1122,42 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
             imageUrl={selectedField.imageUrl ?? null}
             onImageChange={(url) => onFieldUpdate({ imageUrl: url ?? undefined })}
           />
+          {/* Object fit */}
+          <div>
+            <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Fit</p>
+            <div className="flex items-center gap-1">
+              {([
+                { v: 'contain' as const, l: 'Fit' },
+                { v: 'cover' as const, l: 'Fill' },
+                { v: 'fill' as const, l: 'Stretch' },
+              ]).map(({ v, l }) => (
+                <button key={v}
+                  className={`${btn((selectedField.objectFit ?? 'contain') === v)} flex-1 text-[10px]`}
+                  title={v.charAt(0).toUpperCase() + v.slice(1)}
+                  onClick={() => onFieldUpdate({ objectFit: v })}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Flip controls */}
+          <div>
+            <p className="text-[9px] text-muted-foreground/50 mb-1.5 select-none">Flip</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                title="Flip horizontal"
+                className={`${btn(selectedField.flipHorizontal ?? false)} flex-1`}
+                onClick={() => onFieldUpdate({ flipHorizontal: !selectedField.flipHorizontal })}>
+                <FlipHorizontal2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                title="Flip vertical"
+                className={`${btn(selectedField.flipVertical ?? false)} flex-1`}
+                onClick={() => onFieldUpdate({ flipVertical: !selectedField.flipVertical })}>
+                <FlipVertical2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </Section>
       )}
 

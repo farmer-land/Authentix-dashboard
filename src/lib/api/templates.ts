@@ -211,6 +211,7 @@ export const templatesApi = {
     title: string;
     category_id: string | null;
     subcategory_id: string | null;
+    template_version_id?: string;
     template?: { id: string; title: string; status: string };
     version?: { id: string; version_number: number };
     source_file?: { id: string; file_name: string; file_type: string };
@@ -317,7 +318,20 @@ export const templatesApi = {
       throw new ApiError(errorCode, errorMsg);
     }
 
-    return data.data!;
+    // Backend returns { template: {...}, version: {...} } (nested), but callers expect
+    // a flat { id, title, ... } shape. Normalize here so templateData.id is always valid.
+    const raw = data.data! as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const nested = raw.template;
+    return {
+      id: nested?.id ?? raw.id,
+      title: nested?.title ?? raw.title,
+      category_id: nested?.category_id ?? raw.category_id ?? null,
+      subcategory_id: nested?.subcategory_id ?? raw.subcategory_id ?? null,
+      template_version_id: raw.version?.id ?? undefined,
+      template: raw.template,
+      version: raw.version,
+      source_file: raw.source_file,
+    };
   },
 
   update: async (
@@ -328,6 +342,8 @@ export const templatesApi = {
       fields?: unknown[];
       width?: number;
       height?: number;
+      category_id?: string | null;
+      subcategory_id?: string | null;
     },
   ) => {
     const response = await apiRequest(`/templates/${id}`, {

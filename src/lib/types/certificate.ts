@@ -64,6 +64,9 @@ export interface CertificateField {
 
   // Image field
   imageUrl?: string; // For image-type fields
+  objectFit?: 'contain' | 'cover' | 'fill'; // How image fills its box (default: contain)
+  flipHorizontal?: boolean; // Mirror image horizontally
+  flipVertical?: boolean;   // Mirror image vertically
 
   // Image appearance
   cornerRadius?: number; // px, 0–500
@@ -86,6 +89,9 @@ export interface CertificateField {
 
   // Rotation
   rotation?: number;          // degrees, 0-359
+
+  // Text vertical alignment within field box
+  textVerticalAlign?: 'top' | 'middle' | 'bottom'; // defaults to top
 
   // Background padding & corner radius (text fields)
   bgPaddingH?: number;        // horizontal bg padding px

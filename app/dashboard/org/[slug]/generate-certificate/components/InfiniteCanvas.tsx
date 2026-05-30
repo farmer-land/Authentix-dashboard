@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import {
   RotateCw,
   ChevronLeft,
-  ChevronRight,
   GripHorizontal,
   Undo2,
   Redo2,
@@ -89,8 +88,13 @@ interface InfiniteCanvasProps {
   // fitToScreen shifts the template up by half this value so it stays visually
   // centred in the available space, and the toolbar sits above the stepper.
   footerHeight?: number;
-  // Whether the left panel is currently open (used to auto-dismiss the add-fields tip)
+  // Whether the left panel is currently open/visible (toggles trigger refit)
   leftPanelOpen?: boolean;
+  // Whether the right panel is currently open/visible (toggles trigger refit)
+  rightPanelOpen?: boolean;
+  // When false (overlay covering canvas), the entrance animation is deferred until
+  // this transitions to true — prevents the grow animation from playing while hidden.
+  revealContent?: boolean;
 }
 
 const SNAP_SIZE = 8;
@@ -185,8 +189,17 @@ export function InfiniteCanvas({
   rightPanelWidth,
   footerHeight = 0,
   leftPanelOpen = false,
+  rightPanelOpen = false,
+  revealContent,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Always-current refs for props that callbacks close over.
+  // This avoids stale-closure bugs when useCallback deps don't update fast enough.
+  const fieldsRef = useRef(fields);
+  fieldsRef.current = fields;
+  const onFieldUpdateRef = useRef(onFieldUpdate);
+  onFieldUpdateRef.current = onFieldUpdate;
 
   // Pan state
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -219,6 +232,7 @@ export function InfiniteCanvas({
   const resizeCorner = useRef<ResizeHandle | null>(null);
   const templateResizeStart = useRef({ x: 0, y: 0 });
   const initialTemplateDims = useRef({ w: 0, h: 0 });
+  const resizePanStart = useRef({ x: 0, y: 0 });
 
   // Template rotation state
   const [rotation, setRotation] = useState(0);
@@ -241,8 +255,8 @@ export function InfiniteCanvas({
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts] = useState(false);
 
-  // Toolbar minimize + help panel
-  const [toolbarMinimized, setToolbarMinimized] = useState(false);
+  // Help panel (toolbar minimize/hover-expand removed — always-expanded prevents
+  // the preview button from shifting position when the user moves toward it)
   const [helpPanelOpen, setHelpPanelOpen] = useState(false);
 
   // "Add fields" tip — shown once per session
@@ -293,61 +307,77 @@ export function InfiniteCanvas({
   // Sync panRef so wheel handler (non-React closure) can read latest pan
   useEffect(() => { panRef.current = pan; }, [pan]);
 
-  // ── Log pan + scale changes (debounced 600ms, for position calibration) ───
+  // ── Position calibration logger (browser console + server terminal) ─────────
+  const serverLog = (label: string, data: unknown) => {
+    console.log(`[Canvas] ${label}`, data);
+    fetch('/api/dev/canvas-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label, data }),
+    }).catch(() => {});
+  };
+
+  // Debounced pan + zoom log (600ms after settling)
   useEffect(() => {
     const t = setTimeout(() => {
-      console.log('[Canvas] Template position — pan:', { x: Math.round(pan.x), y: Math.round(pan.y) }, '| zoom:', `${Math.round(scale * 100)}%`);
+      serverLog('Template position', { pan: { x: Math.round(pan.x), y: Math.round(pan.y) }, zoom: `${Math.round(scale * 100)}%` });
     }, 600);
     return () => clearTimeout(t);
   }, [pan, scale]);
 
-  // Reset rotation when a new template is loaded
-  useEffect(() => { setRotation(0); }, [fileUrl]);
+  // Reset rotation and entrance animation state when a new template is loaded.
+  // Without resetting hasFitted, template switches wouldn't replay the grow animation.
+  useEffect(() => { setRotation(0); setHasFitted(false); }, [fileUrl]);
+
+  // Hides the canvas until the first fit runs so the user never sees pan={0,0}
+  const [hasFitted, setHasFitted] = useState(false);
 
   // ── Auto-fit on mount and when template changes ──────────────────────────
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-    // Account for panel overlays so template centers in the visible gap between them
+    if (cw === 0 || ch === 0) return; // Container is hidden (display:none) — skip
     const leftW = leftPanelWidth ?? 0;
     const rightW = rightPanelWidth ?? 0;
     const availW = cw - leftW - rightW;
-    const availH = ch - footerHeight;
-    const isLandscape = pdfWidth > pdfHeight;
+    // Reserve space for the floating toolbar (52px offset above footerHeight + ~44px toolbar height + 16px gap)
+    // so tall/vertical templates never overlap the toolbar after auto-fit.
+    const TOOLBAR_RESERVED = 112;
+    const effectiveH = ch - (footerHeight ?? 0) - TOOLBAR_RESERVED;
 
-    let fitScale: number;
-    if (isLandscape) {
-      fitScale = clamp(
-        0.6 * Math.min(availW / pdfWidth, availH / pdfHeight),
-        MIN_SCALE,
-        MAX_SCALE,
-      );
-    } else {
-      const padding = 80;
-      fitScale = clamp(
-        Math.min((availW - padding * 2) / pdfWidth, (availH - padding * 2) / pdfHeight),
-        MIN_SCALE,
-        MAX_SCALE,
-      );
-    }
-
-    // Offset X by the left panel so the template lands in the visible gap
-    const centeredX = leftW + (availW - pdfWidth * fitScale) / 2;
-    const centeredY = (availH - pdfHeight * fitScale) / 2;
-    onScaleChange(fitScale);
+    // Fit template to occupy ~80% of the smaller available dimension, respecting both axes
+    const fitScale = Math.min(availW / pdfWidth, effectiveH / pdfHeight) * 0.80;
+    const clampedScale = Math.min(Math.max(fitScale, 0.04), 2);
+    const centeredX = leftW + (availW - pdfWidth * clampedScale) / 2;
+    // Center in the full available height (not effectiveH) so the template appears
+    // visually centred on screen. effectiveH only controls fit scale (prevents overlap with toolbar).
+    const fullAvailH = ch - (footerHeight ?? 0);
+    const centeredY = Math.max(0, (fullAvailH - pdfHeight * clampedScale) / 2);
+    onScaleChange(clampedScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
+    // Delay hasFitted by one frame so the centered pan renders first.
+    // This way the scale-grow animation starts from the correct position
+    // (no sliding from top-left — the template grows from its own center).
+    requestAnimationFrame(() => setHasFitted(true));
   }, [pdfWidth, pdfHeight, footerHeight, leftPanelWidth, rightPanelWidth, onScaleChange]);
 
-  // Run auto-fit whenever the template dimensions change
+  // Run auto-fit whenever template dimensions change.
+  // First load runs immediately (no delay) to avoid visible jump.
+  // Subsequent changes (template switch) wait one frame for DOM reflow.
   const prevDimsRef = useRef({ w: 0, h: 0 });
+  const isFirstFitRef = useRef(true);
   useEffect(() => {
     if (pdfWidth > 0 && pdfHeight > 0) {
       const prev = prevDimsRef.current;
       if (prev.w !== pdfWidth || prev.h !== pdfHeight) {
         prevDimsRef.current = { w: pdfWidth, h: pdfHeight };
-        // Delay slightly so container has rendered
-        setTimeout(fitToScreen, 50);
+        if (isFirstFitRef.current) {
+          isFirstFitRef.current = false;
+          fitToScreen();
+        } else {
+          setTimeout(fitToScreen, 50);
+        }
       }
     }
   }, [pdfWidth, pdfHeight, fitToScreen]);
@@ -363,6 +393,28 @@ export function InfiniteCanvas({
       setTimeout(fitToScreen, 80);
     }
   }, [fitTrigger, fitToScreen]);
+
+  // Re-center when either panel opens/closes so the certificate always sits in
+  // the middle of the visible space between them.
+  const prevLeftPanelOpen = useRef(leftPanelOpen);
+  useEffect(() => {
+    if (leftPanelOpen !== prevLeftPanelOpen.current) {
+      prevLeftPanelOpen.current = leftPanelOpen;
+      setToolbarPos(null);
+      setTimeout(fitToScreen, 80);
+    }
+  }, [leftPanelOpen, fitToScreen]);
+
+  // Right panel opens on field-select (click) — not mid-drag — so it's safe to refit.
+  // Explicit close buttons already fire fitTrigger; this handles the open transition.
+  const prevRightPanelOpen = useRef(rightPanelOpen);
+  useEffect(() => {
+    if (rightPanelOpen !== prevRightPanelOpen.current) {
+      prevRightPanelOpen.current = rightPanelOpen;
+      setToolbarPos(null);
+      setTimeout(fitToScreen, 80);
+    }
+  }, [rightPanelOpen, fitToScreen]);
 
   // Toolbar starts at CSS default (bottom center) — no JS init needed.
   // toolbarPos is only set after the user drags; null = use CSS default.
@@ -573,6 +625,7 @@ export function InfiniteCanvas({
     resizeCorner.current = corner;
     templateResizeStart.current = { x: e.clientX, y: e.clientY };
     initialTemplateDims.current = { w: pdfWidth, h: pdfHeight };
+    resizePanStart.current = { x: panRef.current.x, y: panRef.current.y };
     onTemplateResizeStart?.(pdfWidth, pdfHeight);
   };
 
@@ -586,17 +639,29 @@ export function InfiniteCanvas({
       const dy = (e.clientY - templateResizeStart.current.y) / scaleRef.current;
       let nw = initialTemplateDims.current.w;
       let nh = initialTemplateDims.current.h;
+      // Screen-space deltas (not divided by scale) for pan adjustment
+      const screenDx = e.clientX - templateResizeStart.current.x;
+      const screenDy = e.clientY - templateResizeStart.current.y;
+      let panX = resizePanStart.current.x;
+      let panY = resizePanStart.current.y;
       switch (resizeCorner.current) {
         case 'se': nw += dx; nh += dy; break;
-        case 'sw': nw -= dx; nh += dy; break;
-        case 'ne': nw += dx; nh -= dy; break;
-        case 'nw': nw -= dx; nh -= dy; break;
+        case 'sw': nw -= dx; nh += dy; panX = resizePanStart.current.x + screenDx; break;
+        case 'ne': nw += dx; nh -= dy; panY = resizePanStart.current.y + screenDy; break;
+        case 'nw': nw -= dx; nh -= dy; panX = resizePanStart.current.x + screenDx; panY = resizePanStart.current.y + screenDy; break;
         case 'e':  nw += dx; break;
-        case 'w':  nw -= dx; break;
+        case 'w':  nw -= dx; panX = resizePanStart.current.x + screenDx; break;
         case 's':  nh += dy; break;
-        case 'n':  nh -= dy; break;
+        case 'n':  nh -= dy; panY = resizePanStart.current.y + screenDy; break;
       }
-      const dims = { w: Math.max(100, nw), h: Math.max(100, nh) };
+      // Clamp dims first, then correct pan if clamped
+      const clampedW = Math.max(100, nw);
+      const clampedH = Math.max(100, nh);
+      if (clampedW !== nw) panX = resizePanStart.current.x; // undo pan if width clamped
+      if (clampedH !== nh) panY = resizePanStart.current.y; // undo pan if height clamped
+      const dims = { w: clampedW, h: clampedH };
+      setPan({ x: panX, y: panY });
+      panRef.current = { x: panX, y: panY };
       latestResizeDims.current = dims;
       // Throttle visual updates to one per animation frame to prevent jitter
       cancelAnimationFrame(rafId);
@@ -675,7 +740,7 @@ export function InfiniteCanvas({
       origX,
       origY,
     };
-    console.log('[Canvas Layout] Toolbar drag START:', { x: Math.round(origX), y: Math.round(origY), minimized: toolbarMinimized });
+    serverLog('Toolbar drag START', { x: Math.round(origX), y: Math.round(origY), minimized: false });
 
     const onMove = (ev: MouseEvent) => {
       if (!toolbarDragRef.current.dragging) return;
@@ -685,8 +750,8 @@ export function InfiniteCanvas({
       if (containerRef.current && toolbarRef.current) {
         const ct = containerRef.current.getBoundingClientRect();
         const tb = toolbarRef.current.getBoundingClientRect();
-        const minX = 4;
-        const maxX = ct.width - tb.width - 4;
+        const minX = (leftPanelWidth ?? 0) + 4;
+        const maxX = ct.width - tb.width - 4 - (rightPanelWidth ?? 0);
         const maxY = ct.height - tb.height - 4;
         setToolbarPos({ x: Math.max(minX, Math.min(rawX, maxX)), y: Math.max(4, Math.min(rawY, maxY)) });
       } else {
@@ -703,7 +768,7 @@ export function InfiniteCanvas({
         const ct = containerRef.current.getBoundingClientRect();
         const finalX = Math.round(tb.left - ct.left);
         const finalY = Math.round(tb.top - ct.top);
-        console.log('[Canvas Layout] Toolbar drag END:', { x: finalX, y: finalY, minimized: toolbarMinimized });
+        serverLog('Toolbar drag END', { x: finalX, y: finalY, minimized: false });
       }
     };
     window.addEventListener('mousemove', onMove);
@@ -713,7 +778,8 @@ export function InfiniteCanvas({
   // ── Field interactions ────────────────────────────────────────────────────
 
   const handleFieldDrag = useCallback((id: string, deltaX: number, deltaY: number) => {
-    const field = fields.find(f => f.id === id);
+    const currentFields = fieldsRef.current;
+    const field = currentFields.find(f => f.id === id);
     if (!field || field.locked) return;
     let nx = field.x + deltaX / scale;
     let ny = field.y + deltaY / scale;
@@ -726,9 +792,9 @@ export function InfiniteCanvas({
     if (multiSelectedIds.size > 1 && multiSelectedIds.has(id)) {
       setGuides([]);
       for (const fid of multiSelectedIds) {
-        const f = fields.find(ff => ff.id === fid);
+        const f = currentFields.find(ff => ff.id === fid);
         if (!f || f.locked) continue;
-        onFieldUpdate(fid, { x: f.x + deltaX / scale, y: f.y + deltaY / scale });
+        onFieldUpdateRef.current(fid, { x: f.x + deltaX / scale, y: f.y + deltaY / scale });
       }
       return;
     }
@@ -739,7 +805,7 @@ export function InfiniteCanvas({
     const dT = ny, dB = ny + field.height, dCY = ny + field.height / 2;
     const seen = new Set<string>();
     const newGuides: { type: 'h' | 'v'; pos: number }[] = [];
-    for (const other of fields) {
+    for (const other of currentFields) {
       if (other.id === id) continue;
       const oL = other.x, oR = other.x + other.width, oCX = other.x + other.width / 2;
       const oT = other.y, oB = other.y + other.height, oCY = other.y + other.height / 2;
@@ -765,11 +831,19 @@ export function InfiniteCanvas({
     setGuides(newGuides);
     // ─────────────────────────────────────────────────────────────────────
 
-    onFieldUpdate(id, { x: nx, y: ny });
-  }, [fields, scale, snapToGrid, onFieldUpdate, multiSelectedIds]);
+    onFieldUpdateRef.current(id, { x: nx, y: ny });
+  }, [scale, snapToGrid, multiSelectedIds]);
 
-  const handleFieldResize = useCallback((id: string, width: number, height: number, initialCanvasWidth: number, initialFontSize: number) => {
-    const field = fields.find(f => f.id === id);
+  const handleFieldResize = useCallback((
+    id: string,
+    width: number,
+    height: number,
+    initialCanvasWidth: number,
+    initialFontSize: number,
+    newCanvasX?: number,
+    newCanvasY?: number,
+  ) => {
+    const field = fieldsRef.current.find(f => f.id === id);
     if (field?.locked) return;
     let w = width / scale;
     let h = height / scale;
@@ -786,12 +860,19 @@ export function InfiniteCanvas({
       const ratio = newW / initialCanvasWidth;
       updates.fontSize = Math.max(6, Math.round(initialFontSize * ratio));
     }
+    // Left/top-edge handles also shift the field position (canvas units, pre-computed in DraggableField)
+    if (newCanvasX !== undefined) updates.x = newCanvasX;
+    if (newCanvasY !== undefined) updates.y = newCanvasY;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onFieldUpdate(id, updates as any);
-  }, [fields, scale, snapToGrid, onFieldUpdate]);
+    onFieldUpdateRef.current(id, updates as any);
+  }, [scale, snapToGrid]);
+
+  const handleFieldRotate = useCallback((id: string, rotation: number) => {
+    onFieldUpdateRef.current(id, { rotation });
+  }, []);
 
   const alignSelectedField = useCallback((alignment: 'left' | 'center-h' | 'right' | 'top' | 'center-v' | 'bottom') => {
-    const field = fields.find(f => f.id === selectedFieldId);
+    const field = fieldsRef.current.find(f => f.id === selectedFieldId);
     if (!field) return;
     let updates: Partial<CertificateField> = {};
     switch (alignment) {
@@ -802,8 +883,8 @@ export function InfiniteCanvas({
       case 'center-v': updates = { y: (pdfHeight - field.height) / 2 }; break;
       case 'bottom':   updates = { y: pdfHeight - field.height }; break;
     }
-    onFieldUpdate(field.id, updates);
-  }, [fields, selectedFieldId, pdfWidth, pdfHeight, onFieldUpdate]);
+    onFieldUpdateRef.current(field.id, updates);
+  }, [selectedFieldId, pdfWidth, pdfHeight]);
 
 
   const cursor = isPanning ? 'grabbing' : (isSpacePressed ? 'grab' : 'default');
@@ -901,6 +982,18 @@ export function InfiniteCanvas({
         }}
         data-field="canvas"
       >
+      {/* Scale-grow entrance wrapper — template grows from its own center on first fit.
+          Gates on revealContent so the animation is deferred until the loading overlay
+          disappears: when revealContent transitions false→true while hasFitted is already
+          true, the CSS transition fires naturally (scale 0.06→1) without any extra JS. */}
+      <div style={{
+        width: '100%',
+        height: '100%',
+        transform: (hasFitted && (revealContent ?? true)) ? 'scale(1)' : 'scale(0.06)',
+        opacity: (hasFitted && (revealContent ?? true)) ? 1 : 0,
+        transition: hasFitted ? 'transform 0.55s cubic-bezier(0.16,1,0.3,1), opacity 0.35s ease' : 'none',
+        transformOrigin: 'center center',
+      }}>
         {/* Rotation wrapper — rotates everything (template + handles) around its center */}
         <div
           style={{
@@ -950,7 +1043,8 @@ export function InfiniteCanvas({
                   isMultiSelected={multiSelectedIds.has(field.id)}
                   onDrag={(dx, dy) => handleFieldDrag(field.id, dx, dy)}
                   onDragStart={onFieldDragStart}
-                  onResize={(w, h, iw, ifs) => handleFieldResize(field.id, w, h, iw, ifs)}
+                  onResize={(w, h, iw, ifs, nx, ny) => handleFieldResize(field.id, w, h, iw, ifs, nx, ny)}
+                  onRotate={(r) => handleFieldRotate(field.id, r)}
                   previewValue={livePreviewValues?.[field.id]}
                   onSelect={e => {
                     e.stopPropagation();
@@ -1046,7 +1140,8 @@ export function InfiniteCanvas({
             </div>
           )}
         </div>
-      </div>
+      </div>{/* end scale-grow wrapper */}
+      </div>{/* end certificate canvas */}
 
       {/* ── Floating draggable toolbar ── */}
       {(() => {
@@ -1062,7 +1157,7 @@ export function InfiniteCanvas({
             style={
               toolbarPos
                 ? { position: 'absolute', left: toolbarPos.x, top: toolbarPos.y, userSelect: 'none' }
-                : { position: 'absolute', bottom: footerHeight + 20, left: `calc(${leftPanelWidth ?? 0}px + (100% - ${(leftPanelWidth ?? 0) + (rightPanelWidth ?? 0)}px) / 2)`, transform: 'translateX(-50%)', userSelect: 'none' }
+                : { position: 'absolute', bottom: footerHeight + 52, left: `calc(${leftPanelWidth ?? 0}px + (100% - ${(leftPanelWidth ?? 0) + (rightPanelWidth ?? 0)}px) / 2)`, transform: 'translateX(-50%)', userSelect: 'none' }
             }
             onMouseDown={handleToolbarMouseDown}
           >
@@ -1114,7 +1209,7 @@ export function InfiniteCanvas({
 
             {/* Toolbar pill */}
             <div className="flex items-center gap-0.5 bg-card/95 backdrop-blur-md border border-border/50 rounded-xl shadow-2xl px-2 py-1.5">
-              {/* Grip */}
+              {/* Grip — drag to move */}
               <div
                 data-grip
                 className="text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing px-0.5"
@@ -1123,32 +1218,8 @@ export function InfiniteCanvas({
                 <GripHorizontal className="w-3.5 h-3.5" />
               </div>
 
-              {/* Minimize / expand toggle */}
-              <Button
-                variant="ghost" size="icon"
-                className="h-7 w-7 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted rounded-lg"
-                onClick={() => {
-                  setToolbarMinimized(v => {
-                    const next = !v;
-                    // Log position in new state so you can capture both expanded and collapsed coords
-                    if (toolbarRef.current && containerRef.current) {
-                      const tb = toolbarRef.current.getBoundingClientRect();
-                      const ct = containerRef.current.getBoundingClientRect();
-                      console.log(`[Canvas] Toolbar ${next ? 'COLLAPSED' : 'EXPANDED'} — pos:`, { x: Math.round(tb.left - ct.left), y: Math.round(tb.top - ct.top) });
-                    }
-                    return next;
-                  });
-                }}
-                title={toolbarMinimized ? 'Expand toolbar' : 'Minimize toolbar'}
-              >
-                {toolbarMinimized
-                  ? <ChevronRight className="w-3.5 h-3.5" />
-                  : <ChevronLeft className="w-3.5 h-3.5" />}
-              </Button>
-
-              {/* ── Expanded section ── */}
-              {!toolbarMinimized && (
-                <>
+              {/* ── Tool section — always visible ── */}
+              <>
                   <div className="w-px h-4 bg-border mx-0.5" />
 
                   {/* Undo / Redo */}
@@ -1236,10 +1307,9 @@ export function InfiniteCanvas({
                       ))}
                     </>
                   )}
-                </>
-              )}
+              </>
 
-              {/* ── Always-visible buttons ── */}
+              {/* ── Preview + global actions ── */}
               <div className="w-px h-4 bg-border mx-0.5" />
 
               {/* Help — before preview */}
@@ -1260,52 +1330,57 @@ export function InfiniteCanvas({
                 </div>
               )}
 
-              {/* Preview */}
-              {onPreviewToggle && (
-                <button
-                  className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium transition-colors ${previewOpen ? 'text-primary bg-primary/10 hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-                  onClick={onPreviewToggle}
-                  title={previewOpen ? 'Exit preview' : 'Preview certificate'}
-                >
-                  <PlayCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Preview</span>
-                </button>
-              )}
+              {/* Preview + Save — only when at least 1 field is on the canvas */}
+              {fields.length > 0 && (
+                <>
+                  {/* Preview */}
+                  {onPreviewToggle && (
+                    <button
+                      className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium transition-colors ${previewOpen ? 'text-primary bg-primary/10 hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                      onClick={onPreviewToggle}
+                      title={previewOpen ? 'Exit preview' : 'Preview certificate'}
+                    >
+                      <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Preview</span>
+                    </button>
+                  )}
 
-              {/* Save button + status indicator */}
-              {saveStatus === 'saving' && (
-                <div className="flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Saving…</span>
-                </div>
-              )}
-              {saveStatus === 'saved' && lastSavedAt && (
-                <div className="flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium text-primary">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Saved {formatSavedAgo(lastSavedAt)}</span>
-                </div>
-              )}
-              {saveStatus === 'error' && (
-                <div className="flex items-center gap-1.5 text-[10px] px-2 rounded-lg h-7 font-medium text-destructive">
-                  <AlertCircle className="w-3 h-3" />
-                  <span>Save failed</span>
-                  {onSaveNow && (
+                  {/* Save button + status indicator */}
+                  {saveStatus === 'saving' && (
+                    <div className="flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium text-muted-foreground">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Saving…</span>
+                    </div>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <div className="flex items-center gap-1 text-[10px] px-2 rounded-lg h-7 font-medium text-primary">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Saved</span>
+                    </div>
+                  )}
+                  {saveStatus === 'error' && (
+                    <div className="flex items-center gap-1.5 text-[10px] px-2 rounded-lg h-7 font-medium text-destructive">
+                      <AlertCircle className="w-3 h-3" />
+                      <span>Save failed</span>
+                      {onSaveNow && (
+                        <button
+                          onClick={onSaveNow}
+                          className="underline underline-offset-2 hover:no-underline"
+                        >Retry</button>
+                      )}
+                    </div>
+                  )}
+                  {saveStatus === 'idle' && onSaveNow && (
                     <button
                       onClick={onSaveNow}
-                      className="underline underline-offset-2 hover:no-underline"
-                    >Retry</button>
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title="Save design now (⌘S)"
+                    >
+                      <Save className="w-3.5 h-3.5 shrink-0" />
+                      <span>Save</span>
+                    </button>
                   )}
-                </div>
-              )}
-              {(saveStatus === 'idle' || (saveStatus === 'saved' && !lastSavedAt)) && onSaveNow && fields.length > 0 && (
-                <button
-                  onClick={onSaveNow}
-                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  title="Save design now (⌘S)"
-                >
-                  <Save className="w-3.5 h-3.5 shrink-0" />
-                  <span>Save</span>
-                </button>
+                </>
               )}
             </div>
           </div>

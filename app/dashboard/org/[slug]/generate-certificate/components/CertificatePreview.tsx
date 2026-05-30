@@ -125,7 +125,12 @@ export function CertificatePreview({ template, fields }: CertificatePreviewProps
                 <img
                   src={field.imageUrl}
                   alt={field.label}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                  style={{
+                    width: '100%', height: '100%',
+                    objectFit: (field.objectFit ?? 'contain') as React.CSSProperties['objectFit'],
+                    transform: [field.flipHorizontal ? 'scaleX(-1)' : '', field.flipVertical ? 'scaleY(-1)' : ''].filter(Boolean).join(' ') || undefined,
+                    display: 'block',
+                  }}
                   draggable={false}
                 />
               </div>
@@ -157,7 +162,7 @@ export function CertificatePreview({ template, fields }: CertificatePreviewProps
                 padding: '4px 8px',
                 backgroundColor: field.backgroundColor || undefined,
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: field.textVerticalAlign === 'bottom' ? 'flex-end' : field.textVerticalAlign === 'middle' ? 'center' : 'flex-start',
                 justifyContent:
                   field.textAlign === 'center'
                     ? 'center'
