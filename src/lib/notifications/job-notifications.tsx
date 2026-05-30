@@ -233,11 +233,6 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
     const runId = Math.random().toString(36).slice(2, 8);
 
     void (async () => {
-      bgChannel = supabase
-        .channel(`bg-jobs-${slug}-${runId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `org_slug=eq.${slug}` }, triggerPoll)
-        .subscribe();
-
       const { data: org } = await supabase
         .from('organizations')
         .select('id')
@@ -245,6 +240,11 @@ export function JobNotificationProvider({ children }: { children: React.ReactNod
         .maybeSingle();
 
       if (cancelled || !org?.id) return;
+
+      bgChannel = supabase
+        .channel(`bg-jobs-${org.id}-${runId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'background_jobs', filter: `organization_id=eq.${org.id}` }, triggerPoll)
+        .subscribe();
 
       certChannel = supabase
         .channel(`cert-gen-jobs-${org.id}-${runId}`)

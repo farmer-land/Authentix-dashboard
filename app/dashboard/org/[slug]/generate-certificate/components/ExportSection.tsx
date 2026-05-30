@@ -143,13 +143,20 @@ function scoreHeaderForField(
   if (field.type === 'course') {
     if (/course|program|subject|workshop|internship|training|award|event/.test(h)) score += 2;
   }
+  if (field.type === 'date') {
+    if (h === 'date' || /completion|award|issued_on/.test(h)) score += 3;
+    if (/date/.test(h) && !/start|end|expir|valid/.test(h)) score += 1;
+  }
   if (field.type === 'start_date') {
-    if (/start|issue|issu|begin|from|commencement|award/.test(h)) score += 2;
+    if (/start|issue|issu|begin|from|commencement/.test(h)) score += 2;
     if (/date/.test(h) && !/end|expir|valid|until/.test(h)) score += 1;
   }
   if (field.type === 'end_date') {
     if (/end|expir|valid|until|to\b/.test(h)) score += 2;
     if (/date/.test(h) && /end|expir|valid/.test(h)) score += 1;
+  }
+  if (field.type === 'place') {
+    if (/place|venue|location|city|town/.test(h)) score += 3;
   }
   if (field.label.toLowerCase().includes('email') && /email|e-mail|mail/.test(h)) score += 3;
 
@@ -158,7 +165,8 @@ function scoreHeaderForField(
   if (inferredType === 'name'  && field.type === 'name') score += 3;
   if (inferredType === 'email' && field.label.toLowerCase().includes('email')) score += 3;
   if (inferredType === 'date') {
-    if (field.type === 'start_date') score += 2; // prefer start over end for ambiguous dates
+    if (field.type === 'date')       score += 3; // plain date field gets highest boost for ambiguous dates
+    if (field.type === 'start_date') score += 2;
     if (field.type === 'end_date')   score += 1;
   }
 
@@ -239,9 +247,11 @@ interface ConfigRowProps {
 }
 
 function ConfigRow({ config, importedData, index, onRemove, onMappingChange }: ConfigRowProps) {
-  const mappableFields = config.fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
-  const hasUnmapped = mappableFields.some(f => !config.fieldMappings.find(m => m.fieldId === f.id));
-  const [expanded, setExpanded] = useState(hasUnmapped);
+  const NON_MAPPABLE_CFG = new Set(['qr_code', 'custom_text', 'image']);
+  const mappableFields = config.fields.filter(f => !NON_MAPPABLE_CFG.has(f.type));
+  const cfgNameField = config.fields.find(f => f.type === 'name');
+  const cfgNameUnmapped = !!cfgNameField && !config.fieldMappings.find(m => m.fieldId === cfgNameField.id);
+  const [expanded, setExpanded] = useState(cfgNameUnmapped);
   const mappedCount = config.fieldMappings.filter(m => mappableFields.some(f => f.id === m.fieldId)).length;
   const allMapped = mappedCount === mappableFields.length && mappableFields.length > 0;
 
@@ -1708,7 +1718,9 @@ export function ExportSection({
   }, [onTrackEvent, template?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to Realtime updates for the primary generation job.
-  // Initial fetch handles jobs that complete before the subscription is established.
+  // Listens on BOTH broadcast (fast — DB trigger fires immediately) and
+  // postgres_changes (fallback — survives if broadcast trigger is absent).
+  // Initial fetch catches jobs that finished before subscribe() fires.
   useEffect(() => {
     if (!generationJobId) return;
 
@@ -1725,6 +1737,13 @@ export function ExportSection({
 
     const channel = supabase
       .channel(`bg-job:${generationJobId}-${Date.now()}`)
+      // Broadcast path: DB trigger fires realtime.broadcast_changes() → instant delivery
+      .on('broadcast', { event: 'UPDATE' }, (payload) => {
+        if (!active) return;
+        const row = (payload as { payload?: { record?: JobRow } }).payload?.record;
+        if (row) handlePrimaryJobRow(row);
+      })
+      // postgres_changes fallback: replication-slot path, slightly delayed
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'background_jobs', filter: `id=eq.${generationJobId}` },
@@ -1878,20 +1897,22 @@ export function ExportSection({
   const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null);
 
   const hasQrCodeField = fields.some(f => f.type === 'qr_code');
-  // Fields that actually require a CSV column mapping (excludes auto-rendered types)
-  const mappableFields = fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
-  // Allow generation even when there are 0 mappable fields (e.g. image/QR-only templates)
-  const allMappableFieldsMapped = mappableFields.every(f => fieldMappings.some(m => m.fieldId === f.id));
+  // Non-data field types that never need a CSV mapping
+  const NON_MAPPABLE = new Set(['qr_code', 'custom_text', 'image']);
+  const mappableFields = fields.filter(f => !NON_MAPPABLE.has(f.type));
+  // Only recipient name is truly required — everything else is optional (leaves blank if unmapped)
+  const nameField = fields.find(f => f.type === 'name');
+  const nameFieldMapped = !nameField || fieldMappings.some(m => m.fieldId === nameField.id);
   // Also verify mapped column names actually exist in the uploaded headers (catches stale mappings)
   const allMappedColumnsValid = !importedData || fieldMappings
     .filter(m => m.columnName)
     .every(m => importedData.headers.includes(m.columnName));
-  // Each additional config must also have all its mappable fields mapped
+  // Additional configs: only require their name field mapped
   const allAdditionalConfigsMapped = additionalConfigs.every(cfg => {
-    const mappable = cfg.fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
-    return mappable.every(f => cfg.fieldMappings.some(m => m.fieldId === f.id));
+    const cfgNameField = cfg.fields.find(f => f.type === 'name');
+    return !cfgNameField || cfg.fieldMappings.some(m => m.fieldId === cfgNameField.id);
   });
-  const canGenerate = !!(template && importedData && template.id && allMappableFieldsMapped && allMappedColumnsValid && allAdditionalConfigsMapped);
+  const canGenerate = !!(template && importedData && template.id && nameFieldMapped && allMappedColumnsValid && allAdditionalConfigsMapped);
 
   // All configs including the primary one (for unified rendering)
   const allConfigs: CertificateConfig[] = [
@@ -2326,9 +2347,7 @@ export function ExportSection({
     if (customDate !== undefined) setCustomExpiryDate(customDate);
   };
 
-  const unmappedFields = fields
-    .filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image')
-    .filter(f => !fieldMappings.find(m => m.fieldId === f.id));
+  const unmappedFields = mappableFields.filter(f => !fieldMappings.find(m => m.fieldId === f.id));
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -3061,14 +3080,25 @@ export function ExportSection({
             </div>
           </div>
 
-          {/* ── Unmapped field warning ── */}
-          {unmappedFields.length > 0 && (
+          {/* ── Unmapped name field — blocks generation ── */}
+          {nameField && !nameFieldMapped && (
             <div className="flex gap-2.5 px-3 py-2.5 rounded-xl border border-destructive/30 bg-destructive/5">
               <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
               <div className="text-xs">
-                <p className="font-medium text-destructive">Unmapped fields</p>
-                <p className="text-destructive/80 mt-0.5">
-                  {unmappedFields.map(f => f.label).join(', ')} will be left empty.
+                <p className="font-medium text-destructive">Recipient Name not mapped</p>
+                <p className="text-destructive/80 mt-0.5">Go to the Data step and map a column to the Recipient Name field.</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Other unmapped fields — soft warning only ── */}
+          {unmappedFields.filter(f => f.type !== 'name').length > 0 && (
+            <div className="flex gap-2.5 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-medium text-amber-700 dark:text-amber-400">Some fields unmapped</p>
+                <p className="text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                  {unmappedFields.filter(f => f.type !== 'name').map(f => f.label).join(', ')} will be left blank — generation can still proceed.
                 </p>
               </div>
             </div>
@@ -3102,9 +3132,9 @@ export function ExportSection({
                 ? 'Import data in the Data step to enable generation'
                 : !template?.id
                 ? 'Template is still being saved — if this persists, go back to Step 1 and re-upload'
-                : !allMappableFieldsMapped
-                ? 'Map all certificate fields to columns in the Data step'
-                : 'Complete all field mappings to enable generation'}
+                : !nameFieldMapped
+                ? 'Map the Recipient Name field to a column in the Data step'
+                : 'Complete setup to enable generation'}
             </p>
           )}
 

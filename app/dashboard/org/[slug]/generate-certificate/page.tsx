@@ -190,6 +190,7 @@ export default function GenerateCertificatePage() {
     canvasScale?: number;
     templateVersionId: string | null;
     currentStep: string | null;
+    previewOpen?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     importedDataMeta: any;
     fieldMappings: FieldMapping[];
@@ -229,6 +230,10 @@ export default function GenerateCertificatePage() {
 
   const leftPanelDragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
+
+  // True after the user makes any field edit; prevents autosave from firing on initial load
+  // and ensures deleting all fields saves an empty list (not skipped by fields.length === 0).
+  const fieldsDirtyRef = useRef(false);
 
   // ── Undo / Redo ───────────────────────────────────────────────────────────
   const historyRef = useRef<CertificateField[][]>([]);
@@ -333,6 +338,7 @@ export default function GenerateCertificatePage() {
           canvasScale,
           templateVersionId,
           currentStep,
+          previewOpen,
           importedDataMeta,
           fieldMappings,
           additionalCertConfigs: persistedAdditionalConfigs,
@@ -368,7 +374,7 @@ export default function GenerateCertificatePage() {
       try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, template?.id, fields, canvasScale, templateVersionId, importedData, fieldMappings, additionalCertConfigs, templateMeta]);
+  }, [currentStep, template?.id, fields, canvasScale, templateVersionId, previewOpen, importedData, fieldMappings, additionalCertConfigs, templateMeta]);
 
   // Re-run auto-mapping whenever the field composition changes (IDs added/removed).
   // Preserves mappings the user already set; only adds mappings for new fields and
@@ -721,6 +727,7 @@ export default function GenerateCertificatePage() {
           if (!templateObj) {
             sessionStorage.removeItem(`gencert_session:${orgSlug}`);
             try { localStorage.removeItem(`gencert_last_template_id:${orgSlug}`); } catch { /* ignore */ }
+            try { localStorage.removeItem(`gencert_draft:${orgSlug}`); } catch { /* ignore */ }
           } else try {
             // autoResume: skip the banner and restore directly when the user reloaded the
             // page (F5/Cmd+R) with a fresh sessionStorage session — so they land back on
@@ -830,10 +837,17 @@ export default function GenerateCertificatePage() {
     setIsTemplateLoading(true);
 
     // Reset state for new template to prevent stale data
+    fieldsDirtyRef.current = false;
     setTemplate(null);
     setFields([]);
     setSelectedFieldId(null);
     setTemplateVersionId(null);
+    // Clear import data and mappings — old field IDs won't match the new template.
+    // Skip during session resume, which restores compatible state from the same template.
+    if (!isResumingRef.current) {
+      setImportedData(null);
+      setFieldMappings([]);
+    }
 
     let fileUrl = selectedTemplate.preview_url;
 
@@ -920,8 +934,10 @@ export default function GenerateCertificatePage() {
       lastLoadedVersionIdRef.current = null;
     }
 
-    // Map backend fields to frontend format if needed
-    const mappedFields = editorData?.fields?.map(mapDbFieldToFrontend) || selectedTemplate.fields || [];
+    // Map backend fields from DB — always use editorData (authoritative).
+    // Never fall back to selectedTemplate.fields: it may contain stale or pre-seeded data
+    // in an incompatible format, causing ghost/duplicate fields in the layers panel.
+    const mappedFields = (editorData?.fields ?? []).map(mapDbFieldToFrontend);
 
     // If the user already clicked a different template, discard this result
     if (selectRequestRef.current !== requestId) { setIsTemplateLoading(false); return; }
@@ -935,11 +951,21 @@ export default function GenerateCertificatePage() {
       pdfHeight: pdfHeight || 600,
       fields: mappedFields,
     });
+    const editorCategories = editorData?.categories ?? [];
+    const primaryCat = editorCategories.find((c: { is_primary: boolean }) => c.is_primary) ?? editorCategories[0];
     setTemplateMeta({
-      category: selectedTemplate.category_name || '',
-      subcategory: selectedTemplate.subcategory_name || '',
-      categoryId: selectedTemplate.category_id || undefined,
-      subcategoryId: selectedTemplate.subcategory_id || undefined,
+      category: selectedTemplate.category_name || primaryCat?.category_name || editorData?.template?.category?.name || '',
+      subcategory: selectedTemplate.subcategory_name || primaryCat?.subcategory_name || editorData?.template?.subcategory?.name || '',
+      categoryId: selectedTemplate.category_id || primaryCat?.category_id || editorData?.template?.category_id || undefined,
+      subcategoryId: selectedTemplate.subcategory_id || primaryCat?.subcategory_id || editorData?.template?.subcategory_id || undefined,
+      categories: editorCategories.map((c: { id: string; category_id: string; category_name: string; subcategory_id: string | null; subcategory_name: string | null; is_primary: boolean }) => ({
+        id: c.id,
+        categoryId: c.category_id,
+        categoryName: c.category_name,
+        subcategoryId: c.subcategory_id,
+        subcategoryName: c.subcategory_name,
+        isPrimary: c.is_primary,
+      })),
     });
     setFields(mappedFields);
     loadedFieldsRef.current = mappedFields;
@@ -1159,7 +1185,10 @@ export default function GenerateCertificatePage() {
       : 'design'; // null / 'template' / anything else → open on design canvas
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setCurrentStep(targetStep as any);
-    if (targetStep === 'design') setFitTrigger(t => t + 1);
+    if (targetStep === 'design') {
+      setFitTrigger(t => t + 1);
+      if (session.previewOpen) setPreviewOpen(true);
+    }
   };
 
   // Auto-resume: when the session came from a same-tab reload on the data/export step,
@@ -1388,6 +1417,7 @@ export default function GenerateCertificatePage() {
   const FIELD_ICONS: Partial<Record<FieldType, any>> = {
     name: User,
     course: BookOpen,
+    date: Calendar,
     start_date: Calendar,
     end_date: Calendar,
     custom_text: Type,
@@ -1399,7 +1429,8 @@ export default function GenerateCertificatePage() {
     const h = header.toLowerCase().replace(/[\s-]+/g, '_');
     if (['recipient_name', 'full_name', 'name', 'first_name', 'last_name'].includes(h)) return 'name';
     if (['course', 'course_name', 'program', 'programme', 'subject'].includes(h)) return 'course';
-    if (['start_date', 'issue_date', 'date', 'from_date', 'issued_on'].includes(h)) return 'start_date';
+    if (['date', 'issued_on', 'completion_date', 'award_date'].includes(h)) return 'date';
+    if (['start_date', 'issue_date', 'from_date'].includes(h)) return 'start_date';
     if (['end_date', 'expiry', 'expiry_date', 'valid_until', 'to_date'].includes(h)) return 'end_date';
     if (['credential_id', 'cert_id', 'certificate_id', 'cert_number'].includes(h)) return 'credential_id';
     if (['organization', 'org', 'institution', 'company'].includes(h)) return 'organization';
@@ -1407,6 +1438,7 @@ export default function GenerateCertificatePage() {
     if (['level', 'achievement_level', 'tier'].includes(h)) return 'level';
     if (['duration', 'hours', 'duration_hours', 'total_hours'].includes(h)) return 'duration';
     if (['issuer', 'instructor', 'trainer', 'facilitator'].includes(h)) return 'issuer';
+    if (['place', 'venue', 'location', 'city', 'town'].includes(h)) return 'place';
     return 'custom_text';
   };
 
@@ -1442,7 +1474,7 @@ export default function GenerateCertificatePage() {
         textAlign: 'center',
         sampleValue: rawLabel,
       };
-      if (fieldType === 'start_date' || fieldType === 'end_date') {
+      if (fieldType === 'date' || fieldType === 'start_date' || fieldType === 'end_date') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (field as any).dateFormat = 'MMMM dd, yyyy';
       }
@@ -1454,6 +1486,7 @@ export default function GenerateCertificatePage() {
   };
 
   const handleAddField = (field: CertificateField) => {
+    fieldsDirtyRef.current = true;
     pushToHistory(fields);
     setFields((prev) => {
       const uniqueLabel = makeUniqueLabel(field.label, prev);
@@ -1469,6 +1502,7 @@ export default function GenerateCertificatePage() {
   };
 
   const handleUpdateField = useCallback((fieldId: string, updates: Partial<CertificateField>) => {
+    fieldsDirtyRef.current = true;
     const ref = updateGroupRef.current;
     if (ref.fieldId !== fieldId || !ref.pushed) {
       // New field or first edit after quiet window — snapshot before applying
@@ -1496,6 +1530,7 @@ export default function GenerateCertificatePage() {
   }, [fields, pushToHistory]);
 
   const handleDeleteField = (fieldId: string) => {
+    fieldsDirtyRef.current = true;
     pushToHistory(fields);
     const deletedField = fields.find(f => f.id === fieldId);
     setFields((prev) => prev.filter((field) => field.id !== fieldId));
@@ -1508,6 +1543,7 @@ export default function GenerateCertificatePage() {
   };
 
   const handleFieldsDelete = (fieldIds: string[]) => {
+    fieldsDirtyRef.current = true;
     pushToHistory(fields);
     const idSet = new Set(fieldIds);
     setFields((prev) => prev.filter((f) => !idSet.has(f.id)));
@@ -1515,6 +1551,7 @@ export default function GenerateCertificatePage() {
   };
 
   const handleFieldDuplicate = (field: CertificateField) => {
+    fieldsDirtyRef.current = true;
     pushToHistory(fields);
     const newId = crypto.randomUUID();
     setFields((prev) => {
@@ -1653,7 +1690,7 @@ export default function GenerateCertificatePage() {
     const templateId = template?.id;
     const versionId = templateVersionId;
 
-    if (!templateId || !versionId || fields.length === 0) return;
+    if (!templateId || !versionId || !fieldsDirtyRef.current) return;
 
     setSaveStatus('saving');
 
@@ -2597,24 +2634,31 @@ export default function GenerateCertificatePage() {
                 <TemplateBreadcrumb
                   templateId={template.id ?? ''}
                   templateName={template.templateName}
-                  categoryId={templateMeta.categoryId}
-                  categoryName={templateMeta.category || undefined}
-                  categoryColor={templateMeta.categoryColor}
-                  subcategoryId={templateMeta.subcategoryId}
-                  subcategoryName={templateMeta.subcategory || undefined}
-                  subcategoryColor={templateMeta.subcategoryColor}
-                  onChanged={({ categoryId, categoryName, categoryColor, subcategoryId, subcategoryName, subcategoryColor }) => {
+                  categories={templateMeta.categories ?? (
+                    templateMeta.categoryId ? [{
+                      categoryId: templateMeta.categoryId,
+                      categoryName: templateMeta.category,
+                      categoryColor: templateMeta.categoryColor ?? null,
+                      subcategoryId: templateMeta.subcategoryId ?? null,
+                      subcategoryName: templateMeta.subcategory || null,
+                      subcategoryColor: templateMeta.subcategoryColor ?? null,
+                      isPrimary: true,
+                    }] : []
+                  )}
+                  onCategoriesChanged={(cats) => {
+                    const primary = cats.find(c => c.isPrimary) ?? cats[0];
                     setTemplateMeta({
-                      category: categoryName,
-                      subcategory: subcategoryName,
-                      categoryId: categoryId ?? undefined,
-                      subcategoryId: subcategoryId ?? undefined,
-                      categoryColor,
-                      subcategoryColor,
+                      category: primary?.categoryName ?? '',
+                      subcategory: primary?.subcategoryName ?? '',
+                      categoryId: primary?.categoryId,
+                      subcategoryId: primary?.subcategoryId ?? undefined,
+                      categoryColor: primary?.categoryColor,
+                      subcategoryColor: primary?.subcategoryColor,
+                      categories: cats,
                     });
                     if (template?.id) {
                       setSavedTemplates(prev => prev.map(t => t.id === template.id
-                        ? { ...t, category_id: categoryId, category_name: categoryName, subcategory_id: subcategoryId, subcategory_name: subcategoryName }
+                        ? { ...t, category_id: primary?.categoryId ?? null, category_name: primary?.categoryName ?? '', subcategory_id: primary?.subcategoryId ?? null, subcategory_name: primary?.subcategoryName ?? '' }
                         : t
                       ));
                     }
@@ -2859,7 +2903,7 @@ export default function GenerateCertificatePage() {
 function mapDbFieldToFrontend(field: any): CertificateField {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = (field.style ?? {}) as Record<string, any>;
-  const VALID_FRONTEND_TYPES = new Set(['name', 'course', 'start_date', 'end_date', 'custom_text', 'qr_code', 'image', 'credential_id', 'organization', 'grade', 'level', 'duration', 'issuer']);
+  const VALID_FRONTEND_TYPES = new Set(['name', 'course', 'date', 'start_date', 'end_date', 'custom_text', 'qr_code', 'image', 'credential_id', 'organization', 'grade', 'level', 'duration', 'issuer', 'place']);
   return {
     // Prefer originalFieldId (frontend UUID stored at save time) so field IDs remain
     // stable across DB round-trips. Falling back to field.id (DB UUID) or field_key
@@ -2915,7 +2959,9 @@ function mapFrontendTypeToBackend(frontendType: CertificateField['type']): 'text
     case 'level':
     case 'duration':
     case 'issuer':
+    case 'place':
       return 'text';
+    case 'date':
     case 'start_date':
     case 'end_date':
       return 'date';
@@ -2934,7 +2980,7 @@ function mapBackendTypeToFrontend(backendType: string): CertificateField['type']
     case 'text':
       return 'custom_text';
     case 'date':
-      return 'start_date';
+      return 'date';
     case 'qrcode':
       return 'qr_code';
     case 'image':
@@ -2946,7 +2992,7 @@ function mapBackendTypeToFrontend(backendType: string): CertificateField['type']
 
 // Sort CSV headers to match semantic field order so data preview columns are predictable
 function sortHeadersByFieldOrder(headers: string[], fields: CertificateField[]): string[] {
-  const TYPE_ORDER: Record<string, number> = { name: 0, course: 1, start_date: 2, end_date: 3, credential_id: 4, organization: 5, grade: 6, level: 7, duration: 8, issuer: 9 };
+  const TYPE_ORDER: Record<string, number> = { name: 0, course: 1, date: 2, start_date: 3, end_date: 4, credential_id: 5, organization: 6, grade: 7, level: 8, duration: 9, issuer: 10, place: 11 };
   const labelToOrder = new Map<string, number>();
   fields.forEach(f => { labelToOrder.set(f.label.toLowerCase().trim(), TYPE_ORDER[f.type] ?? 99); });
   return [...headers].sort((a, b) => {
@@ -2983,11 +3029,13 @@ function autoMapColumns(fields: CertificateField[], headers: string[]): FieldMap
       const nh = header.toLowerCase().trim();
       if (field.type === 'name' && nh.includes('name')) return true;
       if (field.type === 'course' && (nh.includes('course') || nh.includes('program'))) return true;
+      if (field.type === 'date' && (nh === 'date' || nh.includes('completion') || nh.includes('award'))) return true;
       if (field.type === 'start_date' && (nh.includes('start') || nh.includes('issue'))) return true;
       if (field.type === 'end_date' && (nh.includes('end') || nh.includes('expir'))) return true;
       if (field.type === 'credential_id' && (nh.includes('credential') || nh.includes('cert_id') || nh.includes('certificate_id'))) return true;
       if (field.type === 'organization' && (nh.includes('org') || nh.includes('institution') || nh.includes('company'))) return true;
       if (field.type === 'issuer' && (nh.includes('issuer') || nh.includes('instructor') || nh.includes('trainer'))) return true;
+      if (field.type === 'place' && (nh.includes('place') || nh.includes('venue') || nh.includes('location') || nh.includes('city'))) return true;
       return false;
     });
     if (matchingHeader) {
