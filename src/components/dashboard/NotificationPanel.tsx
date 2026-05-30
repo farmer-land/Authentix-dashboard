@@ -263,6 +263,7 @@ export function NotificationPanel({
 
   const [open, setOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<BackgroundJob | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -285,6 +286,16 @@ export function NotificationPanel({
 
   const handleToggle = () => {
     const next = !open;
+    if (next && panelRef.current) {
+      const rect = panelRef.current.getBoundingClientRect();
+      const panelH = 420;
+      // Sidebar is always fixed at left:0. Width: w-14=56px collapsed, w-52=208px expanded.
+      const sidebarRight = expanded ? 208 : 56;
+      setDropdownPos({
+        top: Math.max(8, Math.min(rect.top, window.innerHeight - panelH - 8)),
+        left: sidebarRight + 8,
+      });
+    }
     setOpen(next);
     onOpenChange?.(next);
     if (next) markAllSeen();
@@ -335,7 +346,8 @@ export function NotificationPanel({
       {open && (
         <div
           ref={dropdownRef}
-          className="fixed bottom-auto top-16 left-14 w-72 rounded-xl border border-border bg-background shadow-xl z-100 overflow-hidden"
+          className="fixed w-72 rounded-xl border border-border bg-background shadow-xl z-100 overflow-hidden"
+          style={{ top: dropdownPos.top, left: dropdownPos.left }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">

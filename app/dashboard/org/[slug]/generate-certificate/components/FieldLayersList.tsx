@@ -81,7 +81,15 @@ export function FieldLayersList({
     return () => window.removeEventListener('mousedown', onDown);
   }, [contextMenu]);
 
-  if (fields.length === 0) {
+  // Deduplicate by id — guards against any upstream state glitch producing duplicate entries
+  const seenIds = new Set<string>();
+  const dedupedFields = fields.filter(f => {
+    if (seenIds.has(f.id)) return false;
+    seenIds.add(f.id);
+    return true;
+  });
+
+  if (dedupedFields.length === 0) {
     return (
       <Card className="p-6 text-center border-dashed">
         <p className="text-sm text-muted-foreground">
@@ -92,7 +100,7 @@ export function FieldLayersList({
   }
 
   const isRenameConflict = renamingId !== null &&
-    fields.some(f => f.id !== renamingId && f.label.toLowerCase() === renameValue.trim().toLowerCase());
+    dedupedFields.some(f => f.id !== renamingId && f.label.toLowerCase() === renameValue.trim().toLowerCase());
 
   const commitRename = () => {
     if (renamingId && renameValue.trim()) {
@@ -128,7 +136,7 @@ export function FieldLayersList({
     e.preventDefault();
     const srcId = dragIdRef.current;
     if (!srcId || srcId === targetId) { setDragOverId(null); return; }
-    const ids = fields.map(f => f.id);
+    const ids = dedupedFields.map(f => f.id);
     const from = ids.indexOf(srcId);
     const to = ids.indexOf(targetId);
     const reordered = [...ids];
@@ -151,12 +159,12 @@ export function FieldLayersList({
     setContextMenu({ x: e.clientX, y: e.clientY, fieldId });
   };
 
-  const ctxField = contextMenu ? fields.find(f => f.id === contextMenu.fieldId) : null;
+  const ctxField = contextMenu ? dedupedFields.find(f => f.id === contextMenu.fieldId) : null;
 
   return (
     <>
       <div className="space-y-1">
-        {fields.map((field) => {
+        {dedupedFields.map((field) => {
           const isSelected = field.id === selectedFieldId;
           const isHidden = hiddenFields.has(field.id);
           const isDragOver = dragOverId === field.id;

@@ -1,7 +1,7 @@
 // Certificate Field Types
 export type FieldType =
-  | 'name' | 'course' | 'start_date' | 'end_date' | 'custom_text' | 'qr_code' | 'image'
-  | 'credential_id' | 'organization' | 'grade' | 'level' | 'duration' | 'issuer';
+  | 'name' | 'course' | 'date' | 'start_date' | 'end_date' | 'custom_text' | 'qr_code' | 'image'
+  | 'credential_id' | 'organization' | 'grade' | 'level' | 'duration' | 'issuer' | 'place';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type FontWeight = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900' | 'normal' | 'bold';
@@ -254,6 +254,13 @@ export const FIELD_TYPE_CONFIG = {
     defaultHeight: 40,
     sampleValue: 'Web Development Fundamentals',
   },
+  date: {
+    label: 'Date',
+    icon: 'Calendar',
+    defaultWidth: 160,
+    defaultHeight: 30,
+    sampleValue: 'January 15, 2026',
+  },
   start_date: {
     label: 'Start Date',
     icon: 'Calendar',
@@ -330,5 +337,12 @@ export const FIELD_TYPE_CONFIG = {
     defaultWidth: 220,
     defaultHeight: 30,
     sampleValue: 'Dr. Sarah Johnson',
+  },
+  place: {
+    label: 'Place / Venue',
+    icon: 'MapPin',
+    defaultWidth: 220,
+    defaultHeight: 30,
+    sampleValue: 'New Delhi, India',
   },
 } as const;

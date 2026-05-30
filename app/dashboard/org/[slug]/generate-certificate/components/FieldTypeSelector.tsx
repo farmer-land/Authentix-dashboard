@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import {
   User, BookOpen, Calendar, Type, QrCode, Image as ImageIcon,
-  Hash, Building2, Award, TrendingUp, Clock, UserCheck, Upload,
+  Hash, Building2, Award, TrendingUp, Clock, UserCheck, Upload, MapPin,
+  PenLine, Stamp, BadgeCheck,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -30,6 +31,7 @@ interface FieldTypeSelectorProps {
 const FIELD_ICONS: Record<FieldType, React.ComponentType<{ className?: string }>> = {
   name: User,
   course: BookOpen,
+  date: Calendar,
   start_date: Calendar,
   end_date: Calendar,
   custom_text: Type,
@@ -41,6 +43,7 @@ const FIELD_ICONS: Record<FieldType, React.ComponentType<{ className?: string }>
   level: TrendingUp,
   duration: Clock,
   issuer: UserCheck,
+  place: MapPin,
 };
 
 const FIELD_GROUPS: { label: string; types: FieldType[] }[] = [
@@ -50,11 +53,11 @@ const FIELD_GROUPS: { label: string; types: FieldType[] }[] = [
   },
   {
     label: 'Course',
-    types: ['course', 'duration', 'start_date', 'end_date'],
+    types: ['course', 'duration', 'date', 'start_date', 'end_date'],
   },
   {
     label: 'Certificate',
-    types: ['credential_id', 'organization', 'issuer', 'custom_text'],
+    types: ['credential_id', 'organization', 'issuer', 'place', 'custom_text'],
   },
   {
     label: 'Media',
@@ -69,6 +72,7 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
   const [showCustomNameDialog, setShowCustomNameDialog] = useState(false);
   const [customFieldName, setCustomFieldName] = useState('');
   const [showImagePickerDialog, setShowImagePickerDialog] = useState(false);
+  const [pendingLabel, setPendingLabel] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const createField = (type: FieldType, customLabel?: string) => {
@@ -98,11 +102,17 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       sampleValue: customLabel || config.sampleValue,
     };
 
-    if (type === 'start_date' || type === 'end_date') {
+    if (type === 'date' || type === 'start_date' || type === 'end_date') {
       field.dateFormat = 'MMMM dd, yyyy';
     }
 
     onAddField(field);
+  };
+
+  const openFilePicker = (label?: string) => {
+    setPendingLabel(label ?? null);
+    setShowImagePickerDialog(false);
+    setTimeout(() => fileInputRef.current?.click(), 50);
   };
 
   const handleFieldClick = (type: FieldType) => {
@@ -110,11 +120,7 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       setCustomFieldName('');
       setShowCustomNameDialog(true);
     } else if (type === 'image' && (onAddImageFile || onAddImageField)) {
-      if (orgLogoUrl) {
-        setShowImagePickerDialog(true);
-      } else {
-        fileInputRef.current?.click();
-      }
+      setShowImagePickerDialog(true);
     } else {
       createField(type);
     }
@@ -127,8 +133,9 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       onAddImageFile(file);
     } else {
       const url = URL.createObjectURL(file);
-      onAddImageField?.(url, file.name);
+      onAddImageField?.(url, pendingLabel ?? file.name);
     }
+    setPendingLabel(null);
     e.target.value = '';
   };
 
@@ -207,39 +214,52 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
       <Dialog open={showImagePickerDialog} onOpenChange={setShowImagePickerDialog}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Add Image</DialogTitle>
+            <DialogTitle>Add to canvas</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 py-2">
+          <div className="space-y-3 py-1">
+
+            {/* Org logo shortcut */}
             {orgLogoUrl && (
-              <button
-                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
-                onClick={() => {
-                  onAddImageField?.(orgLogoUrl, 'Organization Logo');
-                  setShowImagePickerDialog(false);
-                }}
-              >
-                <img src={orgLogoUrl} alt="" className="w-10 h-10 object-contain rounded shrink-0 bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                <div>
-                  <p className="text-sm font-medium">Organization logo</p>
-                  <p className="text-xs text-muted-foreground">Use your uploaded logo</p>
-                </div>
-              </button>
+              <>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5">From library</p>
+                <button
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+                  onClick={() => { onAddImageField?.(orgLogoUrl, 'Organization Logo'); setShowImagePickerDialog(false); }}
+                >
+                  <img src={orgLogoUrl} alt="" className="w-10 h-10 object-contain rounded shrink-0 bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <div>
+                    <p className="text-sm font-medium">Organization logo</p>
+                    <p className="text-xs text-muted-foreground">Use your uploaded logo</p>
+                  </div>
+                </button>
+              </>
             )}
-            <button
-              className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
-              onClick={() => {
-                setShowImagePickerDialog(false);
-                fileInputRef.current?.click();
-              }}
-            >
-              <div className="w-10 h-10 flex items-center justify-center rounded bg-muted shrink-0">
-                <Upload className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Upload image</p>
-                <p className="text-xs text-muted-foreground">PNG, JPG, SVG, WebP</p>
-              </div>
-            </button>
+
+            {/* Upload options */}
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5">Upload</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { label: 'Image', icon: ImageIcon, desc: 'Any image' },
+                { label: 'Signature', icon: PenLine, desc: 'Author sign-off' },
+                { label: 'Stamp', icon: Stamp, desc: 'Official seal' },
+                { label: 'Badge', icon: BadgeCheck, desc: 'Achievement badge' },
+              ] as const).map(({ label, icon: Icon, desc }) => (
+                <button
+                  key={label}
+                  className="flex flex-col items-center gap-2 p-3 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-center"
+                  onClick={() => openFilePicker(label === 'Image' ? undefined : label)}
+                >
+                  <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-muted">
+                    <Icon className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium leading-none">{label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
           </div>
         </DialogContent>
       </Dialog>

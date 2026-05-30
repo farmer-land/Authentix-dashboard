@@ -43,7 +43,7 @@ function autoMap(
   const used = new Set<string>();
 
   for (const field of certFields) {
-    if (field.type === 'qr_code' || field.type === 'custom_text') continue;
+    if (field.type === 'qr_code' || field.type === 'custom_text' || field.type === 'image') continue;
     const labelNorm = norm(field.label);
     const typeNorm = norm(field.type);
 
@@ -75,7 +75,7 @@ export function DataImporter({
   const { imports, loading: importsLoading } = useImports({ limit: 20, sort_by: 'created_at', sort_order: 'desc' });
   const { contacts, loading: contactsLoading } = useEmailContacts({ limit: 500, unsubscribed: false, search: contactSearch || undefined });
 
-  const mappableFields = fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text');
+  const mappableFields = fields.filter(f => f.type !== 'qr_code' && f.type !== 'custom_text' && f.type !== 'image');
 
   const applyParsed = useCallback(
     (data: ImportedData) => {

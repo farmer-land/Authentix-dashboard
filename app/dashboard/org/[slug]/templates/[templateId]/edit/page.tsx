@@ -34,8 +34,8 @@ interface EditorData {
     title: string;
     category_id: string;
     subcategory_id: string;
-    category?: { id: string; name: string };
-    subcategory?: { id: string; name: string };
+    category?: { id: string; name: string } | null;
+    subcategory?: { id: string; name: string } | null;
   };
   version: {
     id: string;
@@ -49,7 +49,8 @@ interface EditorData {
     bucket?: string;
     path?: string;
     url?: string;
-  };
+  } | null;
+  categories?: Array<{ id: string; category_id: string; category_name: string; subcategory_id: string | null; subcategory_name: string | null; is_primary: boolean }>;
   fields: TemplateField[];
 }
 
@@ -155,7 +156,7 @@ export default function TemplateEditorPage() {
   }, [editorData]);
 
   // Load preview URL for source file
-  const loadSourcePreviewUrl = useCallback(async (sourceFile: EditorData["source_file"]): Promise<string | null> => {
+  const loadSourcePreviewUrl = useCallback(async (sourceFile: NonNullable<EditorData["source_file"]>): Promise<string | null> => {
     // If URL already exists, cache and return it
     if (sourceFile.url) {
       const cacheKey = getPreviewCacheKey(templateId, sourceFile.id, sourceFile.bucket, sourceFile.path);
@@ -193,7 +194,8 @@ export default function TemplateEditorPage() {
       setError(null);
 
       const data = await api.templates.getEditorData(templateId);
-      setEditorData(data);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setEditorData(data as any);
       setFields(data.fields || []);
 
       // Initialize used field keys
@@ -204,7 +206,7 @@ export default function TemplateEditorPage() {
         loadSourcePreviewUrl(data.source_file).then((url) => {
           if (url && data.source_file) {
             setEditorData((prev) => {
-              if (!prev) return null;
+              if (!prev || !prev.source_file) return null;
               return {
                 ...prev,
                 source_file: { ...prev.source_file, url },
@@ -637,14 +639,14 @@ export default function TemplateEditorPage() {
         <div className="flex-1 p-8 bg-muted/20 overflow-auto">
           <div className="relative bg-white shadow-lg rounded-lg inline-block" style={{ minWidth: "100%" }}>
             {/* Template Preview */}
-            {editorData.source_file.url ? (
+            {editorData.source_file?.url ? (
               <img
                 src={editorData.source_file.url}
                 alt={editorData.template.title}
                 className="w-full h-auto block"
                 draggable={false}
               />
-            ) : editorData.source_file.bucket && editorData.source_file.path ? (
+            ) : editorData.source_file?.bucket && editorData.source_file?.path ? (
               <div className="flex items-center justify-center h-full min-h-[800px] text-muted-foreground">
                 <div className="text-center">
                   <p>Preview URL not available</p>

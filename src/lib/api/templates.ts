@@ -89,7 +89,7 @@ export const templatesApi = {
   },
 
   /**
-   * Get template editor data (template + version + source file + fields).
+   * Get template editor data (template + version + source file + fields + categories).
    */
   getEditorData: async (templateId: string) => {
     const response = await apiRequest<{
@@ -98,9 +98,17 @@ export const templatesApi = {
         title: string;
         category_id: string;
         subcategory_id: string;
-        category?: { id: string; name: string };
-        subcategory?: { id: string; name: string };
+        category?: { id: string; name: string } | null;
+        subcategory?: { id: string; name: string } | null;
       };
+      categories: Array<{
+        id: string;
+        category_id: string;
+        category_name: string;
+        subcategory_id: string | null;
+        subcategory_name: string | null;
+        is_primary: boolean;
+      }>;
       version: { id: string; version_number: number; status: string };
       source_file: {
         id: string;
@@ -109,7 +117,7 @@ export const templatesApi = {
         bucket?: string;
         path?: string;
         url?: string;
-      };
+      } | null;
       fields: Array<{
         id: string;
         field_key: string;
@@ -125,6 +133,46 @@ export const templatesApi = {
       }>;
     }>(`/templates/${templateId}/editor`);
     return response.data!;
+  },
+
+  /**
+   * Get all category assignments for a template.
+   */
+  getTemplateCategories: async (templateId: string) => {
+    const response = await apiRequest<{
+      categories: Array<{
+        id: string;
+        category_id: string;
+        category_name: string;
+        subcategory_id: string | null;
+        subcategory_name: string | null;
+        is_primary: boolean;
+      }>;
+    }>(`/templates/${templateId}/categories`);
+    return response.data!.categories;
+  },
+
+  /**
+   * Replace all category assignments for a template.
+   */
+  setCategories: async (
+    templateId: string,
+    categories: Array<{ category_id: string; subcategory_id?: string | null; is_primary?: boolean }>,
+  ) => {
+    const response = await apiRequest<{
+      categories: Array<{
+        id: string;
+        category_id: string;
+        category_name: string;
+        subcategory_id: string | null;
+        subcategory_name: string | null;
+        is_primary: boolean;
+      }>;
+    }>(`/templates/${templateId}/categories`, {
+      method: "PUT",
+      body: JSON.stringify({ categories }),
+    });
+    return response.data!.categories;
   },
 
   /**

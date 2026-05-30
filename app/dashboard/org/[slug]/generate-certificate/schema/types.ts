@@ -34,6 +34,17 @@ export interface TemplateConfig {
 
 // ── Template metadata ─────────────────────────────────────────────────────────
 
+export interface TemplateCategoryAssignment {
+  id?: string;
+  categoryId: string;
+  categoryName: string;
+  categoryColor?: string | null;
+  subcategoryId: string | null;
+  subcategoryName: string | null;
+  subcategoryColor?: string | null;
+  isPrimary: boolean;
+}
+
 export interface TemplateMeta {
   category: string;
   subcategory: string;
@@ -41,6 +52,8 @@ export interface TemplateMeta {
   subcategoryId?: string;
   categoryColor?: string | null;
   subcategoryColor?: string | null;
+  /** Full multi-category assignments — authoritative source when present */
+  categories?: TemplateCategoryAssignment[];
 }
 
 // ── Panel position ────────────────────────────────────────────────────────────
