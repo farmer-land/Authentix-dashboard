@@ -3,13 +3,14 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import Lottie from 'lottie-react';
-import generationAnimationData from '../assets/generation.json';
 import generatedNewAnimationData from '../assets/generated-new.json';
+import sean1AnimationData from '../../../../../../public/template/generation-sean-1.json';
+import sean2AnimationData from '../../../../../../public/template/generation-sean-2.json';
+import sean3AnimationData from '../../../../../../public/template/generation-sean-3.json';
 import { CertificateTemplate, CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -1491,6 +1492,30 @@ function SmartCalendar({ selected, onSelect, defaultMonth, fromYear, toYear }: S
   );
 }
 
+// ── Smooth count-up hook ───────────────────────────────────────────────────────
+
+function useCountUp(target: number, duration = 400): number {
+  const [displayed, setDisplayed] = useState(target);
+  const prev = useRef(target);
+  const rafRef = useRef<number | null>(null);
+  useEffect(() => {
+    const start = prev.current;
+    const diff = target - start;
+    if (diff === 0) return;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const pct = Math.min((now - t0) / duration, 1);
+      const ease = 1 - Math.pow(1 - pct, 3);
+      setDisplayed(Math.round(start + diff * ease));
+      if (pct < 1) rafRef.current = requestAnimationFrame(tick);
+      else { setDisplayed(target); prev.current = target; }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration]);
+  return displayed;
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function ExportSection({
@@ -1584,8 +1609,8 @@ export function ExportSection({
 
   // 'hidden' = idle, 'generating' = submitting, 'queued' = job sent to background, 'success' = done
   const [overlayState, setOverlayState] = useState<'hidden' | 'generating' | 'queued' | 'success'>('hidden');
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState('');
+  const [, setProgress] = useState(0);
+  const [, setProgressLabel] = useState('');
   const [simulatedCount, setSimulatedCount] = useState(0);
   const [generationStatus, setGenerationStatus] = useState<'idle' | 'generating' | 'completed' | 'error'>('idle');
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -1597,7 +1622,7 @@ export function ExportSection({
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewImageLoaded, setPreviewImageLoaded] = useState(false);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [statusMsgIndex, setStatusMsgIndex] = useState(0);
+  const [, setStatusMsgIndex] = useState(0);
   const isMountedRef = useRef(true);
   useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
 
@@ -1737,7 +1762,7 @@ export function ExportSection({
         return newCerts.length ? [...prev, ...newCerts] : prev;
       });
     }
-  }, [onTrackEvent, template?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onTrackEvent, template?.id]);
 
   // Subscribe to Realtime updates for the primary generation job.
   // Listens on BOTH broadcast (fast — DB trigger fires immediately) and
@@ -2566,58 +2591,96 @@ export function ExportSection({
             </div>
           ) : (
             /* ── Generating animation ── */
-            <div className="flex flex-col items-center gap-8" style={{ animation: 'genFadeSlide 0.3s ease-out both' }}>
-              <Lottie
-                animationData={generationAnimationData}
-                loop
-                autoplay
-                style={{ width: 280, height: 280 }}
-                rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
-              />
-
-              {/* Status label */}
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)', animation: 'genMsgFade 0.4s ease-out both' }} key={statusMsgIndex}>
-                {progressLabel || STATUS_MESSAGES[statusMsgIndex]}
-              </p>
-
-              {/* Modern progress bar */}
-              <div style={{ width: 420 }} className="space-y-2.5">
-                {/* Track */}
-                <div className="relative rounded-full overflow-hidden" style={{ height: 6, background: 'rgba(255,255,255,0.08)' }}>
-                  {/* Animated fill with gradient */}
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full"
-                    style={{
-                      width: `${progress}%`,
-                      background: 'linear-gradient(90deg, #3ECF8E 0%, #6EE7B7 100%)',
-                      boxShadow: progress > 0 ? '0 0 12px rgba(62,207,142,0.6)' : 'none',
-                      minWidth: progress > 0 ? 6 : 0,
-                      transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)',
-                    }}
-                  />
-                  {/* Shimmer sweep on the fill */}
-                  {progress > 0 && progress < 100 && (
-                    <div
-                      className="absolute inset-y-0 rounded-full pointer-events-none"
-                      style={{
-                        left: 0,
-                        width: `${progress}%`,
-                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%)',
-                        backgroundSize: '200% 100%',
-                        animation: 'shimmer 1.6s ease-in-out infinite',
-                      }}
+            (() => {
+              const liveCount = Math.max(simulatedCount, generatedCertificates.length);
+              const totalExpected = (importedData?.rowCount ?? 0) * Math.max(activeConfigCount, 1);
+              // eslint-disable-next-line react-hooks/rules-of-hooks
+              const animCount = useCountUp(liveCount, 350);
+              return (
+                <>
+                  {/* Sean-3: nature illustration — ambient right bleed */}
+                  <div style={{
+                    position: 'absolute', right: -60, bottom: 40, width: 420,
+                    opacity: 0.1, pointerEvents: 'none', zIndex: 0,
+                  }}>
+                    <Lottie
+                      animationData={sean3AnimationData as object}
+                      loop autoplay
+                      style={{ width: 420 }}
+                      rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
                     />
-                  )}
-                </div>
-                {/* Numeric labels */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold tabular-nums" style={{ color: '#3ECF8E' }}>{progress}%</span>
-                  <span className="text-xs tabular-nums" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {simulatedCount > 0 ? `${simulatedCount} / ${importedData?.rowCount ?? '?'}` : '—'}
-                  </span>
-                </div>
-              </div>
-            </div>
+                  </div>
+
+                  {/* Sean-1: wave strip — bottom ambient */}
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 120,
+                    opacity: 0.2, pointerEvents: 'none', overflow: 'hidden', zIndex: 0,
+                  }}>
+                    <Lottie
+                      animationData={sean1AnimationData as object}
+                      loop autoplay
+                      style={{ width: '100%', minWidth: 800 }}
+                      rendererSettings={{ preserveAspectRatio: 'xMidYMid slice' }}
+                    />
+                  </div>
+
+                  {/* Center column */}
+                  <div
+                    className="flex flex-col items-center gap-8 relative"
+                    style={{ zIndex: 1, animation: 'genFadeSlide 0.3s ease-out both' }}
+                  >
+                    {/* Sean-2: main compact processing animation */}
+                    <Lottie
+                      animationData={sean2AnimationData as object}
+                      loop autoplay
+                      style={{ width: 340, height: Math.round(340 * 316 / 794) }}
+                      rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
+                    />
+
+                    {/* Big counter */}
+                    <div className="flex flex-col items-center gap-2" style={{ animation: 'genFadeSlide 0.4s ease-out 0.1s both' }}>
+                      <div className="flex items-baseline" style={{ gap: 10 }}>
+                        <span
+                          className="tabular-nums font-black"
+                          style={{ fontSize: 96, lineHeight: 1, color: '#fff', letterSpacing: '-5px', fontVariantNumeric: 'tabular-nums' }}
+                        >
+                          {animCount}
+                        </span>
+                        <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 28, fontWeight: 300, letterSpacing: 0 }}>
+                          of
+                        </span>
+                        <span
+                          className="tabular-nums font-semibold"
+                          style={{ fontSize: 52, lineHeight: 1, color: 'rgba(255,255,255,0.35)', letterSpacing: '-2px' }}
+                        >
+                          {totalExpected || '…'}
+                        </span>
+                      </div>
+
+                      <p
+                        className="uppercase tracking-widest text-xs font-semibold"
+                        style={{ color: 'rgba(255,255,255,0.28)', letterSpacing: '0.22em' }}
+                      >
+                        certificates generated
+                      </p>
+
+                      {/* Thin progress line — no numbers, pure visual */}
+                      <div style={{ width: 260, height: 2, borderRadius: 1, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginTop: 6 }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${totalExpected > 0 ? Math.min((liveCount / totalExpected) * 100, 100) : 4}%`,
+                          background: 'linear-gradient(90deg, #3ECF8E, #6EE7B7)',
+                          borderRadius: 1,
+                          transition: 'width 400ms ease',
+                          boxShadow: '0 0 6px rgba(62,207,142,0.45)',
+                          minWidth: 6,
+                        }} />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()
           )}
         </div>
       </div>
