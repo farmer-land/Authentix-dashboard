@@ -54,9 +54,9 @@ function stripExt(filename: string): string {
   return filename.replace(/\.[^.]+$/, '');
 }
 
-// Strips trailing " (Required)" / " *" markers added by sample files before comparing
+// Strips trailing " (Required)" / " (optional)" / " *" markers added by sample files before comparing
 function normalizeHeader(h: string): string {
-  return h.toLowerCase().trim().replace(/\s*\(required\)\s*$/i, '').replace(/\s*\*\s*$/, '').trim();
+  return h.toLowerCase().trim().replace(/\s*\((required|optional)\)\s*$/i, '').replace(/\s*\*\s*$/, '').trim();
 }
 
 interface DataSelectorProps {
@@ -349,8 +349,11 @@ export function DataSelector({
     const sampleData = [];
     for (let i = 1; i <= 5; i++) {
       const row: Record<string, unknown> = {};
-      mappableFields.forEach(f => { row[`${f.label} (Required)`] = sampleValue(f, i); });
-      if (!hasEmailCol) row['Email (Required)'] = `student${i}@example.com`;
+      mappableFields.forEach(f => {
+        const colName = f.type === 'name' ? `${f.label} (Required)` : f.label;
+        row[colName] = sampleValue(f, i);
+      });
+      if (!hasEmailCol) row['Email (optional)'] = `student${i}@example.com`;
       sampleData.push(row);
     }
 
@@ -392,8 +395,8 @@ export function DataSelector({
 
     const hasEmailCol = mappableFields.some(f => f.label.toLowerCase().includes('email'));
     const headers = [
-      ...mappableFields.map(f => `${f.label} (Required)`),
-      ...(hasEmailCol ? [] : ['Email (Required)']),
+      ...mappableFields.map(f => f.type === 'name' ? `${f.label} (Required)` : f.label),
+      ...(hasEmailCol ? [] : ['Email (optional)']),
     ];
     const rows: string[][] = [];
     for (let i = 1; i <= 5; i++) {
@@ -519,7 +522,7 @@ export function DataSelector({
     const mappedCols = new Set(fieldMappings.map(m => m.columnName).filter(Boolean));
     // "Email" is a system delivery column — never mapped to a certificate field.
     // Exclude it (and common aliases) so it never shows the "not in template" warning.
-    return importedData.headers.filter(h => !mappedCols.has(h) && !/^e-?mail$/i.test(h));
+    return importedData.headers.filter(h => !mappedCols.has(h) && !/^e-?mail(\s*\((required|optional)\))?$/i.test(h));
   }, [importedData, fieldMappings]);
 
   // Detect columns with only numeric values mapped to text-type fields (likely wrong column)
