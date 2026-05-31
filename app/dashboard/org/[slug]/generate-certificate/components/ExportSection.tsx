@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import Lottie from 'lottie-react';
 import generationAnimationData from '../assets/generation.json';
-import successAnimationData from '../assets/success-animation.json';
+import generatedNewAnimationData from '../assets/generated-new.json';
 import { CertificateTemplate, CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -2410,25 +2410,42 @@ export function ExportSection({
           {overlayState === 'success' ? (
             /* ── Success ── */
             <div className="flex flex-col items-center gap-8">
-              {/* Medal celebration animation */}
-              <div style={{ animation: 'genZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              {/* Celebration animation with logo overlay */}
+              <div style={{ animation: 'genZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both', position: 'relative', width: 220, height: 220 }}>
                 <Lottie
-                  animationData={successAnimationData}
+                  animationData={generatedNewAnimationData}
                   loop={false}
                   autoplay
-                  style={{ width: 300, height: 180 }}
+                  style={{ width: 220, height: 220 }}
                   rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
                 />
+                {/* Logo centered on the ring */}
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 60, height: 60, borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.95)',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden',
+                  animation: 'genZoomIn 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.35s both',
+                }}>
+                  <img
+                    src={organization?.logo_url ?? '/brand/logo.png'}
+                    alt="Logo"
+                    style={{ width: '80%', height: '80%', objectFit: 'contain' }}
+                  />
+                </div>
               </div>
 
               {/* Text with count-up */}
               <div className="text-center space-y-3" style={{ animation: 'genFadeUp 0.5s ease-out 0.3s both' }}>
                 <p className="font-black tracking-tight" style={{ fontSize: 40, lineHeight: 1, animation: 'genCountPop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s both' }}>
-                  <CheckCircle2 className="inline-block mr-2 mb-0.5" style={{ width: 34, height: 34, color: '#3ECF8E', verticalAlign: 'middle' }} />All done!
+                  <CheckCircle2 className="inline-block mr-2 mb-0.5" style={{ width: 34, height: 34, color: '#3ECF8E', verticalAlign: 'middle' }} />All set!
                 </p>
                 <p className="text-muted-foreground" style={{ fontSize: 17 }}>
                   <span style={{ color: '#3ECF8E', fontWeight: 800, fontSize: 22 }}>{displayCount}</span>
-                  {' '}certificate{totalGenerated !== 1 ? 's' : ''} generated successfully
+                  {' '}certificate{totalGenerated !== 1 ? 's' : ''} generated
                 </p>
                 {generationSummary.length > 1 && (
                   <div className="flex flex-wrap justify-center gap-2 mt-1">
@@ -2454,7 +2471,7 @@ export function ExportSection({
               )}
 
               {/* CTAs */}
-              <div className="flex gap-3" style={{ animation: 'genFadeUp 0.5s ease-out 0.55s both' }}>
+              <div className="flex items-start gap-3" style={{ animation: 'genFadeUp 0.5s ease-out 0.55s both' }}>
                 {downloadUrl && (() => {
                   const expiry = linkExpiryStatus(downloadExpiresAt);
                   return (

@@ -90,7 +90,9 @@ export function DataSelector({
   onGoToDesign,
 }: DataSelectorProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showUpload, setShowUpload] = useState(!importedData);
+  // Always start on the upload/fresh screen — the user may have added or removed template
+  // fields since the last run, so we never auto-resume from a previous import.
+  const [showUpload, setShowUpload] = useState(true);
   // Mapping section: start collapsed when all fields are already mapped on mount
   const [mappingExpanded, setMappingExpanded] = useState(() => {
     const mf = fields.filter(f => f.type !== 'qr_code' && f.type !== 'image');
@@ -585,6 +587,97 @@ export function DataSelector({
             </div>
           )}
 
+          {/* Most recent import — shown prominently so the user can reuse it with one click */}
+          {savedImports.length > 0 && !pendingFiles && !isProcessing && entryMode === 'upload' && (() => {
+            const top = savedImports[0]!;
+            const topName = top.file_name ? stripExt(top.file_name) : 'Untitled';
+            const topExpanded = expandedImportId === top.id;
+            const topPreview = importPreviewCache[top.id];
+            return (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Use previous data</p>
+                <div className="rounded-xl border border-primary/25 bg-primary/5 overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-3 py-2.5">
+                    <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{topName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(top.total_rows ?? 0).toLocaleString()} {top.total_rows === 1 ? 'row' : 'rows'}
+                        {top.created_at ? ` · ${new Date(top.created_at).toLocaleDateString()}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => void handleToggleExpand(top.id)}
+                      title={topExpanded ? 'Collapse' : 'Preview rows'}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                    >
+                      {previewLoading === top.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : topExpanded
+                          ? <ChevronUp className="w-3.5 h-3.5" />
+                          : <ChevronDown className="w-3.5 h-3.5" />
+                      }
+                    </button>
+                    <Button
+                      size="sm"
+                      className="h-7 px-3 text-xs shrink-0"
+                      disabled={isProcessing}
+                      onClick={async () => {
+                        if (!onLoadImport) return;
+                        setLoadImportError(null);
+                        setIsProcessing(true);
+                        try {
+                          await onLoadImport(top.id);
+                          setShowUpload(false);
+                        } catch {
+                          setLoadImportError('Failed to load. Please try again.');
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }}
+                    >
+                      Use this
+                    </Button>
+                  </div>
+                  {topExpanded && (
+                    <div className="border-t border-primary/15 bg-muted/20 overflow-x-auto">
+                      {!topPreview ? (
+                        <p className="text-xs text-muted-foreground px-3 py-2">Loading preview…</p>
+                      ) : topPreview.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-3 py-2">No data rows found.</p>
+                      ) : (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-border">
+                              {Object.keys(topPreview[0]!).map(h => (
+                                <th key={h} className="px-3 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {topPreview.map((row, i) => (
+                              <tr key={i} className="border-b border-border/50 last:border-0">
+                                {Object.values(row).map((v, j) => (
+                                  <td key={j} className="px-3 py-1.5 whitespace-nowrap max-w-40 truncate text-muted-foreground">{String(v ?? '')}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Divider before upload zone */}
+                <div className="relative flex items-center gap-3 py-1">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or upload new data</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Mode toggle */}
           <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
             <button
@@ -696,15 +789,15 @@ export function DataSelector({
             />
           )}
 
-          {/* Recent uploads — expandable rows, upload mode only */}
-          {savedImports.length > 0 && entryMode === 'upload' && !pendingFiles && !isProcessing && (
+          {/* Recent uploads — rest of the list (first is shown as the "Use previous data" card above) */}
+          {savedImports.length > 1 && entryMode === 'upload' && !pendingFiles && !isProcessing && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Recent uploads</p>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Recent</p>
               {loadImportError && (
                 <p className="text-xs text-destructive mb-2">{loadImportError}</p>
               )}
               <div className="rounded-lg border border-border divide-y divide-border overflow-hidden">
-                {savedImports.slice(0, 8).map((importJob) => {
+                {savedImports.slice(1, 8).map((importJob) => {
                   const isExpanded = expandedImportId === importJob.id;
                   const previewRows = importPreviewCache[importJob.id];
                   const displayName = importJob.file_name ? stripExt(importJob.file_name) : 'Untitled';
