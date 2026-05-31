@@ -1706,7 +1706,7 @@ export function ExportSection({
       return;
     }
 
-    // In-progress: update real progress bar if backend reports partial counts
+    // In-progress: update real progress bar and accumulate batch certs as they stream in
     const rawResult = row.result as Record<string, unknown> | null | undefined;
     const processedSoFar = rawResult?.processed_so_far as number | undefined;
     const progressTotal = rawResult?.total as number | undefined;
@@ -1714,6 +1714,28 @@ export function ExportSection({
       if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
       setProgress(Math.min(Math.round((processedSoFar / progressTotal) * 100), 98));
       setSimulatedCount(processedSoFar);
+    }
+    // Stream certs into the grid as each render batch completes — no need to wait for the full job
+    type BatchCert = { id: string; certificate_number: string; recipient_name: string; recipient_email: string | null; issued_at: string; expires_at: string | null; download_url: string | null; preview_url: string | null; recipient_id?: string | null };
+    const batchCerts = rawResult?.batch_certs as BatchCert[] | undefined;
+    if (batchCerts?.length) {
+      setGeneratedCertificates(prev => {
+        const existingIds = new Set(prev.map(c => c.id));
+        const newCerts = batchCerts
+          .filter(c => !existingIds.has(c.id))
+          .map(c => ({
+            id: c.id,
+            certificate_number: c.certificate_number,
+            recipient_name: c.recipient_name,
+            recipient_email: c.recipient_email ?? null,
+            issued_at: c.issued_at,
+            expires_at: c.expires_at ?? null,
+            download_url: c.download_url,
+            preview_url: c.preview_url ?? null,
+            recipient_id: c.recipient_id ?? null,
+          }));
+        return newCerts.length ? [...prev, ...newCerts] : prev;
+      });
     }
   }, [onTrackEvent, template?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
