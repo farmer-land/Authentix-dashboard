@@ -8,7 +8,7 @@ import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { useOrgSlug } from '@/lib/org';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
 import { CertificateField, CertificateTemplate, ImportedData, FieldMapping, FIELD_TYPE_CONFIG, FieldType } from '@/lib/types/certificate';
-import { api } from '@/lib/api/client';
+import { api, ApiError } from '@/lib/api/client';
 import type { CertificateConfig } from './components/ExportSection';
 import {
   Image as ImageIcon, FileText,
@@ -1383,7 +1383,17 @@ export default function GenerateCertificatePage() {
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
-    await api.templates.delete(templateId);
+    try {
+      await api.templates.delete(templateId);
+    } catch (err) {
+      // If the backend says the template doesn't exist it's already gone — remove
+      // it from the list anyway so the UI stays consistent.
+      if (err instanceof ApiError && err.code === 'NOT_FOUND') {
+        setSavedTemplates(prev => prev.filter(t => t.id !== templateId));
+        return;
+      }
+      throw err;
+    }
     setSavedTemplates(prev => prev.filter(t => t.id !== templateId));
 
     // If this was the template saved in the design session, clear it so the

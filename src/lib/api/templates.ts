@@ -402,22 +402,8 @@ export const templatesApi = {
   },
 
   delete: async (id: string) => {
-    const response = await fetch(`${API_BASE_URL}/templates/${id}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-
-    const data = (await response.json()) as ApiResponse<unknown>;
-
-    if (!response.ok || !data.success) {
-      const { code: errorCode, message: errorMessage } = extractApiError(
-        data.error,
-        "Failed to delete template",
-      );
-      throw new ApiError(errorCode, errorMessage);
-    }
-
-    return data.data!;
+    const response = await apiRequest(`/templates/${id}`, { method: "DELETE" });
+    return response.data;
   },
 
   getPreviewUrl: async (id: string) => {
