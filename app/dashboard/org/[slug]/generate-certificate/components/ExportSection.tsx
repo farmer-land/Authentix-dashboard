@@ -2410,8 +2410,8 @@ export function ExportSection({
           {overlayState === 'success' ? (
             /* ── Success ── */
             <div className="flex flex-col items-center gap-8">
-              {/* Celebration animation with logo overlay */}
-              <div style={{ animation: 'genZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both', position: 'relative', width: 220, height: 220 }}>
+              {/* Celebration animation */}
+              <div style={{ animation: 'genZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both', width: 220, height: 220 }}>
                 <Lottie
                   animationData={generatedNewAnimationData}
                   loop={false}
@@ -2419,23 +2419,6 @@ export function ExportSection({
                   style={{ width: 220, height: 220 }}
                   rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
                 />
-                {/* Logo centered on the ring */}
-                <div style={{
-                  position: 'absolute', top: '50%', left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: 60, height: 60, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.95)',
-                  boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  overflow: 'hidden',
-                  animation: 'genZoomIn 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.35s both',
-                }}>
-                  <img
-                    src={organization?.logo_url ?? '/brand/logo.png'}
-                    alt="Logo"
-                    style={{ width: '80%', height: '80%', objectFit: 'contain' }}
-                  />
-                </div>
               </div>
 
               {/* Text with count-up */}
