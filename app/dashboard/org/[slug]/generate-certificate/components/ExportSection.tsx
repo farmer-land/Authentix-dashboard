@@ -4,9 +4,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import Lottie from 'lottie-react';
 import generatedNewAnimationData from '../assets/generated-new.json';
-import sean1AnimationData from '../../../../../../public/template/generation-sean-1.json';
 import sean2AnimationData from '../../../../../../public/template/generation-sean-2.json';
-import sean3AnimationData from '../../../../../../public/template/generation-sean-3.json';
 import { CertificateTemplate, CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -1977,6 +1975,9 @@ export function ExportSection({
   // Generation uses the stricter `c.template?.id` filter so the API call always has a valid id.
   const activeConfigCount = allConfigs.filter(c => c.template != null).length;
 
+  const liveCount = Math.max(simulatedCount, generatedCertificates.length);
+  const animCount = useCountUp(liveCount, 350);
+
   const estimatedTime = canGenerate && importedData
     ? estimateGenerationTime(importedData.rowCount, allConfigs.filter(c => c.template?.id))
     : '';
@@ -2592,50 +2593,23 @@ export function ExportSection({
           ) : (
             /* ── Generating animation ── */
             (() => {
-              const liveCount = Math.max(simulatedCount, generatedCertificates.length);
               const totalExpected = (importedData?.rowCount ?? 0) * Math.max(activeConfigCount, 1);
-              // eslint-disable-next-line react-hooks/rules-of-hooks
-              const animCount = useCountUp(liveCount, 350);
               return (
                 <>
-                  {/* Sean-3: nature illustration — ambient right bleed */}
-                  <div style={{
-                    position: 'absolute', right: -60, bottom: 40, width: 420,
-                    opacity: 0.1, pointerEvents: 'none', zIndex: 0,
-                  }}>
-                    <Lottie
-                      animationData={sean3AnimationData as object}
-                      loop autoplay
-                      style={{ width: 420 }}
-                      rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
-                    />
-                  </div>
-
-                  {/* Sean-1: wave strip — bottom ambient */}
-                  <div style={{
-                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 120,
-                    opacity: 0.2, pointerEvents: 'none', overflow: 'hidden', zIndex: 0,
-                  }}>
-                    <Lottie
-                      animationData={sean1AnimationData as object}
-                      loop autoplay
-                      style={{ width: '100%', minWidth: 800 }}
-                      rendererSettings={{ preserveAspectRatio: 'xMidYMid slice' }}
-                    />
-                  </div>
-
                   {/* Center column */}
                   <div
                     className="flex flex-col items-center gap-8 relative"
                     style={{ zIndex: 1, animation: 'genFadeSlide 0.3s ease-out both' }}
                   >
-                    {/* Sean-2: main compact processing animation */}
-                    <Lottie
-                      animationData={sean2AnimationData as object}
-                      loop autoplay
-                      style={{ width: 340, height: Math.round(340 * 316 / 794) }}
-                      rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
-                    />
+                    {/* Car animation — brand-tinted */}
+                    <div style={{ filter: 'hue-rotate(130deg) saturate(1.8) brightness(1.05)' }}>
+                      <Lottie
+                        animationData={sean2AnimationData as object}
+                        loop autoplay
+                        style={{ width: 340, height: Math.round(340 * 316 / 794) }}
+                        rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
+                      />
+                    </div>
 
                     {/* Big counter */}
                     <div className="flex flex-col items-center gap-2" style={{ animation: 'genFadeSlide 0.4s ease-out 0.1s both' }}>
