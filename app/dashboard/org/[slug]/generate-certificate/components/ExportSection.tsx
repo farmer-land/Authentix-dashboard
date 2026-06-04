@@ -2034,9 +2034,9 @@ export function ExportSection({
           id: savedTemplate.id,
           templateName: savedTemplate.title || savedTemplate.name,
           fileUrl: savedTemplate.preview_url || '',
-          fileType: 'image',
-          pdfWidth: savedTemplate.width || 800,
-          pdfHeight: savedTemplate.height || 600,
+          
+          templateWidth: savedTemplate.width || 800,
+          templateHeight: savedTemplate.height || 600,
           fields: templateFields,
         },
         fields: templateFields,
@@ -3351,9 +3351,9 @@ export function ExportSection({
 
       {/* ── Preview Modal ── */}
       <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
-        <DialogContent className={`w-full p-0 overflow-hidden bg-black/95 border-border/40 [&>button:last-child]:hidden ${template && template.pdfWidth > template.pdfHeight ? 'max-w-5xl' : 'max-w-3xl'}`}>
+        <DialogContent className={`w-full p-0 overflow-hidden bg-black/95 border-border/40 [&>button:last-child]:hidden ${template && template.templateWidth > template.templateHeight ? 'max-w-5xl' : 'max-w-3xl'}`}>
           <DialogTitle className="sr-only">Certificate Preview</DialogTitle>
-          <div className="relative flex flex-col items-center justify-center" style={{ minHeight: template && template.pdfWidth > template.pdfHeight ? '40vh' : '60vh' }}>
+          <div className="relative flex flex-col items-center justify-center" style={{ minHeight: template && template.templateWidth > template.templateHeight ? '40vh' : '60vh' }}>
             {/* Close button */}
             <button
               onClick={() => setPreviewModalOpen(false)}

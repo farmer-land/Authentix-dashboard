@@ -507,8 +507,8 @@ interface RightPanelProps {
   onFitToScreen?: () => void;
   snapToGrid?: boolean;
   onSnapToggle?: () => void;
-  pdfWidth?: number;
-  pdfHeight?: number;
+  templateWidth?: number;
+  templateHeight?: number;
   // Align to canvas
   onAlignField?: (alignment: 'left' | 'center-h' | 'right' | 'top' | 'center-v' | 'bottom') => void;
   // Z-order
@@ -520,7 +520,7 @@ interface RightPanelProps {
 
 type EffectType = 'none' | 'drop_shadow' | 'layer_blur' | 'background_blur';
 
-export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale, onScaleChange, onFitToScreen, snapToGrid, onSnapToggle, pdfWidth, pdfHeight, onAlignField, onBringForward, onSendBackward, columnHeaders }: RightPanelProps) {
+export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale, onScaleChange, onFitToScreen, snapToGrid, onSnapToggle, templateWidth, templateHeight, onAlignField, onBringForward, onSendBackward, columnHeaders }: RightPanelProps) {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<ColorTarget>('main');
   const [pickerInitialPos, setPickerInitialPos] = useState({ x: 0, y: 0 });
@@ -716,18 +716,18 @@ export function RightPanel({ selectedField, onFieldUpdate, allFieldLabels, scale
       </div>
 
       {/* Template dimensions */}
-      {(pdfWidth || pdfHeight) && (
+      {(templateWidth || templateHeight) && (
         <div className="px-5 py-3.5 border-t border-border">
           <p className="text-xs font-semibold text-foreground mb-2 select-none">Template</p>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded h-9 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">W</span>
-              <span className="flex-1 text-xs text-foreground">{Math.round(pdfWidth ?? 0)}</span>
+              <span className="flex-1 text-xs text-foreground">{Math.round(templateWidth ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
             <div className="flex items-center bg-background dark:bg-[#0A0A0A] border border-border dark:border-white/8 rounded h-9 px-3 gap-2">
               <span className="text-xs text-muted-foreground/60 shrink-0 select-none">H</span>
-              <span className="flex-1 text-xs text-foreground">{Math.round(pdfHeight ?? 0)}</span>
+              <span className="flex-1 text-xs text-foreground">{Math.round(templateHeight ?? 0)}</span>
               <span className="text-[10px] text-muted-foreground/50 shrink-0">px</span>
             </div>
           </div>

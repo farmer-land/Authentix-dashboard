@@ -8,14 +8,6 @@ import { ChevronLeft, ChevronRight, Clock, FileText, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
-const PDFThumbnail = dynamic(() => import('./PDFThumbnail'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-secondary/50">
-      <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-    </div>
-  )
-});
 
 interface RecentTemplate {
   template_id: string;
@@ -158,15 +150,11 @@ export function RecentUsedTemplates({
               {/* Preview */}
               <div className="h-[140px] bg-muted/50 flex items-center justify-center overflow-hidden">
                 {template.preview_url ? (
-                  template.preview_url.toLowerCase().endsWith('.pdf') ? (
-                    <PDFThumbnail url={template.preview_url} />
-                  ) : (
-                    <img
-                      src={template.preview_url}
-                      alt={template.template_title}
-                      className="w-full h-full object-contain"
-                    />
-                  )
+                  <img
+                    src={template.preview_url}
+                    alt={template.template_title}
+                    className="w-full h-full object-contain"
+                  />
                 ) : (
                   <FileText className="w-12 h-12 text-muted-foreground/50" />
                 )}

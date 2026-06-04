@@ -40,8 +40,8 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface InfiniteCanvasProps {
   fileUrl: string;
-  pdfWidth: number;
-  pdfHeight: number;
+  templateWidth: number;
+  templateHeight: number;
   fields: CertificateField[];
   selectedFieldId: string | null;
   hiddenFields: Set<string>;
@@ -155,8 +155,8 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 export function InfiniteCanvas({
   fileUrl,
-  pdfWidth,
-  pdfHeight,
+  templateWidth,
+  templateHeight,
   fields,
   selectedFieldId,
   hiddenFields,
@@ -346,13 +346,13 @@ export function InfiniteCanvas({
     const effectiveH = ch - (footerHeight ?? 0) - TOOLBAR_RESERVED;
 
     // Fit template to occupy ~80% of the smaller available dimension, respecting both axes
-    const fitScale = Math.min(availW / pdfWidth, effectiveH / pdfHeight) * 0.80;
+    const fitScale = Math.min(availW / templateWidth, effectiveH / templateHeight) * 0.80;
     const clampedScale = Math.min(Math.max(fitScale, 0.04), 2);
-    const centeredX = leftW + (availW - pdfWidth * clampedScale) / 2;
+    const centeredX = leftW + (availW - templateWidth * clampedScale) / 2;
     // Center in the full available height (not effectiveH) so the template appears
     // visually centred on screen. effectiveH only controls fit scale (prevents overlap with toolbar).
     const fullAvailH = ch - (footerHeight ?? 0);
-    const centeredY = Math.max(0, (fullAvailH - pdfHeight * clampedScale) / 2);
+    const centeredY = Math.max(0, (fullAvailH - templateHeight * clampedScale) / 2);
     onScaleChange(clampedScale);
     setPan({ x: centeredX, y: centeredY });
     panRef.current = { x: centeredX, y: centeredY };
@@ -360,7 +360,7 @@ export function InfiniteCanvas({
     // This way the scale-grow animation starts from the correct position
     // (no sliding from top-left — the template grows from its own center).
     requestAnimationFrame(() => setHasFitted(true));
-  }, [pdfWidth, pdfHeight, footerHeight, leftPanelWidth, rightPanelWidth, onScaleChange]);
+  }, [templateWidth, templateHeight, footerHeight, leftPanelWidth, rightPanelWidth, onScaleChange]);
 
   // Run auto-fit whenever template dimensions change.
   // First load runs immediately (no delay) to avoid visible jump.
@@ -368,10 +368,10 @@ export function InfiniteCanvas({
   const prevDimsRef = useRef({ w: 0, h: 0 });
   const isFirstFitRef = useRef(true);
   useEffect(() => {
-    if (pdfWidth > 0 && pdfHeight > 0) {
+    if (templateWidth > 0 && templateHeight > 0) {
       const prev = prevDimsRef.current;
-      if (prev.w !== pdfWidth || prev.h !== pdfHeight) {
-        prevDimsRef.current = { w: pdfWidth, h: pdfHeight };
+      if (prev.w !== templateWidth || prev.h !== templateHeight) {
+        prevDimsRef.current = { w: templateWidth, h: templateHeight };
         if (isFirstFitRef.current) {
           isFirstFitRef.current = false;
           fitToScreen();
@@ -380,7 +380,7 @@ export function InfiniteCanvas({
         }
       }
     }
-  }, [pdfWidth, pdfHeight, fitToScreen]);
+  }, [templateWidth, templateHeight, fitToScreen]);
 
   // External fit-to-screen trigger (e.g. right panel open/close changes available width).
   // setTimeout lets the DOM finish reflowing before we measure the container.
@@ -624,9 +624,9 @@ export function InfiniteCanvas({
     setIsResizingTemplate(true);
     resizeCorner.current = corner;
     templateResizeStart.current = { x: e.clientX, y: e.clientY };
-    initialTemplateDims.current = { w: pdfWidth, h: pdfHeight };
+    initialTemplateDims.current = { w: templateWidth, h: templateHeight };
     resizePanStart.current = { x: panRef.current.x, y: panRef.current.y };
-    onTemplateResizeStart?.(pdfWidth, pdfHeight);
+    onTemplateResizeStart?.(templateWidth, templateHeight);
   };
 
   useEffect(() => {
@@ -877,22 +877,22 @@ export function InfiniteCanvas({
     let updates: Partial<CertificateField> = {};
     switch (alignment) {
       case 'left':     updates = { x: 0 }; break;
-      case 'center-h': updates = { x: (pdfWidth - field.width) / 2 }; break;
-      case 'right':    updates = { x: pdfWidth - field.width }; break;
+      case 'center-h': updates = { x: (templateWidth - field.width) / 2 }; break;
+      case 'right':    updates = { x: templateWidth - field.width }; break;
       case 'top':      updates = { y: 0 }; break;
-      case 'center-v': updates = { y: (pdfHeight - field.height) / 2 }; break;
-      case 'bottom':   updates = { y: pdfHeight - field.height }; break;
+      case 'center-v': updates = { y: (templateHeight - field.height) / 2 }; break;
+      case 'bottom':   updates = { y: templateHeight - field.height }; break;
     }
     onFieldUpdateRef.current(field.id, updates);
-  }, [selectedFieldId, pdfWidth, pdfHeight]);
+  }, [selectedFieldId, templateWidth, templateHeight]);
 
 
   const cursor = isPanning ? 'grabbing' : (isSpacePressed ? 'grab' : 'default');
-  const canvasW = pdfWidth * scale;
-  const canvasH = pdfHeight * scale;
+  const canvasW = templateWidth * scale;
+  const canvasH = templateHeight * scale;
   // During resize: use visualDims for smooth visual feedback without re-rendering PDF
-  const displayW = (visualDims?.w ?? pdfWidth) * scale;
-  const displayH = (visualDims?.h ?? pdfHeight) * scale;
+  const displayW = (visualDims?.w ?? templateWidth) * scale;
+  const displayH = (visualDims?.h ?? templateHeight) * scale;
   const visibleFields = fields.filter(f => !hiddenFields.has(f.id));
 
   return (

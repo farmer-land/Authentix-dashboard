@@ -11,8 +11,8 @@ import { ZoomIn, ZoomOut, Maximize, RotateCcw } from 'lucide-react';
 interface CertificateCanvasProps {
   fileUrl: string;
 
-  pdfWidth: number;
-  pdfHeight: number;
+  templateWidth: number;
+  templateHeight: number;
   fields: CertificateField[];
   selectedFieldId: string | null;
   hiddenFields: Set<string>;
@@ -26,8 +26,8 @@ interface CertificateCanvasProps {
 
 export function CertificateCanvas({
   fileUrl,
-  pdfWidth,
-  pdfHeight,
+  templateWidth,
+  templateHeight,
   fields,
   selectedFieldId,
   hiddenFields,
@@ -144,13 +144,13 @@ export function CertificateCanvas({
      setIsResizingTemplate(true);
      resizeCorner.current = corner;
      templateResizeStart.current = { x: e.clientX, y: e.clientY };
-     initialTemplateDims.current = { w: pdfWidth, h: pdfHeight };
+     initialTemplateDims.current = { w: templateWidth, h: templateHeight };
   };
 
   // Update canvas width based on scale (Legacy logic maintained for now as per plan)
   useEffect(() => {
-    setCanvasWidth(pdfWidth * scale);
-  }, [pdfWidth, scale]);
+    setCanvasWidth(templateWidth * scale);
+  }, [templateWidth, scale]);
   
   const handleFieldDrag = (id: string, deltaX: number, deltaY: number) => {
     const field = fieldsRef.current.find(f => f.id === id);
@@ -172,8 +172,8 @@ export function CertificateCanvas({
     const dragBottom = newY + h;
 
     // Canvas center axes
-    const canvasW = pdfWidth;
-    const canvasH = pdfHeight;
+    const canvasW = templateWidth;
+    const canvasH = templateHeight;
     const canvasCX = canvasW / 2;
     const canvasCY = canvasH / 2;
     if (Math.abs(dragCenterX - canvasCX) < SNAP_PX) vLines.push(canvasCX);
@@ -340,7 +340,7 @@ export function CertificateCanvas({
   const handleFitToWidth = () => {
     if (containerRef.current) {
       const containerWidth = containerRef.current.clientWidth - 96; // margin
-      onScaleChange(containerWidth / pdfWidth);
+      onScaleChange(containerWidth / templateWidth);
       setPan({ x: 0, y: 0 }); // Reset pan on fit
     }
   };
@@ -393,7 +393,7 @@ export function CertificateCanvas({
         className="relative origin-center"
         style={{ 
           width: canvasWidth, 
-          height: canvasWidth * (pdfHeight / pdfWidth),
+          height: canvasWidth * (templateHeight / templateWidth),
           transform: `translate(${pan.x}px, ${pan.y}px)`,
           willChange: isPanning || isResizingTemplate ? 'transform' : 'auto',
         }}
@@ -497,7 +497,7 @@ export function CertificateCanvas({
 
       {/* Info Bar */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 text-[10px] text-muted-foreground bg-background/90 backdrop-blur border px-3 py-1 rounded-full shadow-sm select-none pointer-events-none">
-        {Math.round(pdfWidth)} × {Math.round(pdfHeight)}px • {fields.length} field{fields.length !== 1 ? 's' : ''} ({hiddenFields.size} hidden)
+        {Math.round(templateWidth)} × {Math.round(templateHeight)}px • {fields.length} field{fields.length !== 1 ? 's' : ''} ({hiddenFields.size} hidden)
       </div>
     </div>
   );

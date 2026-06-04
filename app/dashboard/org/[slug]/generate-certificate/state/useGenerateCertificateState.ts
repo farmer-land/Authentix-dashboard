@@ -62,8 +62,8 @@ export function useGenerateCertificateState(templateIdFromUrl: string | null) {
     dispatch({ type: "SET_TEMPLATE_META", meta });
   }, []);
 
-  const setPdfFile = useCallback((file: File | null) => {
-    dispatch({ type: "SET_PDF_FILE", file });
+  const setTemplateFile = useCallback((file: File | null) => {
+    dispatch({ type: "SET_TEMPLATE_FILE", file });
   }, []);
 
   const setTemplateVersionId = useCallback((versionId: string | null) => {
@@ -280,7 +280,7 @@ export function useGenerateCertificateState(templateIdFromUrl: string | null) {
     setSavedTemplates,
     setIsTemplateLoading,
     setTemplateMeta,
-    setPdfFile,
+    setTemplateFile,
     setTemplateVersionId,
     setTemplateMode,
     setTemplateConfigs,

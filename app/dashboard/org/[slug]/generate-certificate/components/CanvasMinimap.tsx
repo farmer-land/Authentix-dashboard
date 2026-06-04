@@ -14,7 +14,7 @@ interface CanvasMinimapProps {
   fields: CertificateField[];
   onViewportChange: (x: number, y: number) => void;
   templateUrl?: string;
-  templateType?: 'pdf' | 'image';
+  templateType?: 'image';
 }
 
 const MINIMAP_WIDTH = 150;

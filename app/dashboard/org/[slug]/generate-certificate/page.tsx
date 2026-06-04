@@ -86,7 +86,7 @@ export default function GenerateCertificatePage() {
     stepperExpanded,
     canUndo, canRedo, saveStatus, showNavGuard,
     setCurrentStep, setTemplate, setSavedTemplates, setIsTemplateLoading,
-    setTemplateMeta, setPdfFile, setTemplateVersionId,
+    setTemplateMeta, setTemplateFile, setTemplateVersionId,
     setTemplateMode, setTemplateConfigs, setActiveTemplateIndex,
     setFields, setSelectedFieldId, setHiddenFields,
     setImportedData, setSavedImports, setFieldMappings, setAdditionalCertConfigs,
@@ -885,15 +885,15 @@ export default function GenerateCertificatePage() {
       }
     }
 
-    let pdfWidth = selectedTemplate.width;
-    let pdfHeight = selectedTemplate.height;
+    let templateWidth = selectedTemplate.width;
+    let templateHeight = selectedTemplate.height;
 
     // If dimensions are missing, calculate them
-    if (!pdfWidth || !pdfHeight) {
+    if (!templateWidth || !templateHeight) {
         if (!fileUrl) {
             // No file URL available, use defaults
-            pdfWidth = 800;
-            pdfHeight = 600;
+            templateWidth = 800;
+            templateHeight = 600;
         } else
         try {
             console.log("Template missing dimensions, calculating...");
@@ -903,7 +903,7 @@ export default function GenerateCertificatePage() {
             const img = new Image();
             const objectUrl = URL.createObjectURL(blob);
             await new Promise((resolve, reject) => {
-              img.onload = () => { pdfWidth = img.naturalWidth; pdfHeight = img.naturalHeight; resolve(true); };
+              img.onload = () => { templateWidth = img.naturalWidth; templateHeight = img.naturalHeight; resolve(true); };
               img.onerror = reject;
               img.src = objectUrl;
             });
@@ -915,12 +915,11 @@ export default function GenerateCertificatePage() {
 
         } catch (e) {
             console.error("Failed to extract dimensions", e);
-            pdfWidth = 800;
-            pdfHeight = 600;
+            templateWidth = 800;
+            templateHeight = 600;
         }
     }
 
-    const fileType = 'image';
 
     // Store version ID for autosave; expose via ref for session restore comparison.
     // Fall back to template_version_id from the template list if getEditorData failed
@@ -946,9 +945,8 @@ export default function GenerateCertificatePage() {
       id: selectedTemplate.id,
       templateName: selectedTemplate.title || selectedTemplate.name,
       fileUrl,
-      fileType,
-      pdfWidth: pdfWidth || 800,
-      pdfHeight: pdfHeight || 600,
+      templateWidth: templateWidth || 800,
+      templateHeight: templateHeight || 600,
       fields: mappedFields,
     });
     const editorCategories = editorData?.categories ?? [];
@@ -1005,26 +1003,25 @@ export default function GenerateCertificatePage() {
     try {
       const editorData = await api.templates.getEditorData(t.id);
       let fileUrl: string = editorData?.source_file?.url || t.preview_url || '';
-      const fileType = 'image';
       const mappedFields: CertificateField[] = (editorData?.fields ?? []).map(mapDbFieldToFrontend);
 
-      let pdfWidth: number = t.width || 0;
-      let pdfHeight: number = t.height || 0;
+      let templateWidth: number = t.width || 0;
+      let templateHeight: number = t.height || 0;
 
-      if ((!pdfWidth || !pdfHeight) && fileUrl) {
+      if ((!templateWidth || !templateHeight) && fileUrl) {
         try {
           const response = await fetch(fileUrl);
           const blob = await response.blob();
           const img = new Image();
           const objectUrl = URL.createObjectURL(blob);
           await new Promise((resolve) => {
-            img.onload = () => { pdfWidth = img.naturalWidth; pdfHeight = img.naturalHeight; URL.revokeObjectURL(objectUrl); resolve(true); };
+            img.onload = () => { templateWidth = img.naturalWidth; templateHeight = img.naturalHeight; URL.revokeObjectURL(objectUrl); resolve(true); };
             img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(false); };
             img.src = objectUrl;
           });
         } catch {
-          pdfWidth = pdfWidth || 794;
-          pdfHeight = pdfHeight || 1123;
+          templateWidth = templateWidth || 794;
+          templateHeight = templateHeight || 1123;
         }
       }
 
@@ -1032,9 +1029,8 @@ export default function GenerateCertificatePage() {
         id: t.id,
         templateName: t.title || t.name,
         fileUrl,
-        fileType,
-        pdfWidth: pdfWidth || 794,
-        pdfHeight: pdfHeight || 1123,
+        templateWidth: templateWidth || 794,
+        templateHeight: templateHeight || 1123,
         fields: mappedFields,
       };
       return { template: tmpl, fields: mappedFields, versionId: editorData?.version?.id || null };
@@ -1044,9 +1040,9 @@ export default function GenerateCertificatePage() {
           id: t.id,
           templateName: t.title || t.name,
           fileUrl: t.preview_url || '',
-          fileType: 'image' as const,
-          pdfWidth: t.width || 794,
-          pdfHeight: t.height || 1123,
+          
+          templateWidth: t.width || 794,
+          templateHeight: t.height || 1123,
           fields: [],
         },
         fields: [],
@@ -1274,7 +1270,6 @@ export default function GenerateCertificatePage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleNewTemplateUpload = async (file: File, width: number, height: number, saveTemplate: boolean, templateName?: string, categoryId?: string, subcategoryId?: string, onProgress?: (pct: number) => void, navigateToDesign = true): Promise<any> => {
-    const fileType = 'image';
     const baseName = templateName || file.name.replace(/\.(jpe?g|png|webp|avif)$/i, '');
     const existingNames = savedTemplates.map(t => t.title?.toLowerCase() ?? '');
     let finalTemplateName = baseName;
@@ -1330,14 +1325,13 @@ export default function GenerateCertificatePage() {
     const newTemplate: CertificateTemplate = {
       templateName: finalTemplateName,
       fileUrl: URL.createObjectURL(file),
-      fileType,
-      pdfWidth: width,
-      pdfHeight: height,
+      templateWidth: width,
+      templateHeight: height,
       fields: [],
     };
 
     setTemplate(newTemplate);
-    setPdfFile(file);
+    setTemplateFile(file);
     setFields([]);
     setSelectedFieldId(null);
     setCurrentStep('design');
@@ -1457,16 +1451,16 @@ export default function GenerateCertificatePage() {
     pushToHistory(fields);
     const REF_WIDTH = 595;
     const REF_HEIGHT = 842;
-    const wScale = template.pdfWidth > 0 ? template.pdfWidth / REF_WIDTH : 1;
-    const hScale = template.pdfHeight > 0 ? template.pdfHeight / REF_HEIGHT : 1;
+    const wScale = template.templateWidth > 0 ? template.templateWidth / REF_WIDTH : 1;
+    const hScale = template.templateHeight > 0 ? template.templateHeight / REF_HEIGHT : 1;
     const newFields: CertificateField[] = [];
-    let nextY = template.pdfHeight * 0.35;
+    let nextY = template.templateHeight * 0.35;
     for (const header of headers) {
       const fieldType = headerToFieldType(header);
       const config = FIELD_TYPE_CONFIG[fieldType];
       const scaledWidth = Math.round(config.defaultWidth * wScale);
       const scaledHeight = Math.round(config.defaultHeight * hScale);
-      const x = (template.pdfWidth - scaledWidth) / 2;
+      const x = (template.templateWidth - scaledWidth) / 2;
       const rawLabel = header.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       const field: CertificateField = {
         id: crypto.randomUUID(),
@@ -1642,7 +1636,7 @@ export default function GenerateCertificatePage() {
         fontSize: Math.round(f.fontSize * sf),
       })));
     }
-    setTemplate(prev => prev ? { ...prev, pdfWidth: width, pdfHeight: height } : null);
+    setTemplate(prev => prev ? { ...prev, templateWidth: width, templateHeight: height } : null);
   };
 
   // Handles file-picker image add: optimistic blob preview + background upload + URL swap
@@ -1668,15 +1662,15 @@ export default function GenerateCertificatePage() {
       return;
     }
     const defaultSize = template
-      ? Math.max(200, Math.round(Math.min(template.pdfWidth, template.pdfHeight) * 0.25))
+      ? Math.max(200, Math.round(Math.min(template.templateWidth, template.templateHeight) * 0.25))
       : 200;
     const newField: CertificateField = {
       id: crypto.randomUUID(),
       type: 'image',
       label: name,
       imageUrl: url,
-      x: x !== undefined ? x - defaultSize / 2 : (template ? (template.pdfWidth - defaultSize) / 2 : 100),
-      y: y !== undefined ? y - defaultSize / 2 : (template ? (template.pdfHeight - defaultSize) / 2 : 100),
+      x: x !== undefined ? x - defaultSize / 2 : (template ? (template.templateWidth - defaultSize) / 2 : 100),
+      y: y !== undefined ? y - defaultSize / 2 : (template ? (template.templateHeight - defaultSize) / 2 : 100),
       width: defaultSize,
       height: defaultSize,
       fontSize: 0,
@@ -1798,7 +1792,7 @@ export default function GenerateCertificatePage() {
           if (field.prefix) style.prefix = field.prefix;
           if (field.suffix) style.suffix = field.suffix;
 
-          // Extended style properties for faithful PDF/image rendering
+          // Extended style properties for faithful image rendering
           if (field.opacity !== undefined && field.opacity !== 100) style.opacity = field.opacity;
           if (field.letterSpacing) style.letterSpacing = field.letterSpacing;
           if (field.lineHeight) style.lineHeight = field.lineHeight;
@@ -2567,8 +2561,8 @@ export default function GenerateCertificatePage() {
                                   onAddField={handleAddField}
                                   onAddImageField={handleAddAssetField}
                                   onAddImageFile={handleAddImageFile}
-                                  pdfWidth={template.pdfWidth}
-                                  pdfHeight={template.pdfHeight}
+                                  templateWidth={template.templateWidth}
+                                  templateHeight={template.templateHeight}
                                   orgLogoUrl={organization?.logo_url ?? null}
                                 />
                               </div>
@@ -2581,8 +2575,8 @@ export default function GenerateCertificatePage() {
                               onAddField={handleAddField}
                               onAddImageField={handleAddAssetField}
                               onAddImageFile={handleAddImageFile}
-                              pdfWidth={template.pdfWidth}
-                              pdfHeight={template.pdfHeight}
+                              templateWidth={template.templateWidth}
+                              templateHeight={template.templateHeight}
                               orgLogoUrl={organization?.logo_url ?? null}
                             />
                           </div>
@@ -2637,7 +2631,7 @@ export default function GenerateCertificatePage() {
                   {template && (
                     <div className="shrink-0 border-t border-border/40 px-3 py-2">
                       <p className="text-[9px] text-muted-foreground/50 tabular-nums">
-                        {Math.round(template.pdfWidth)} × {Math.round(template.pdfHeight)} px
+                        {Math.round(template.templateWidth)} × {Math.round(template.templateHeight)} px
                         {' · '}
                         {fields.length} field{fields.length !== 1 ? 's' : ''}
                       </p>
@@ -2690,8 +2684,8 @@ export default function GenerateCertificatePage() {
               <ErrorBoundary fallbackLabel="Canvas failed to load">
               <InfiniteCanvas
                 fileUrl={template.fileUrl}
-                pdfWidth={template.pdfWidth}
-                pdfHeight={template.pdfHeight}
+                templateWidth={template.templateWidth}
+                templateHeight={template.templateHeight}
                 fields={fields}
                 selectedFieldId={selectedFieldId}
                 hiddenFields={hiddenFields}
@@ -2742,8 +2736,8 @@ export default function GenerateCertificatePage() {
               <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8">
                 <CertificateCanvas
                   fileUrl={template.fileUrl}
-                  pdfWidth={template.pdfWidth}
-                  pdfHeight={template.pdfHeight}
+                  templateWidth={template.templateWidth}
+                  templateHeight={template.templateHeight}
                   fields={fields}
                   selectedFieldId={selectedFieldId}
                   hiddenFields={hiddenFields}
@@ -2797,19 +2791,19 @@ export default function GenerateCertificatePage() {
                       onFitToScreen={() => setFitTrigger(t => t + 1)}
                       snapToGrid={snapToGrid}
                       onSnapToggle={() => setSnapToGrid(v => !v)}
-                      pdfWidth={template?.pdfWidth}
-                      pdfHeight={template?.pdfHeight}
+                      templateWidth={template?.templateWidth}
+                      templateHeight={template?.templateHeight}
                       onAlignField={(alignment) => {
                         if (!selectedField || !template) return;
                         const { width, height } = selectedField;
-                        const { pdfWidth, pdfHeight } = template;
+                        const { templateWidth, templateHeight } = template;
                         const updates: Partial<CertificateField> = {};
                         if (alignment === 'left') updates.x = 0;
-                        else if (alignment === 'center-h') updates.x = (pdfWidth - width) / 2;
-                        else if (alignment === 'right') updates.x = pdfWidth - width;
+                        else if (alignment === 'center-h') updates.x = (templateWidth - width) / 2;
+                        else if (alignment === 'right') updates.x = templateWidth - width;
                         else if (alignment === 'top') updates.y = 0;
-                        else if (alignment === 'center-v') updates.y = (pdfHeight - height) / 2;
-                        else if (alignment === 'bottom') updates.y = pdfHeight - height;
+                        else if (alignment === 'center-v') updates.y = (templateHeight - height) / 2;
+                        else if (alignment === 'bottom') updates.y = templateHeight - height;
                         if (selectedFieldId) handleUpdateField(selectedFieldId, updates);
                       }}
                       onBringForward={() => selectedFieldId && handleFieldReorder(selectedFieldId, 'front')}

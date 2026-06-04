@@ -206,7 +206,7 @@ export function TemplateSelector({
     if (!file) return;
     setUploadFile(file);
     setUploadDims(null);
-    setTemplateName(file.name.replace(/\.(pdf|jpe?g|png|webp|avif)$/i, ''));
+    setTemplateName(file.name.replace(/\.(jpe?g|png|webp|avif|gif)$/i, ''));
     setIsProcessing(false);
     // One URL for both preview display and dimension measurement (revoked on dialog close)
     const url = URL.createObjectURL(file);

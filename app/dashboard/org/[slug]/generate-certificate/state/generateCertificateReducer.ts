@@ -38,7 +38,7 @@ export type GenerateCertificateAction =
   | { type: "SET_SAVED_TEMPLATES"; templates: any[] }
   | { type: "SET_TEMPLATE_LOADING"; loading: boolean }
   | { type: "SET_TEMPLATE_META"; meta: TemplateMeta }
-  | { type: "SET_PDF_FILE"; file: File | null }
+  | { type: "SET_TEMPLATE_FILE"; file: File | null }
   | { type: "SET_TEMPLATE_VERSION"; versionId: string | null }
   | { type: "REMOVE_SAVED_TEMPLATE"; templateId: string }
    
@@ -123,8 +123,8 @@ export function generateCertificateReducer(
       return { ...state, isTemplateLoading: action.loading };
     case "SET_TEMPLATE_META":
       return { ...state, templateMeta: action.meta };
-    case "SET_PDF_FILE":
-      return { ...state, pdfFile: action.file };
+    case "SET_TEMPLATE_FILE":
+      return { ...state, templateFile: action.file };
     case "SET_TEMPLATE_VERSION":
       return { ...state, templateVersionId: action.versionId };
     case "REMOVE_SAVED_TEMPLATE":
@@ -221,7 +221,7 @@ export function generateCertificateReducer(
       return {
         ...state,
         template: null,
-        pdfFile: null,
+        templateFile: null,
         templateVersionId: null,
         fields: [],
         selectedFieldId: null,

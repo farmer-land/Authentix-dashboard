@@ -19,7 +19,7 @@ interface LeftPanelProps {
   importedData: ImportedData | null;
   selectedFieldId: string | null;
   hiddenFields: Set<string>;
-  onPdfUpload: (file: File, width: number, height: number) => void;
+  onTemplateUpload: (file: File, width: number, height: number) => void;
   onAddField: (field: CertificateField) => void;
   onFieldSelect: (fieldId: string) => void;
   onFieldDelete: (fieldId: string) => void;
@@ -83,7 +83,7 @@ export function LeftPanel({
   importedData,
   selectedFieldId,
   hiddenFields,
-  onPdfUpload,
+  onTemplateUpload,
   onAddField,
   onFieldSelect,
   onFieldDelete,
@@ -146,7 +146,7 @@ export function LeftPanel({
         {/* Upload tab */}
         {activeTab === 'upload' && (
           <div className="p-4 space-y-4">
-            <TemplateUploader onUpload={onPdfUpload} />
+            <TemplateUploader onUpload={onTemplateUpload} />
 
             {template && (
               <Card className="overflow-hidden">
@@ -161,13 +161,13 @@ export function LeftPanel({
                       Dimensions
                     </span>
                     <span className="font-mono text-[11px]">
-                      {template.pdfWidth} × {template.pdfHeight} px
+                      {template.templateWidth} × {template.templateHeight} px
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Format</span>
                     <span className="uppercase text-[10px] font-bold tracking-widest text-muted-foreground">
-                      {template.fileType}
+                      IMAGE
                     </span>
                   </div>
                 </div>
@@ -194,8 +194,8 @@ export function LeftPanel({
               </p>
               <FieldTypeSelector
                 onAddField={onAddField}
-                pdfWidth={template?.pdfWidth || 0}
-                pdfHeight={template?.pdfHeight || 0}
+                templateWidth={template?.templateWidth || 0}
+                templateHeight={template?.templateHeight || 0}
               />
             </div>
 

@@ -34,8 +34,8 @@ export function CertificatePreview({ template, fields }: CertificatePreviewProps
       const { clientWidth: cw, clientHeight: ch } = el;
       const pad = 48;
       const s = Math.min(
-        (cw - pad * 2) / template.pdfWidth,
-        (ch - pad * 2) / template.pdfHeight,
+        (cw - pad * 2) / template.templateWidth,
+        (ch - pad * 2) / template.templateHeight,
       );
       setScale(Math.max(0.05, Math.min(3, s)));
     };
@@ -43,10 +43,10 @@ export function CertificatePreview({ template, fields }: CertificatePreviewProps
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [template.pdfWidth, template.pdfHeight]);
+  }, [template.templateWidth, template.templateHeight]);
 
-  const canvasW = template.pdfWidth * scale;
-  const canvasH = template.pdfHeight * scale;
+  const canvasW = template.templateWidth * scale;
+  const canvasH = template.templateHeight * scale;
 
   return (
     <div

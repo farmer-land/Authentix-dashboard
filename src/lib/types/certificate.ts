@@ -99,14 +99,13 @@ export interface CertificateField {
   bgCornerRadius?: number;    // corner radius for text background
 }
 
-// Template configuration
+// Template configuration — always image-based (PNG/JPG/WebP); no PDF support.
 export interface CertificateTemplate {
   id?: string;
   templateName: string;
   fileUrl: string;
-  fileType: 'image';
-  pdfWidth: number; // Template dimensions in pixels
-  pdfHeight: number;
+  templateWidth: number;  // actual image pixel width
+  templateHeight: number; // actual image pixel height
   fields: CertificateField[];
   createdAt?: Date;
   updatedAt?: Date;

@@ -23,8 +23,8 @@ interface FieldTypeSelectorProps {
   onAddField: (field: CertificateField) => void;
   onAddImageField?: (url: string, name: string) => void;
   onAddImageFile?: (file: File) => void;
-  pdfWidth: number;
-  pdfHeight: number;
+  templateWidth: number;
+  templateHeight: number;
   orgLogoUrl?: string | null;
 }
 
@@ -68,7 +68,7 @@ const FIELD_GROUPS: { label: string; types: FieldType[] }[] = [
 const REF_WIDTH = 595;
 const REF_HEIGHT = 842;
 
-export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile, pdfWidth, pdfHeight, orgLogoUrl }: FieldTypeSelectorProps) {
+export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile, templateWidth, templateHeight, orgLogoUrl }: FieldTypeSelectorProps) {
   const [showCustomNameDialog, setShowCustomNameDialog] = useState(false);
   const [customFieldName, setCustomFieldName] = useState('');
   const [showImagePickerDialog, setShowImagePickerDialog] = useState(false);
@@ -77,12 +77,12 @@ export function FieldTypeSelector({ onAddField, onAddImageField, onAddImageFile,
 
   const createField = (type: FieldType, customLabel?: string) => {
     const config = FIELD_TYPE_CONFIG[type];
-    const wScale = pdfWidth > 0 ? pdfWidth / REF_WIDTH : 1;
-    const hScale = pdfHeight > 0 ? pdfHeight / REF_HEIGHT : 1;
+    const wScale = templateWidth > 0 ? templateWidth / REF_WIDTH : 1;
+    const hScale = templateHeight > 0 ? templateHeight / REF_HEIGHT : 1;
     const scaledWidth = Math.round(config.defaultWidth * wScale);
     const scaledHeight = Math.round(config.defaultHeight * hScale);
-    const x = (pdfWidth - scaledWidth) / 2;
-    const y = (pdfHeight - scaledHeight) / 2;
+    const x = (templateWidth - scaledWidth) / 2;
+    const y = (templateHeight - scaledHeight) / 2;
     const label = customLabel || config.label;
 
     const field: CertificateField = {
