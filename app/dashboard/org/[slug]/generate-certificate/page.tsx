@@ -128,9 +128,15 @@ export default function GenerateCertificatePage() {
     prevStepRef.current = currentStep;
     currentStepRef.current = currentStep;
     // When the user returns to the template chooser, clear any pending remote-change banner
-    // and silently refresh so they always see fresh data
     if (currentStep === 'template') {
       setHasRemoteChanges(false);
+    }
+    // Refresh the saved-imports list whenever the data step becomes active so that
+    // imports deleted since page load disappear from "Use previous data" automatically.
+    if (currentStep === 'data') {
+      api.imports.list({ sort_by: 'created_at', sort_order: 'desc', limit: 20 })
+        .then(r => setSavedImports((r.items || []).filter(i => i.status === 'completed').slice(0, 5)))
+        .catch(() => {});
     }
     // Immediately clear the design loading overlay when leaving the design step so it
     // never bleeds through onto the data/export views.
@@ -643,13 +649,16 @@ export default function GenerateCertificatePage() {
         inProgress: recentUsageResponse.in_progress?.length || 0,
       });
 
-      // Load imports (remove status filter - backend handles filtering)
+      // Load recent completed imports for the "Use previous data" quick-pick.
+      // Fetch 20 so we still get 5 completed ones even if some are failed/pending.
+      // Client-side filter: only show completed imports — failed/pending/deleted ones
+      // confuse users and fail when "Use this" is clicked.
       try {
-      const importsResponse = await api.imports.list({ sort_by: 'created_at', sort_order: 'desc', limit: 5 });
-      setSavedImports(importsResponse.items || []);
+        const importsResponse = await api.imports.list({ sort_by: 'created_at', sort_order: 'desc', limit: 20 });
+        const completed = (importsResponse.items || []).filter(i => i.status === 'completed');
+        setSavedImports(completed.slice(0, 5));
       } catch (error) {
         console.warn('[Generate] Error loading imports:', error);
-        // Continue without imports - user can still proceed
         setSavedImports([]);
       }
 
@@ -2126,8 +2135,11 @@ export default function GenerateCertificatePage() {
       // Stay on the data step so the user can review/adjust mappings before generating.
       // (DataSelector shows the mapping UI once importedData is set and showUpload → false.)
     } catch (error) {
-      console.error('Error loading import:', error);
-      throw error;
+      // If the import no longer exists (deleted from Imports page), silently remove it
+      // from the list so it won't show again, then surface a user-friendly error.
+      setSavedImports(savedImports.filter(i => i.id !== importId));
+      console.warn('Import no longer available:', importId, error);
+      throw new Error('This import has been deleted. Please upload a new file.');
     }
   };
 
@@ -2161,7 +2173,11 @@ export default function GenerateCertificatePage() {
         const isCompleted = step.completed;
         const currentIndex = steps.findIndex(s => s.id === currentStep);
         const isNext = index === currentIndex + 1;
-        const canNavigate = isCompleted || isActive || isNext || step.id === 'template';
+        // Design step is only navigable if a template is actually loaded (not just isNext).
+        // Without this, clicking Design from the template chooser while no template is
+        // selected would immediately bounce back to the template chooser via the guard effect.
+        const isNavigableNext = isNext && !(step.id === 'design' && !template);
+        const canNavigate = isCompleted || isActive || isNavigableNext || step.id === 'template';
         const StepIcon = step.icon;
 
         return (
