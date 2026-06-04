@@ -305,7 +305,13 @@ export function DraggableField({
     e.preventDefault();
     onDragStart?.();
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    initialDimsRef.current = { width: scaledWidth, height: scaledHeight };
+    // Read the actual rendered dimensions from the DOM so resize starts from
+    // the visually correct size (max-content text fields are wider than scaledWidth).
+    const rect = fieldRef.current?.getBoundingClientRect();
+    initialDimsRef.current = {
+      width: rect?.width ?? scaledWidth,
+      height: rect?.height ?? scaledHeight,
+    };
     initialFieldRef.current = { width: field.width, fontSize: field.fontSize, x: field.x, y: field.y };
     setResizeHandle(handle);
   };
@@ -354,8 +360,12 @@ export function DraggableField({
 
   // Scale handle sizes proportionally. Minimum 8px so they're always clickable.
   const hSize = Math.max(8, Math.min(12, Math.round(12 * scale)));
-  // Hide mid-edge handles when the field is too small to fit them without overlapping
-  const showMidHandles = scaledWidth > hSize * 3 && scaledHeight > hSize * 3;
+  // For text fields the actual rendered size (max-content) is larger than scaledWidth/Height,
+  // so always show mid handles — they'll sit on the edges of the visible text box.
+  const isTextField = field.type !== 'image' && field.type !== 'qr_code';
+  const showMidHandles = isTextField
+    ? (scaledFontSize > hSize * 2)
+    : (scaledWidth > hSize * 3 && scaledHeight > hSize * 3);
 
   // Handles are centered on the field's corner/edge points using transform.
   // This keeps 50% inside the field boundary (always hittable even if the canvas
@@ -384,14 +394,19 @@ export function DraggableField({
       style={{
         left: scaledX,
         top: scaledY,
-        // Text fields use fixed dimensions that match what the generator renders into.
-        // Previously 'max-content'/'auto' — fields looked right in editor but positions
-        // and alignments were wrong in generated certs (wrong click target too).
-        width: scaledWidth,
-        height: scaledHeight,
+        // Image / QR: exact field dimensions — the bounding box IS the content.
+        // Text fields: size to content (max-content/auto) so the box and drag target
+        // always match the visible text regardless of zoom level. Using scaledWidth ×
+        // scaledHeight caused the box to collapse to a few pixels on high-res templates
+        // at low zoom (e.g. 30px field height × 0.2 scale = 6 CSS px — unclickable).
+        // minWidth/minHeight ensure the box is at least the field's stored dimensions
+        // so center/right text alignment stays consistent with the generator output.
+        width: (field.type === 'image' || field.type === 'qr_code') ? scaledWidth : 'max-content',
+        minWidth: (field.type !== 'image' && field.type !== 'qr_code') ? scaledWidth : undefined,
+        height: (field.type === 'image' || field.type === 'qr_code') ? scaledHeight : 'auto',
+        minHeight: (field.type !== 'image' && field.type !== 'qr_code') ? Math.max(scaledHeight, scaledFontSize * 1.4) : undefined,
         transform: field.rotation ? `rotate(${field.rotation}deg)` : undefined,
         transformOrigin: 'center',
-        overflow: 'visible',
         ...(field.type !== 'image' ? {
           fontSize: scaledFontSize,
           fontFamily: field.fontFamily,
@@ -399,16 +414,11 @@ export function DraggableField({
           fontWeight: field.fontWeight,
           fontStyle: field.fontStyle,
           textAlign: field.textAlign,
-          // Padding mirrors the generator's bgPaddingH/V offsets so the editor and
-          // generated certificate show text in the same position within the field box.
-          // Defaults match RightPanel UI defaults (bgPaddingH=8, bgPaddingV=4).
           padding: `${(field.bgPaddingV ?? 4) * scale}px ${(field.bgPaddingH ?? 8) * scale}px`,
           backgroundColor: field.backgroundColor || undefined,
         } : {}),
         display: 'flex',
-        // Always vertically center — the generator positions text at field.y + height/2
-        // (SVG dominant-baseline="middle"), so the editor must match this.
-        alignItems: field.type === 'image' ? 'center' : 'center',
+        alignItems: field.type === 'image' ? 'center' : 'flex-start',
         justifyContent: field.type === 'image' ? 'center' : (field.textAlign === 'center' ? 'center' : field.textAlign === 'right' ? 'flex-end' : 'flex-start'),
         // box-shadow draws right at the element edge with no layout impact.
         // outline with outlineOffset added invisible horizontal gap and was
