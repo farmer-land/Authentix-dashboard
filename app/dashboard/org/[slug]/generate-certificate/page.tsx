@@ -1822,6 +1822,15 @@ export default function GenerateCertificatePage() {
             if (field.imageUrl && !field.imageUrl.startsWith('blob:')) style.imageUrl = field.imageUrl;
           }
 
+          // Text background styling — saved so the generator can apply matching offsets.
+          // bgPaddingH/V always saved (even at defaults) so generator uses the correct value.
+          if (field.type !== 'image' && field.type !== 'qr_code') {
+            style.bgPaddingH = field.bgPaddingH ?? 8;
+            style.bgPaddingV = field.bgPaddingV ?? 4;
+            if (field.backgroundColor) style.backgroundColor = field.backgroundColor;
+            if (field.bgCornerRadius !== undefined) style.bgCornerRadius = field.bgCornerRadius;
+          }
+
           // Calculate width and height - ensure they're positive numbers
           // Provide defaults to ensure fields are always valid
           const width = field.width && field.width > 0 ? field.width : 200;
@@ -2954,6 +2963,11 @@ function mapDbFieldToFrontend(field: any): CertificateField {
     // Image
     ...(s.imageUrl !== undefined && { imageUrl: s.imageUrl }),
     ...(s.cornerRadius !== undefined && { cornerRadius: s.cornerRadius }),
+    // Text background
+    ...(s.bgPaddingH !== undefined && { bgPaddingH: s.bgPaddingH as number }),
+    ...(s.bgPaddingV !== undefined && { bgPaddingV: s.bgPaddingV as number }),
+    ...(s.backgroundColor !== undefined && { backgroundColor: s.backgroundColor as string }),
+    ...(s.bgCornerRadius !== undefined && { bgCornerRadius: s.bgCornerRadius as number }),
   };
 }
 

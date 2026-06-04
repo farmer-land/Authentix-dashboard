@@ -384,10 +384,14 @@ export function DraggableField({
       style={{
         left: scaledX,
         top: scaledY,
-        width: (field.type === 'image' || field.type === 'qr_code') ? scaledWidth : 'max-content',
-        height: (field.type === 'image' || field.type === 'qr_code') ? scaledHeight : 'auto',
+        // Text fields use fixed dimensions that match what the generator renders into.
+        // Previously 'max-content'/'auto' — fields looked right in editor but positions
+        // and alignments were wrong in generated certs (wrong click target too).
+        width: scaledWidth,
+        height: scaledHeight,
         transform: field.rotation ? `rotate(${field.rotation}deg)` : undefined,
         transformOrigin: 'center',
+        overflow: 'visible',
         ...(field.type !== 'image' ? {
           fontSize: scaledFontSize,
           fontFamily: field.fontFamily,
@@ -395,16 +399,16 @@ export function DraggableField({
           fontWeight: field.fontWeight,
           fontStyle: field.fontStyle,
           textAlign: field.textAlign,
-          // +4 px constant on every side so there's always breathing room between
-          // the rendered content and the selection ring, regardless of bgPadding.
-          padding: `${(field.bgPaddingV ?? 4) * scale + 4}px ${(field.bgPaddingH ?? 8) * scale + 4}px`,
+          // Padding mirrors the generator's bgPaddingH/V offsets so the editor and
+          // generated certificate show text in the same position within the field box.
+          // Defaults match RightPanel UI defaults (bgPaddingH=8, bgPaddingV=4).
+          padding: `${(field.bgPaddingV ?? 4) * scale}px ${(field.bgPaddingH ?? 8) * scale}px`,
           backgroundColor: field.backgroundColor || undefined,
         } : {}),
         display: 'flex',
-        alignItems: field.type === 'image' ? 'center' : (
-          field.textVerticalAlign === 'bottom' ? 'flex-end' :
-          field.textVerticalAlign === 'middle' ? 'center' : 'flex-start'
-        ),
+        // Always vertically center — the generator positions text at field.y + height/2
+        // (SVG dominant-baseline="middle"), so the editor must match this.
+        alignItems: field.type === 'image' ? 'center' : 'center',
         justifyContent: field.type === 'image' ? 'center' : (field.textAlign === 'center' ? 'center' : field.textAlign === 'right' ? 'flex-end' : 'flex-start'),
         // box-shadow draws right at the element edge with no layout impact.
         // outline with outlineOffset added invisible horizontal gap and was
