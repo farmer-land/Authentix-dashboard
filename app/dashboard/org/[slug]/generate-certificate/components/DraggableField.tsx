@@ -219,6 +219,12 @@ export function DraggableField({
   const scaledHeight = field.height * scale;
   const scaledFontSize = field.fontSize * scale;
 
+  // The minimum on-screen size for the interactive bounding box so fields are always
+  // grabbable even at low zoom levels (same pattern as Figma's minimum handle area).
+  const MIN_BOX = 20;
+  const visibleW = Math.max(scaledWidth, MIN_BOX);
+  const visibleH = Math.max(scaledHeight, MIN_BOX);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging) {
@@ -305,13 +311,10 @@ export function DraggableField({
     e.preventDefault();
     onDragStart?.();
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    // Read the actual rendered dimensions from the DOM so resize starts from
-    // the visually correct size (max-content text fields are wider than scaledWidth).
-    const rect = fieldRef.current?.getBoundingClientRect();
-    initialDimsRef.current = {
-      width: rect?.width ?? scaledWidth,
-      height: rect?.height ?? scaledHeight,
-    };
+    // Use visibleW/H — the actual displayed box size — so there is zero jump on
+    // the first drag tick. visibleW/H = max(scaledWidth, MIN_BOX) which matches
+    // exactly what is rendered on screen.
+    initialDimsRef.current = { width: visibleW, height: visibleH };
     initialFieldRef.current = { width: field.width, fontSize: field.fontSize, x: field.x, y: field.y };
     setResizeHandle(handle);
   };
@@ -360,12 +363,8 @@ export function DraggableField({
 
   // Scale handle sizes proportionally. Minimum 8px so they're always clickable.
   const hSize = Math.max(8, Math.min(12, Math.round(12 * scale)));
-  // For text fields the actual rendered size (max-content) is larger than scaledWidth/Height,
-  // so always show mid handles — they'll sit on the edges of the visible text box.
-  const isTextField = field.type !== 'image' && field.type !== 'qr_code';
-  const showMidHandles = isTextField
-    ? (scaledFontSize > hSize * 2)
-    : (scaledWidth > hSize * 3 && scaledHeight > hSize * 3);
+  // Show mid-edge handles when the bounding box is large enough to fit them.
+  const showMidHandles = visibleW > hSize * 3 && visibleH > hSize * 3;
 
   // Handles are centered on the field's corner/edge points using transform.
   // This keeps 50% inside the field boundary (always hittable even if the canvas
@@ -390,23 +389,24 @@ export function DraggableField({
         absolute pointer-events-auto group
         ${isSelected ? 'z-50' : 'z-10'}
         ${field.locked ? 'cursor-not-allowed' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}
+        ${!isSelected && !isMultiSelected ? 'hover:outline-[1.5px] hover:outline-dashed hover:outline-primary/40' : ''}
       `}
       style={{
+        // ── Bounding box ───────────────────────────────────────────────────────
+        // The outer div IS the field bounding box — same as Figma/Canva.
+        // width/height = field.width/height scaled to screen pixels.
+        // visibleW/H enforce a 20px minimum so the box is always grabbable even at
+        // low zoom (Figma does the same with its minimum handle interaction area).
+        // overflow: visible lets text spill outside when the box is very tight — the
+        // user zooms in to work precisely, just like in any pro design tool.
         left: scaledX,
         top: scaledY,
-        // Image / QR: exact field dimensions — the bounding box IS the content.
-        // Text fields: size to content (max-content/auto) so the box and drag target
-        // always match the visible text regardless of zoom level. Using scaledWidth ×
-        // scaledHeight caused the box to collapse to a few pixels on high-res templates
-        // at low zoom (e.g. 30px field height × 0.2 scale = 6 CSS px — unclickable).
-        // minWidth/minHeight ensure the box is at least the field's stored dimensions
-        // so center/right text alignment stays consistent with the generator output.
-        width: (field.type === 'image' || field.type === 'qr_code') ? scaledWidth : 'max-content',
-        minWidth: (field.type !== 'image' && field.type !== 'qr_code') ? scaledWidth : undefined,
-        height: (field.type === 'image' || field.type === 'qr_code') ? scaledHeight : 'auto',
-        minHeight: (field.type !== 'image' && field.type !== 'qr_code') ? Math.max(scaledHeight, scaledFontSize * 1.4) : undefined,
+        width: visibleW,
+        height: visibleH,
+        overflow: 'visible',
         transform: field.rotation ? `rotate(${field.rotation}deg)` : undefined,
         transformOrigin: 'center',
+        // ── Text styling ───────────────────────────────────────────────────────
         ...(field.type !== 'image' ? {
           fontSize: scaledFontSize,
           fontFamily: field.fontFamily,
@@ -414,15 +414,18 @@ export function DraggableField({
           fontWeight: field.fontWeight,
           fontStyle: field.fontStyle,
           textAlign: field.textAlign,
+          // bgPaddingH/V are scaled — they represent the inset from the field edge
+          // where text starts, matching the generator's bgPaddingH offset.
           padding: `${(field.bgPaddingV ?? 4) * scale}px ${(field.bgPaddingH ?? 8) * scale}px`,
           backgroundColor: field.backgroundColor || undefined,
         } : {}),
+        // ── Layout ────────────────────────────────────────────────────────────
         display: 'flex',
-        alignItems: field.type === 'image' ? 'center' : 'flex-start',
+        // Center content vertically within the box — matches the generator which
+        // places text at field.y + field.height/2 (SVG dominant-baseline="middle").
+        alignItems: 'center',
         justifyContent: field.type === 'image' ? 'center' : (field.textAlign === 'center' ? 'center' : field.textAlign === 'right' ? 'flex-end' : 'flex-start'),
-        // box-shadow draws right at the element edge with no layout impact.
-        // outline with outlineOffset added invisible horizontal gap and was
-        // clipped by overflow:hidden on ancestor canvas containers.
+        // ── Selection ring ────────────────────────────────────────────────────
         boxShadow: isSelected
           ? '0 0 0 1.5px var(--primary), 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent)'
           : isMultiSelected
