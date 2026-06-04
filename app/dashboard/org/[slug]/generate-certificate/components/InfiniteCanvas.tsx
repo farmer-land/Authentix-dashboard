@@ -307,24 +307,6 @@ export function InfiniteCanvas({
   // Sync panRef so wheel handler (non-React closure) can read latest pan
   useEffect(() => { panRef.current = pan; }, [pan]);
 
-  // ── Position calibration logger (browser console + server terminal) ─────────
-  const serverLog = (label: string, data: unknown) => {
-    console.log(`[Canvas] ${label}`, data);
-    fetch('/api/dev/canvas-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label, data }),
-    }).catch(() => {});
-  };
-
-  // Debounced pan + zoom log (600ms after settling)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      serverLog('Template position', { pan: { x: Math.round(pan.x), y: Math.round(pan.y) }, zoom: `${Math.round(scale * 100)}%` });
-    }, 600);
-    return () => clearTimeout(t);
-  }, [pan, scale]);
-
   // Reset rotation and entrance animation state when a new template is loaded.
   // Without resetting hasFitted, template switches wouldn't replay the grow animation.
   useEffect(() => { setRotation(0); setHasFitted(false); }, [fileUrl]);
@@ -740,7 +722,6 @@ export function InfiniteCanvas({
       origX,
       origY,
     };
-    serverLog('Toolbar drag START', { x: Math.round(origX), y: Math.round(origY), minimized: false });
 
     const onMove = (ev: MouseEvent) => {
       if (!toolbarDragRef.current.dragging) return;
@@ -762,14 +743,6 @@ export function InfiniteCanvas({
       toolbarDragRef.current.dragging = false;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      // Log final position after drag (setToolbarPos is async, read from DOM)
-      if (toolbarRef.current && containerRef.current) {
-        const tb = toolbarRef.current.getBoundingClientRect();
-        const ct = containerRef.current.getBoundingClientRect();
-        const finalX = Math.round(tb.left - ct.left);
-        const finalY = Math.round(tb.top - ct.top);
-        serverLog('Toolbar drag END', { x: finalX, y: finalY, minimized: false });
-      }
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
