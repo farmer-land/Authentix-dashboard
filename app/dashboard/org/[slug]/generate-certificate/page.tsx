@@ -1099,6 +1099,22 @@ export default function GenerateCertificatePage() {
     const templateObj = templatePool.find((t: any) => t.id === session.templateId);
     if (!templateObj) return;
 
+    // Determine target step NOW so we can navigate immediately — the session's saved step
+    // is known before any async work starts, so there's no reason to stay on step 1.
+    const earlyTargetStep: 'design' | 'data' | 'export' =
+      session.currentStep === 'data' ? 'data'
+      : session.currentStep === 'export' ? 'export'
+      : 'design';
+
+    // Navigate immediately so the user leaves step 1 right away (no flash of the
+    // template chooser while the template loads). Show the design overlay for the
+    // design step so the empty canvas is hidden until the template is ready.
+    if (earlyTargetStep === 'design') {
+      setShowDesignOverlay(true);
+      overlayStartRef.current = Date.now();
+    }
+    setCurrentStep(earlyTargetStep);
+
     lastLoadedVersionIdRef.current = null;
     isResumingRef.current = true;
     await handleTemplateSelectSafe(templateObj);
