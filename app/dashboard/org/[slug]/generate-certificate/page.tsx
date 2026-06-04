@@ -154,6 +154,7 @@ export default function GenerateCertificatePage() {
   const [additionalRows, setAdditionalRows] = useState<Record<string, unknown>[]>([]);
   // True when the active template was uploaded without a category — show a soft prompt in design view
   const [templateNeedsCategory, setTemplateNeedsCategory] = useState(false);
+
   // True until the first loadSavedData() completes — prevents step-1 skeleton flash on reload
   const [pageInitializing, setPageInitializing] = useState(true);
   // Set to true by realtime when template table changes while user is away from template chooser
@@ -207,6 +208,9 @@ export default function GenerateCertificatePage() {
 
   // Tracks previous field IDs so we can detect when field composition changes
   const prevFieldIdsRef = useRef<string>('');
+  // Synchronous ref mirror of pendingResumeSession so loadSavedData can check it
+  // without waiting for React to flush the setPendingResumeSession state update.
+  const pendingResumeSessionRef = useRef<typeof pendingResumeSession>(null);
 
   // Set to true when a resumed session's templateVersionId differs from the current DB version,
   // meaning the template image may have changed and field positions could be off.
@@ -294,6 +298,23 @@ export default function GenerateCertificatePage() {
   // Captures the fields that were just loaded by handleTemplateSelect so that
   // handleResumeSession can auto-map without relying on stale React state.
   const loadedFieldsRef = useRef<CertificateField[]>([]);
+
+  // Clears all per-generation flow data. Called whenever the user starts fresh:
+  // template change, re-upload, or "back to step 1". NOT called during session resume.
+  const resetFlowState = () => {
+    setImportedData(null);
+    setFieldMappings([]);
+    setAdditionalCertConfigs([]);
+    setAdditionalRows([]);
+    setSelectedFieldId(null);
+    setHiddenFields(new Set());
+    setVersionChangedWarning(false);
+    historyRef.current = [];
+    futureRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
+    fieldsDirtyRef.current = false;
+  };
 
   // ── Session persistence ────────────────────────────────────────────────────
   // NOTE: We intentionally do NOT clear sessionStorage on unmount.
@@ -735,7 +756,7 @@ export default function GenerateCertificatePage() {
             // sections and returning), always show the banner so the user can choose.
             // localStorage drafts always show the banner regardless of reload.
             const autoResume = isPageReload && restoredFromSessionStorage;
-            setPendingResumeSession({
+            const resumeSession = {
               templateId: templateIdToRestore!,
               templateName: templateObj.title || templateObj.name || 'Previous session',
               fields: sessionFields ?? [],
@@ -749,7 +770,11 @@ export default function GenerateCertificatePage() {
               resolvedTemplates: templatesWithSignedUrls,
               categoryColor: sessionCategoryColor,
               subcategoryColor: sessionSubcategoryColor,
-            });
+            };
+            // Mirror to ref synchronously so loadSavedData's finally block can
+            // check autoResume before React flushes the state update.
+            pendingResumeSessionRef.current = resumeSession;
+            setPendingResumeSession(resumeSession);
           } catch {
             setIsTemplateLoading(false);
             setCurrentStep('template');
@@ -759,7 +784,13 @@ export default function GenerateCertificatePage() {
     } catch (error) {
       console.error('[Generate] Error loading saved data:', error);
       setRecentLoading(false);
-    } finally {
+      setPageInitializing(false);
+    }
+    // NOTE: no setPageInitializing(false) in finally here — the autoResume useEffect
+    // dismisses the spinner itself after the async resume completes. For non-autoResume
+    // paths, pendingResumeSession will be null/non-autoResume so we dismiss below.
+    // This runs synchronously after the try/catch, so autoResume is always set before here.
+    if (!pendingResumeSessionRef.current?.autoResume) {
       setPageInitializing(false);
     }
   };
@@ -836,17 +867,19 @@ export default function GenerateCertificatePage() {
     }
     setIsTemplateLoading(true);
 
-    // Reset state for new template to prevent stale data
-    fieldsDirtyRef.current = false;
+    // Reset all per-flow state so no stale data from a previous generation leaks through.
+    // Skip during session resume — resume restores its own data immediately after.
     setTemplate(null);
     setFields([]);
-    setSelectedFieldId(null);
-    setTemplateVersionId(null);
-    // Clear import data and mappings — old field IDs won't match the new template.
-    // Skip during session resume, which restores compatible state from the same template.
     if (!isResumingRef.current) {
-      setImportedData(null);
-      setFieldMappings([]);
+      resetFlowState();
+    } else {
+      // Even during resume, clear undo/dirty to avoid false dirty-save triggers.
+      fieldsDirtyRef.current = false;
+      historyRef.current = [];
+      futureRef.current = [];
+      setCanUndo(false);
+      setCanRedo(false);
     }
 
     let fileUrl = selectedTemplate.preview_url;
@@ -1056,6 +1089,7 @@ export default function GenerateCertificatePage() {
     if (!pendingResumeSession) return;
     const session = pendingResumeSession;
     setPendingResumeSession(null);
+    pendingResumeSessionRef.current = null;
 
     // Prefer resolvedTemplates (fresh from API, set at session-detect time) to avoid
     // stale-state reads when auto-resuming before the first savedTemplates re-render.
@@ -1189,8 +1223,13 @@ export default function GenerateCertificatePage() {
 
   // Auto-resume: when the session came from a same-tab reload on the data/export step,
   // skip the banner and restore immediately so the user lands back where they were.
+  // Keep pageInitializing=true so the spinner stays up during the async resume — without
+  // this the user briefly sees the step-1 template chooser before the step changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (pendingResumeSession?.autoResume) handleResumeSession(); }, [pendingResumeSession?.autoResume]);
+  useEffect(() => {
+    if (!pendingResumeSession?.autoResume) return;
+    handleResumeSession().finally(() => setPageInitializing(false));
+  }, [pendingResumeSession?.autoResume]);
 
   // Multi-mode: load all selected templates in parallel, navigate to design
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1333,7 +1372,7 @@ export default function GenerateCertificatePage() {
     setTemplate(newTemplate);
     setTemplateFile(file);
     setFields([]);
-    setSelectedFieldId(null);
+    resetFlowState(); // clear any data/mappings from a previous generation
     setCurrentStep('design');
     setTemplateNeedsCategory(!categoryId);
 
@@ -2123,8 +2162,8 @@ export default function GenerateCertificatePage() {
                   selectRequestRef.current++;
                   setTemplate(null);
                   setFields([]);
-                  setSelectedFieldId(null);
                   setPanelReady(false);
+                  resetFlowState();
                   router.replace(pathname);
                 }
                 if (step.id === 'design' && currentStep !== 'design') {
@@ -2891,12 +2930,8 @@ export default function GenerateCertificatePage() {
                   selectRequestRef.current++;
                   setTemplate(null);
                   setFields([]);
-                  setSelectedFieldId(null);
                   setPanelReady(false);
-                  historyRef.current = [];
-                  futureRef.current = [];
-                  setCanUndo(false);
-                  setCanRedo(false);
+                  resetFlowState();
                   router.replace(pathname);
                   setCurrentStep('template');
                 }}

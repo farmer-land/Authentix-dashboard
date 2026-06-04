@@ -228,6 +228,7 @@ export function generateCertificateReducer(
         hiddenFields: new Set(),
         importedData: null,
         fieldMappings: [],
+        additionalCertConfigs: [],
         canUndo: false,
         canRedo: false,
         saveStatus: "idle",
