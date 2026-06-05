@@ -468,12 +468,38 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
   const [deliveryMessages, setDeliveryMessages] = useState<DeliveryMessage[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(true);
+  // User acknowledgement to proceed past the required-placeholder validation.
+  const [ackPlaceholders, setAckPlaceholders] = useState(false);
 
   const selectedIntegration = integrations.find(i => i.id === selectedIntegrationId) ?? null;
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
 
+  // ── Required-placeholder validation ──────────────────────────────────────────
+  // A certificate delivery email should personalise the recipient and link the cert.
+  const REQUIRED_PLACEHOLDERS = ['recipient_name', 'verification_url'];
+  const RECOMMENDED_PLACEHOLDERS = ['organization_name', 'issue_date'];
+  const placeholdersOf = (t: DeliveryTemplate | null | undefined): Set<string> => {
+    if (!t) return new Set();
+    const text = `${t.email_subject ?? ''} ${t.body ?? ''}`;
+    return new Set([...text.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)].map(m => m[1]!.trim()));
+  };
+  // The actual template(s) that will be used in this send.
+  const templatesInUse: DeliveryTemplate[] = (multiCert && useDifferentPerCert)
+    ? Array.from(new Set((certJobs ?? []).map(j => perJobTemplate[j.jobId] || selectedTemplateId)))
+        .map(id => templates.find(t => t.id === id))
+        .filter((t): t is DeliveryTemplate => !!t)
+    : (selectedTemplate ? [selectedTemplate] : []);
+  // A placeholder is "missing" if ANY template in use lacks it.
+  const missingRequired = REQUIRED_PLACEHOLDERS.filter(p => templatesInUse.some(t => !placeholdersOf(t).has(p)));
+  const missingRecommended = RECOMMENDED_PLACEHOLDERS.filter(p => templatesInUse.some(t => !placeholdersOf(t).has(p)));
+  // Subject override (if set) can satisfy a placeholder too — re-check against it.
+  const effectiveMissingRequired = missingRequired.filter(p => !(subjectOverride && subjectOverride.includes(`{{${p}}}`)));
+
   // Wait until the org query resolves so isPlatformOwner is accurate before branching.
   useEffect(() => { if (!orgLoading) check(); }, [orgLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-validate (clear the acknowledgement) whenever the chosen template(s) change.
+  useEffect(() => { setAckPlaceholders(false); }, [selectedTemplateId, useDifferentPerCert, perJobTemplate]);
 
   const check = async () => {
     setStep('checking');
@@ -1121,6 +1147,35 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
               </div>
             )}
 
+            {/* Required-placeholder validation — block until added or acknowledged */}
+            {effectiveMissingRequired.length > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900/50">
+                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-xs font-semibold text-red-800 dark:text-red-300">
+                    {templatesInUse.length > 1 ? 'A template is missing required placeholders' : 'This template is missing required placeholders'}
+                  </p>
+                  <p className="text-[11px] text-red-700 dark:text-red-400">
+                    Recipients need these to personalise and access their certificate:&nbsp;
+                    {effectiveMissingRequired.map(v => (
+                      <code key={v} className="font-mono bg-red-100 dark:bg-red-900/40 px-1 rounded mr-1">{`{{${v}}}`}</code>
+                    ))}
+                  </p>
+                  <label className="flex items-center gap-1.5 text-[11px] text-red-700 dark:text-red-400 cursor-pointer select-none pt-0.5">
+                    <input type="checkbox" checked={ackPlaceholders} onChange={e => setAckPlaceholders(e.target.checked)} className="accent-red-600" />
+                    Send anyway — I understand these will be missing
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Recommended placeholders — soft hint only */}
+            {effectiveMissingRequired.length === 0 && missingRecommended.length > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Tip: add {missingRecommended.map(v => <code key={v} className="font-mono bg-muted px-1 rounded mr-1">{`{{${v}}}`}</code>)} for a more complete email.
+              </p>
+            )}
+
             <p className="text-xs text-muted-foreground">
               Certificates will be attached as PNG images to each email.
             </p>
@@ -1130,7 +1185,11 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
                 <ChevronLeft className="w-4 h-4" />
                 Back
               </Button>
-              <Button onClick={() => setStep('test_email')} className="flex-1 gap-2">
+              <Button
+                onClick={() => setStep('test_email')}
+                disabled={effectiveMissingRequired.length > 0 && !ackPlaceholders}
+                className="flex-1 gap-2"
+              >
                 Continue
                 <ChevronRight className="w-4 h-4" />
               </Button>
