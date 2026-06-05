@@ -374,6 +374,16 @@ const PREVIEW_MOCKS: Record<string, string> = {
   verification_url_encoded: encodeURIComponent("https://verify.authentix.io/abc123"),
 };
 
+/**
+ * Swap external api.qrserver.com QR image URLs for a self-contained inline SVG QR.
+ * Used by previews so the QR always renders without depending on an external request
+ * (which is slow/blocked inside sandboxed preview iframes). Preview-only — real sends
+ * keep the live qrserver URL with the recipient's verification link.
+ */
+export function replaceQrApiWithSvg(html: string): string {
+  return html.replace(/https:\/\/api\.qrserver\.com\/v1\/create-qr-code\/[^"' <]*/g, _QR_SVG);
+}
+
 export function applyPreviewMocks(html: string): string {
   // Step 1: Replace variables inside src= / href= attribute values with raw mock values.
   // This prevents broken img tags when {{certificate_image_url}} or {{verification_url}}

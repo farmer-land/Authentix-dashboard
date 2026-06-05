@@ -36,6 +36,7 @@ import { useOrg } from "@/lib/org";
 import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PREDEFINED_TEMPLATES, type PredefinedTemplate } from "./PREDEFINED_TEMPLATES";
+import { replaceQrApiWithSvg } from "./[id]/EmailBlockBuilder";
 import { cn } from "@/lib/utils";
 
 // ── localStorage helpers ───────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ const BASE_MOCK: Record<string, string> = {
   // Must be a real URL — a bare "#" truncates the QR API's ?data=# as a URL
   // fragment, leaving the QR empty/broken in previews.
   verification_url: "https://verify.digicertificates.in/sample",
+  verification_url_encoded: encodeURIComponent("https://verify.digicertificates.in/sample"),
   unsubscribe_url: "#",
 };
 
@@ -132,7 +134,9 @@ function SampleChooser({
 
   const mockVars = { ...buildPreviewMock(organization), certificate_image_url: certImg };
   const renderedHtml = activeTemplate
-    ? activeTemplate.body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, key: string) => (mockVars as Record<string, string>)[key.trim()] ?? "")
+    ? replaceQrApiWithSvg(
+        activeTemplate.body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, key: string) => (mockVars as Record<string, string>)[key.trim()] ?? ""),
+      )
     : "";
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
   const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>*{box-sizing:border-box}body{margin:0;padding:0;background:#ffffff}</style></head><body>${renderedHtml}</body></html>`;
@@ -413,7 +417,9 @@ function TemplatePreview({ body }: { body: string | null | undefined }) {
   }
 
   const mock = buildPreviewMock(organization);
-  const rendered = body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? "");
+  const rendered = replaceQrApiWithSvg(
+    body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? ""),
+  );
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   // Strip the email's outer grey canvas so the actual content fills the preview.
   const reset = `*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}.ax-wrap{background:#fff!important;padding:0!important}.ax-card{border:none!important;border-radius:0!important;box-shadow:none!important}.ax-foot{display:none!important}`;
