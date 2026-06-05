@@ -420,7 +420,15 @@ function TemplateThumbnail({ id, body }: { id: string; body: string | null | und
   const mock: Record<string, string> = { ...BASE_MOCK, certificate_image_url: CERT_IMAGES[0]! };
   const rendered = body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? "");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>*{box-sizing:border-box}body{margin:0;padding:0;background:#fff}</style></head><body>${rendered}</body></html>`;
+  // Strip the email's outer canvas (grey padding) so the actual content fills the
+  // thumbnail edge-to-edge — otherwise the scaled preview is mostly empty background.
+  const thumbReset = `
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#ffffff;}
+    .ax-wrap{background:#ffffff!important;padding:0!important;}
+    .ax-card{border:none!important;border-radius:0!important;box-shadow:none!important;}
+    .ax-foot{display:none!important;}`;
+  const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>${thumbReset}</style></head><body>${rendered}</body></html>`;
   // Container is h-44 (176px). Render the iframe at 600px wide and scale it down so the
   // top of the email (accent strip + heading + hero) fills the thumbnail.
   const displayH = 176;
@@ -498,8 +506,10 @@ function TemplateCard({
       onClick={onEdit}
     >
       {/* Preview area — real rendered thumbnail of the email */}
-      <div className="h-44 overflow-hidden relative shrink-0 border-b border-border/50 bg-slate-50">
+      <div className="h-44 overflow-hidden relative shrink-0 border-b border-border/50 bg-white">
         <TemplateThumbnail id={template.id} body={template.body} />
+        {/* Soft fade at the bottom so the cropped email blends into the card */}
+        <div className="absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-white to-transparent pointer-events-none" />
         {/* Status badges */}
         <div className="absolute top-2.5 left-2.5 flex gap-1.5">
           {template.is_default && (
