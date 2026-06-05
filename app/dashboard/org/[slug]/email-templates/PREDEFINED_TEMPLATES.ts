@@ -1,6 +1,12 @@
 /**
  * Predefined email templates shipped with Authentix.
  * Users can select one of these as a starting point when creating a new template.
+ *
+ * Design system (2026): all templates share one modern, brand-aligned shell built by
+ * `buildTemplate()` — soft neutral canvas, rounded 20px card, thin accent strip, generous
+ * spacing, pill CTA, and a framed certificate. Every template is light/dark aware: a
+ * `@media (prefers-color-scheme: dark)` block restyles surfaces/text via `.ax-*` classes,
+ * so recipients on dark mode get a true dark email and everyone else gets the light design.
  */
 
 export interface PredefinedTemplate {
@@ -16,540 +22,295 @@ export interface PredefinedTemplate {
   layout: string;
 }
 
+// ── Shared building blocks ──────────────────────────────────────────────────────
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/** Light + dark adaptive style block. Inline styles are the light default; these
+ *  class overrides kick in for recipients whose client reports dark mode. */
+const DARK_STYLE = `<style>
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  @media (prefers-color-scheme: dark) {
+    .ax-wrap   { background:#0b0e13 !important; }
+    .ax-card   { background:#12161d !important; border-color:#252b35 !important; box-shadow:none !important; }
+    .ax-h1     { color:#f4f6f8 !important; }
+    .ax-sub    { color:#aeb7c2 !important; }
+    .ax-text   { color:#c4ccd6 !important; }
+    .ax-muted  { color:#8b94a1 !important; }
+    .ax-foot   { color:#6b7480 !important; }
+    .ax-frame  { background:#0f141b !important; border-color:#252b35 !important; }
+    .ax-chip   { background:#0f141b !important; border-color:#252b35 !important; }
+    .ax-chip-l { color:#8b94a1 !important; }
+    .ax-chip-v { color:#e8edf2 !important; }
+  }
+</style>`;
+
+const preheader = (text: string) =>
+  `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;opacity:0;font-size:1px;line-height:1px;color:#eef1f5;">${text}</div>`;
+
+const certImage = () =>
+  `<div class="ax-frame" style="background:#f5f7fa;border:1px solid #e6e9ef;border-radius:16px;padding:14px;margin:0 0 22px;">
+    <img src="{{certificate_image_url}}" alt="Your certificate" style="display:block;width:100%;border-radius:8px;" />
+  </div>`;
+
+const qrBlock = () =>
+  `<div class="ax-frame" style="background:#f5f7fa;border:1px solid #e6e9ef;border-radius:16px;padding:20px;text-align:center;margin:0 0 22px;">
+    <div style="display:inline-block;background:#ffffff;border-radius:12px;padding:10px;box-shadow:0 2px 8px rgba(15,23,42,.06);">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=132x132&amp;data={{verification_url}}&amp;qzone=1&amp;color=0b0e13&amp;bgcolor=ffffff" width="132" height="132" alt="Scan to verify" style="display:block;border-radius:6px;" />
+    </div>
+    <p class="ax-muted" style="margin:12px 0 0;font-size:12px;color:#8a93a0;">Scan to verify authenticity</p>
+  </div>`;
+
+const chip = (label: string, value: string) =>
+  `<td class="ax-chip" width="50%" style="background:#f5f7fa;border:1px solid #e6e9ef;border-radius:12px;padding:12px 14px;vertical-align:top;">
+    <p class="ax-chip-l" style="margin:0 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8a93a0;">${label}</p>
+    <p class="ax-chip-v" style="margin:0;font-size:14px;font-weight:600;color:#1a1f27;">${value}</p>
+  </td>`;
+
+function detailsTable(details: { label: string; value: string }[]): string {
+  if (!details.length) return '';
+  let rows = '';
+  for (let i = 0; i < details.length; i += 2) {
+    const a = details[i]!;
+    const b = details[i + 1];
+    rows += `<tr>${chip(a.label, a.value)}<td style="width:10px;font-size:0;">&nbsp;</td>${
+      b ? chip(b.label, b.value) : '<td width="50%"></td>'
+    }</tr><tr><td colspan="3" style="height:10px;font-size:0;line-height:10px;">&nbsp;</td></tr>`;
+  }
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin:0 0 6px;">${rows}</table>`;
+}
+
+const cta = (label: string, accent: string, textColor: string) =>
+  `<div style="text-align:center;margin:6px 0 4px;">
+    <a href="{{verification_url}}" style="display:inline-block;background:${accent};color:${textColor};font-size:15px;font-weight:700;padding:14px 32px;border-radius:999px;text-decoration:none;letter-spacing:.2px;box-shadow:0 8px 20px ${accent}3d;">${label}</a>
+  </div>`;
+
+interface BuildOpts {
+  accent: string;
+  ctaText: string;
+  preheader: string;
+  eyebrow?: string;
+  heading: string;
+  subheading?: string;
+  intro?: string;
+  details?: { label: string; value: string }[];
+  showCertImage?: boolean;
+  showQr?: boolean;
+  ctaLabel?: string;
+  footerNote?: string;
+}
+
+/** Assembles a complete, light/dark-aware email body from content options. */
+function buildTemplate(o: BuildOpts): string {
+  return `${DARK_STYLE}
+${preheader(o.preheader)}
+<div class="ax-wrap" style="background:#eef1f5;padding:28px 14px;font-family:${FONT};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;border-collapse:collapse;">
+    <tr><td>
+      <div class="ax-card" style="background:#ffffff;border:1px solid #e6e9ef;border-radius:20px;overflow:hidden;box-shadow:0 12px 40px rgba(15,23,42,.10);">
+        <div style="height:4px;background:${o.accent};"></div>
+        <div style="padding:38px 34px 32px;">
+          ${o.eyebrow ? `<p style="margin:0 0 14px;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:${o.accent};">${o.eyebrow}</p>` : ''}
+          <h1 class="ax-h1" style="margin:0 0 ${o.subheading ? '8' : '18'}px;font-size:27px;line-height:1.22;font-weight:800;letter-spacing:-.5px;color:#0f1722;">${o.heading}</h1>
+          ${o.subheading ? `<p class="ax-sub" style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#55606e;">${o.subheading}</p>` : ''}
+          ${o.intro ? `<p class="ax-text" style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#4b5563;">${o.intro}</p>` : ''}
+          ${detailsTable(o.details ?? [])}
+          ${o.showCertImage ? certImage() : ''}
+          ${o.showQr ? qrBlock() : ''}
+          ${o.ctaLabel ? cta(o.ctaLabel, o.accent, o.ctaText) : ''}
+          ${o.footerNote ? `<p class="ax-muted" style="margin:18px 0 0;font-size:13px;line-height:1.6;text-align:center;color:#8a93a0;">${o.footerNote}</p>` : ''}
+        </div>
+      </div>
+      <p class="ax-foot" style="margin:18px 0 0;text-align:center;font-size:12px;color:#9aa3af;">© {{organization_name}} · Secured by Authentix</p>
+    </td></tr>
+  </table>
+</div>`;
+}
+
+const GREEN = '#3ECF8E';
+const INK = '#04140d'; // high-contrast dark text for use on light accents (green/amber/sky)
+
+// ── Templates ───────────────────────────────────────────────────────────────────
+
 export const PREDEFINED_TEMPLATES: PredefinedTemplate[] = [
   {
     id: "predefined_showcase",
     name: "Course Completion",
-    description: "Clean white design with Authentix green header — certificate takes center stage",
+    description: "Clean, modern, Authentix-green — the certificate takes center stage. Light/dark adaptive.",
     category: "Education",
     email_subject: "🎓 Your Certificate — {{course_name}}",
     previewImage: "/email-templates/certificate-modern.avif",
-    accentColor: "#3ECF8E",
+    accentColor: GREEN,
     layout: "Header + Certificate + CTA",
     variables: ["recipient_name", "course_name", "organization_name", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
-  <div style="background: linear-gradient(135deg, #3ECF8E 0%, #1a9f6a 100%); padding: 44px 32px; text-align: center; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #ffffff; font-size: 30px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.5px;">
-      Congratulations, {{recipient_name}}!
-    </h1>
-    <p style="color: rgba(255,255,255,0.88); font-size: 16px; margin: 0;">You've successfully completed <strong>{{course_name}}</strong></p>
-  </div>
-
-  <div style="padding: 40px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
-    <p style="font-size: 16px; color: #374151; margin: 0 0 16px;">Hi <strong>{{recipient_name}}</strong>,</p>
-
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 12px;">
-      We are delighted to inform you that you have successfully completed <strong>{{course_name}}</strong>
-      with <strong>{{organization_name}}</strong>. Your dedication and hard work throughout this program
-      have been truly commendable.
-    </p>
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 28px;">
-      Your official certificate is ready — download it, share it, and wear it with pride.
-    </p>
-
-    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px 24px; margin: 0 0 28px;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 4px 0;">
-            <p style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Course</p>
-            <p style="font-size: 15px; font-weight: 600; color: #166534; margin: 0;">{{course_name}}</p>
-          </td>
-          <td style="padding: 4px 0; text-align: right;">
-            <p style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Date Issued</p>
-            <p style="font-size: 15px; font-weight: 600; color: #166534; margin: 0;">{{issue_date}}</p>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <div style="margin: 32px 0; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #3ECF8E; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <p style="font-size: 14px; color: #6b7280; text-align: center; margin: 0 0 24px;">
-      🎓 Share your achievement on LinkedIn and inspire others!
-    </p>
-
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0 16px;" />
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: GREEN, ctaText: INK,
+      preheader: "Your certificate for {{course_name}} is ready.",
+      eyebrow: "Certificate of Completion",
+      heading: "Congratulations, {{recipient_name}} 🎉",
+      subheading: "You've successfully completed {{course_name}}.",
+      intro: "Your dedication paid off. Your official certificate from <strong>{{organization_name}}</strong> is ready below — download it, share it, and wear it with pride.",
+      details: [{ label: "Course", value: "{{course_name}}" }, { label: "Issued", value: "{{issue_date}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Certificate",
+      footerNote: "Tip: share your achievement on LinkedIn to inspire others.",
+    }),
   },
-
   {
     id: "predefined_dark_premium",
     name: "Award & Recognition",
-    description: "Bold dark navy design — glowing certificate, high-contrast typography",
+    description: "Premium award styling with a gold accent — high-contrast and celebratory. Light/dark adaptive.",
     category: "Awards",
     email_subject: "🏆 Your Award Certificate — {{award_name}}",
     previewImage: "/email-templates/certificate-premium.avif",
-    accentColor: "#0f172a",
-    layout: "Dark full-bleed + Certificate glow",
+    accentColor: "#f59e0b",
+    layout: "Award header + Certificate + CTA",
     variables: ["recipient_name", "award_name", "organization_name", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; border-radius: 10px; overflow: hidden;">
-  <div style="padding: 52px 32px 32px; text-align: center;">
-    <p style="color: #3ECF8E; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 16px;">{{organization_name}}</p>
-    <h1 style="color: #f8fafc; font-size: 34px; font-weight: 800; margin: 0 0 12px; letter-spacing: -0.5px; line-height: 1.2;">
-      You've earned it,<br />{{recipient_name}}.
-    </h1>
-    <p style="color: #94a3b8; font-size: 16px; margin: 0;">{{award_name}}</p>
-  </div>
-
-  <div style="padding: 0 32px 48px;">
-    <p style="font-size: 15px; color: #cbd5e1; line-height: 1.7; margin: 0 0 12px; text-align: center;">
-      This certificate recognizes your outstanding performance, dedication, and the remarkable
-      impact you have made within <strong style="color:#e2e8f0;">{{organization_name}}</strong>.
-    </p>
-    <p style="font-size: 15px; color: #94a3b8; line-height: 1.7; margin: 0 0 28px; text-align: center;">
-      We are truly proud to honor your achievement with the <strong style="color:#e2e8f0;">{{award_name}}</strong>.
-    </p>
-
-    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px 24px; margin: 0 0 28px;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 4px 0;">
-            <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Award</p>
-            <p style="font-size: 15px; font-weight: 600; color: #e2e8f0; margin: 0;">{{award_name}}</p>
-          </td>
-          <td style="padding: 4px 0; text-align: right;">
-            <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Issued On</p>
-            <p style="font-size: 15px; font-weight: 600; color: #e2e8f0; margin: 0;">{{issue_date}}</p>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <div style="margin: 32px 0; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 0 0 2px #3ECF8E, 0 8px 32px rgba(62,207,142,0.15);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=3ECF8E&amp;bgcolor=1e293b&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #3ECF8E; color: #0f172a; font-size: 15px; font-weight: 700; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <p style="font-size: 14px; color: #64748b; text-align: center; margin: 0 0 28px;">
-      🎓 Share your achievement on LinkedIn and inspire your network!
-    </p>
-
-    <hr style="border: none; border-top: 1px solid #1e293b; margin: 0 0 20px;" />
-    <p style="font-size: 12px; color: #475569; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: "#f59e0b", ctaText: "#1a1205",
+      preheader: "You've received the {{award_name}} award.",
+      eyebrow: "Award & Recognition",
+      heading: "{{recipient_name}}, you earned it 🏆",
+      subheading: "Awarded the {{award_name}} by {{organization_name}}.",
+      intro: "In recognition of outstanding achievement, <strong>{{organization_name}}</strong> is proud to present you with this award. Your official certificate is below.",
+      details: [{ label: "Award", value: "{{award_name}}" }, { label: "Issued", value: "{{issue_date}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Award",
+    }),
   },
-
   {
     id: "predefined_minimal_focus",
     name: "Simple & Clean",
-    description: "Ultra clean, near-chromeless — the certificate is the entire hero",
+    description: "Ultra clean — the certificate is the hero with minimal copy. Light/dark adaptive.",
     category: "General",
     email_subject: "Your Certificate from {{organization_name}}",
     previewImage: "/email-templates/certificate-classic.avif",
-    accentColor: "#f8fafc",
+    accentColor: GREEN,
     layout: "Certificate centered",
     variables: ["recipient_name", "organization_name", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 40px 24px;">
-  <p style="font-size: 16px; color: #374151; margin: 0 0 10px;">Hi <strong>{{recipient_name}}</strong>,</p>
-  <p style="font-size: 15px; color: #6b7280; line-height: 1.7; margin: 0 0 8px;">
-    Your certificate from <strong>{{organization_name}}</strong> is ready. We're glad to have you
-    as part of our community and hope this recognition means as much to you as your contribution
-    has meant to us.
-  </p>
-  <p style="font-size: 15px; color: #6b7280; line-height: 1.7; margin: 0 0 28px;">
-    Issued on <strong>{{issue_date}}</strong>.
-  </p>
-
-  <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 8px 4px; margin: 0 0 28px;">
-    <table style="width: 100%; border-collapse: collapse;">
-      <tr>
-        <td style="padding: 12px 16px;">
-          <p style="font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Issued by</p>
-          <p style="font-size: 14px; font-weight: 600; color: #374151; margin: 0;">{{organization_name}}</p>
-        </td>
-        <td style="padding: 12px 16px; text-align: right;">
-          <p style="font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Date</p>
-          <p style="font-size: 14px; font-weight: 600; color: #374151; margin: 0;">{{issue_date}}</p>
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  <div style="margin: 32px 0; text-align: center;">
-    <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-  </div>
-
-  <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-    <a href="{{verification_url}}" style="display: inline-block;">
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-    </a>
-    <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-  </div>
-
-  <div style="text-align: center; margin: 28px 0;">
-    <a href="{{verification_url}}" style="display: inline-block; background: #111827; color: #ffffff; font-size: 14px; font-weight: 600; padding: 12px 28px; border-radius: 8px; text-decoration: none;">
-      View &amp; Verify Certificate
-    </a>
-  </div>
-
-  <p style="font-size: 14px; color: #9ca3af; text-align: center; margin: 0 0 24px;">
-    🎓 Share your achievement on LinkedIn and inspire others!
-  </p>
-
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0 16px;" />
-  <p style="font-size: 12px; color: #d1d5db; margin: 0; text-align: center;">
-    © {{organization_name}} · Powered by Authentix
-  </p>
-</div>`,
+    body: buildTemplate({
+      accent: GREEN, ctaText: INK,
+      preheader: "Your certificate from {{organization_name}} is ready.",
+      heading: "Hi {{recipient_name}}, your certificate is ready",
+      intro: "Issued by <strong>{{organization_name}}</strong> on {{issue_date}}. It's attached and shown below — verify it anytime with the button.",
+      showCertImage: true,
+      ctaLabel: "View & Verify Certificate",
+    }),
   },
-
   {
     id: "predefined_golden_celebration",
     name: "Event Attendance",
-    description: "Amber/gold gradient header, celebratory tone, LinkedIn share CTA",
+    description: "Warm gold accent with a celebratory tone and share prompt. Light/dark adaptive.",
     category: "Events",
     email_subject: "🎉 Your Certificate — {{event_name}}",
     previewImage: "/email-templates/certificate-elegant.avif",
     accentColor: "#f59e0b",
     layout: "Gradient header + Certificate frame + Share CTA",
     variables: ["recipient_name", "event_name", "event_date", "organization_name", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
-  <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 48px 32px; text-align: center; border-radius: 10px 10px 0 0;">
-    <div style="font-size: 44px; margin-bottom: 14px;">🎉</div>
-    <h1 style="color: #ffffff; font-size: 30px; font-weight: 800; margin: 0 0 10px; letter-spacing: -0.5px;">
-      Congratulations, {{recipient_name}}!
-    </h1>
-    <p style="color: rgba(255,255,255,0.9); font-size: 15px; margin: 0;">{{event_name}} · {{event_date}}</p>
-  </div>
-
-  <div style="padding: 40px 32px; border: 1px solid #fde68a; border-top: none; border-radius: 0 0 10px 10px;">
-    <p style="font-size: 16px; color: #374151; margin: 0 0 16px;">Dear <strong>{{recipient_name}}</strong>,</p>
-
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 12px;">
-      It was an absolute pleasure having you join us at <strong>{{event_name}}</strong> on <strong>{{event_date}}</strong>.
-      Your presence and participation made the event truly special, and we hope it was
-      as memorable for you as it was for us.
-    </p>
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 28px;">
-      As a token of appreciation, here is your official certificate of attendance from
-      <strong>{{organization_name}}</strong>:
-    </p>
-
-    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 20px 24px; margin: 0 0 28px;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 4px 0;">
-            <p style="font-size: 12px; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Event</p>
-            <p style="font-size: 15px; font-weight: 600; color: #78350f; margin: 0;">{{event_name}}</p>
-          </td>
-          <td style="padding: 4px 0; text-align: right;">
-            <p style="font-size: 12px; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Date</p>
-            <p style="font-size: 15px; font-weight: 600; color: #78350f; margin: 0;">{{event_date}}</p>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <div style="margin: 32px 0; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;border:3px solid #f59e0b;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #f59e0b; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <div style="text-align: center; margin: 12px 0 24px;">
-      <a href="https://www.linkedin.com/shareArticle" style="display: inline-block; background: #0077b5; color: #ffffff; font-size: 14px; font-weight: 600; padding: 11px 24px; border-radius: 8px; text-decoration: none;">
-        🎓 Share your achievement on LinkedIn
-      </a>
-    </div>
-
-    <hr style="border: none; border-top: 1px solid #fde68a; margin: 24px 0 16px;" />
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: "#f59e0b", ctaText: "#1a1205",
+      preheader: "Your certificate for {{event_name}} is here.",
+      eyebrow: "Certificate of Participation",
+      heading: "Thanks for joining us, {{recipient_name}} 🎉",
+      subheading: "Your participation in {{event_name}} is confirmed.",
+      intro: "It was great to have you at <strong>{{event_name}}</strong>. Here's your official certificate of participation.",
+      details: [{ label: "Event", value: "{{event_name}}" }, { label: "Date", value: "{{event_date}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Certificate",
+      footerNote: "🎉 Share the moment on LinkedIn!",
+    }),
   },
-
   {
     id: "predefined_corporate_blue",
     name: "Corporate Training",
-    description: "Navy header, formal tone, org name top-right — built for enterprise",
+    description: "Formal navy accent for enterprise training completion. Light/dark adaptive.",
     category: "Corporate",
     email_subject: "Training Completion Certificate — {{training_name}}",
     previewImage: "/email-templates/certificate-classic.avif",
     accentColor: "#1e3a5f",
     layout: "Navy header + Certificate card + Formal footer",
     variables: ["recipient_name", "training_name", "completion_date", "organization_name", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
-  <div style="background: #1e3a5f; padding: 28px 32px; border-radius: 10px 10px 0 0;">
-    <table style="width: 100%; border-collapse: collapse;">
-      <tr>
-        <td>
-          <p style="color: #7dd3fc; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin: 0;">Training Certificate</p>
-        </td>
-        <td style="text-align: right;">
-          <p style="color: #93c5fd; font-size: 13px; font-weight: 600; margin: 0;">{{organization_name}}</p>
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  <div style="padding: 40px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
-    <p style="font-size: 16px; color: #374151; margin: 0 0 20px;">Dear <strong>{{recipient_name}}</strong>,</p>
-
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 12px;">
-      This is to formally confirm that you have successfully completed the training program
-      administered by <strong>{{organization_name}}</strong>. Your commitment to professional
-      development is an asset to your team and organization.
-    </p>
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 28px;">
-      Please find your official certificate of completion below. This certificate may be used
-      to demonstrate your competency and dedication.
-    </p>
-
-    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px 24px; margin: 0 0 28px;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
-            <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin: 0 0 2px;">Training Program</p>
-            <p style="font-size: 16px; font-weight: 700; color: #1e3a5f; margin: 0;">{{training_name}}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 0 0;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td>
-                  <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin: 0 0 2px;">Completed On</p>
-                  <p style="font-size: 14px; font-weight: 600; color: #1e3a5f; margin: 0;">{{completion_date}}</p>
-                </td>
-                <td style="text-align: right;">
-                  <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin: 0 0 2px;">Certificate Issued</p>
-                  <p style="font-size: 14px; font-weight: 600; color: #1e3a5f; margin: 0;">{{issue_date}}</p>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <div style="margin: 32px 0; text-align: center; background: #f8fafc; padding: 24px; border-radius: 8px;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #1e3a5f; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <p style="font-size: 14px; color: #6b7280; text-align: center; margin: 0 0 24px;">
-      🎓 Share your achievement on LinkedIn and let your network know!
-    </p>
-
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 16px;" />
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: "#1e3a5f", ctaText: "#ffffff",
+      preheader: "Your training completion certificate is ready.",
+      eyebrow: "Certificate of Training",
+      heading: "Training completed, {{recipient_name}}",
+      subheading: "{{training_name}} · {{organization_name}}",
+      intro: "This confirms successful completion of <strong>{{training_name}}</strong>. Your official certificate is provided below for your records.",
+      details: [{ label: "Training", value: "{{training_name}}" }, { label: "Completed", value: "{{completion_date}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Certificate",
+    }),
   },
-
   {
     id: "predefined_gradient_modern",
     name: "Membership Welcome",
-    description: "Purple-to-indigo gradient bg, floating white card — sleek membership email",
+    description: "Sleek indigo accent welcoming new members. Light/dark adaptive.",
     category: "Membership",
     email_subject: "Welcome — Your {{membership_type}} Certificate",
     previewImage: "/email-templates/certificate-premium.avif",
     accentColor: "#7c3aed",
-    layout: "Gradient bg + Floating white card + Verify CTA",
+    layout: "Accent header + Membership card + Verify CTA",
     variables: ["recipient_name", "membership_type", "organization_name", "valid_until", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(160deg, #6d28d9 0%, #4f46e5 100%); padding: 40px 24px; border-radius: 12px;">
-  <div style="background: #ffffff; border-radius: 12px; padding: 40px 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);">
-    <p style="font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #7c3aed; margin: 0 0 12px;">{{organization_name}}</p>
-    <h1 style="font-size: 28px; font-weight: 700; color: #1e1b4b; margin: 0 0 10px; letter-spacing: -0.5px;">
-      Welcome, {{recipient_name}}!
-    </h1>
-    <p style="font-size: 15px; color: #6b7280; line-height: 1.7; margin: 0 0 10px;">
-      Your <strong style="color: #4f46e5;">{{membership_type}}</strong> membership with
-      <strong style="color: #4f46e5;">{{organization_name}}</strong> has been confirmed.
-      We're thrilled to have you as a valued member of our community.
-    </p>
-    <p style="font-size: 15px; color: #6b7280; line-height: 1.7; margin: 0 0 28px;">
-      Your membership certificate is ready below — keep it as proof of your status
-      and enjoy all the benefits that come with it through <strong>{{valid_until}}</strong>.
-    </p>
-
-    <div style="display: flex; gap: 16px; margin: 0 0 28px;">
-      <div style="flex: 1; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 14px 16px;">
-        <p style="font-size: 11px; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Membership</p>
-        <p style="font-size: 14px; font-weight: 700; color: #1e1b4b; margin: 0;">{{membership_type}}</p>
-      </div>
-      <div style="flex: 1; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 14px 16px;">
-        <p style="font-size: 11px; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Valid Until</p>
-        <p style="font-size: 14px; font-weight: 700; color: #1e1b4b; margin: 0;">{{valid_until}}</p>
-      </div>
-      <div style="flex: 1; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 14px 16px;">
-        <p style="font-size: 11px; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Issued On</p>
-        <p style="font-size: 14px; font-weight: 700; color: #1e1b4b; margin: 0;">{{issue_date}}</p>
-      </div>
-    </div>
-
-    <div style="margin: 32px 0; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="{{verification_url}}" style="display: inline-block; background: linear-gradient(135deg, #6d28d9, #4f46e5); color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <p style="font-size: 14px; color: #6b7280; text-align: center; margin: 0 0 24px;">
-      🎓 Share your achievement on LinkedIn and let your network know!
-    </p>
-
-    <hr style="border: none; border-top: 1px solid #ede9fe; margin: 0 0 16px;" />
-    <p style="font-size: 12px; color: #a78bfa; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: "#7c3aed", ctaText: "#ffffff",
+      preheader: "Welcome — your {{membership_type}} membership is active.",
+      eyebrow: "Membership Confirmed",
+      heading: "Welcome aboard, {{recipient_name}}",
+      subheading: "You're now a {{membership_type}} member of {{organization_name}}.",
+      intro: "We're thrilled to have you. Your membership is active through <strong>{{valid_until}}</strong>, and your official certificate is below.",
+      details: [{ label: "Membership", value: "{{membership_type}}" }, { label: "Valid Until", value: "{{valid_until}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View My Certificate",
+    }),
   },
-
-  // ── 6 new templates ──────────────────────────────────────────────────────────
-
   {
     id: "predefined_name_only",
     name: "Name Only (Minimal)",
-    description: "Bare-bones template — just the recipient name and org. Perfect for simple acknowledgements",
+    description: "Bare-bones — recipient name, certificate, and a verify link. Light/dark adaptive.",
     category: "General",
     email_subject: "Your Certificate from {{organization_name}}",
     previewImage: "/email-templates/certificate-classic.avif",
-    accentColor: "#6b7280",
+    accentColor: GREEN,
     layout: "Single column minimal",
     variables: ["recipient_name", "organization_name", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-  <div style="padding: 48px 40px 32px; text-align: center;">
-    <p style="font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #9ca3af; margin: 0 0 20px;">{{organization_name}}</p>
-    <h1 style="font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 8px; letter-spacing: -0.5px;">
-      {{recipient_name}}
-    </h1>
-    <p style="font-size: 15px; color: #6b7280; margin: 0 0 36px;">Your certificate is ready.</p>
-
-    <div style="margin: 0 0 32px; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.08);" />
-    </div>
-
-    <a href="{{verification_url}}" style="display: inline-block; background: #111827; color: #ffffff; font-size: 14px; font-weight: 600; padding: 12px 28px; border-radius: 8px; text-decoration: none; margin: 0 0 32px;">
-      View &amp; Verify
-    </a>
-  </div>
-
-  <div style="padding: 16px 40px; border-top: 1px solid #f3f4f6; text-align: center;">
-    <p style="font-size: 11px; color: #d1d5db; margin: 0;">© {{organization_name}} · Powered by Authentix</p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: GREEN, ctaText: INK,
+      preheader: "Your certificate from {{organization_name}}.",
+      heading: "Congratulations, {{recipient_name}}",
+      intro: "Your certificate from <strong>{{organization_name}}</strong> is ready. View it below and verify anytime.",
+      showCertImage: true,
+      ctaLabel: "View & Verify Certificate",
+    }),
   },
-
   {
     id: "predefined_qr_focus",
     name: "QR Verify Focus",
-    description: "QR code front and center — designed for recipients who verify on mobile",
+    description: "QR code front and center — built for mobile verification. Light/dark adaptive.",
     category: "General",
     email_subject: "Verify Your Certificate — {{organization_name}}",
     previewImage: "/email-templates/certificate-modern.avif",
-    accentColor: "#3ECF8E",
+    accentColor: GREEN,
     layout: "QR centered + minimal text",
     variables: ["recipient_name", "organization_name", "issue_date", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-  <div style="background: #f0fdf4; padding: 36px 40px 28px; text-align: center;">
-    <p style="font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #3ECF8E; margin: 0 0 12px;">{{organization_name}}</p>
-    <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 6px;">Hi {{recipient_name}},</h1>
-    <p style="font-size: 15px; color: #4b5563; margin: 0;">Your certificate has been issued on <strong>{{issue_date}}</strong>.</p>
-  </div>
-
-  <div style="padding: 40px; text-align: center;">
-    <p style="font-size: 14px; color: #6b7280; margin: 0 0 24px;">Scan the QR code below to instantly verify your certificate on any device.</p>
-
-    <div style="display: inline-block; background: #f9fafb; border: 2px solid #3ECF8E; border-radius: 16px; padding: 24px;">
-      <a href="{{verification_url}}" style="display: block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 180px; height: 180px; display: block; border-radius: 4px;" />
-      </a>
-    </div>
-
-    <p style="font-size: 12px; color: #9ca3af; margin: 16px 0 32px;">or click the button below</p>
-
-    <a href="{{verification_url}}" style="display: inline-block; background: #3ECF8E; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 36px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-      Open Certificate
-    </a>
-  </div>
-
-  <div style="padding: 16px 40px; border-top: 1px solid #e5e7eb; text-align: center;">
-    <p style="font-size: 11px; color: #d1d5db; margin: 0;">© {{organization_name}} · Powered by Authentix</p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: GREEN, ctaText: INK,
+      preheader: "Scan to verify your certificate from {{organization_name}}.",
+      eyebrow: "Verify Your Certificate",
+      heading: "Hi {{recipient_name}}, scan to verify",
+      intro: "Your certificate from <strong>{{organization_name}}</strong> was issued on {{issue_date}}. Scan the code below — or tap the button — to view and verify it.",
+      showQr: true,
+      ctaLabel: "Open Verification Page",
+    }),
   },
-
   {
     id: "predefined_all_fields",
     name: "All Fields",
-    description: "Uses every available variable — great starting point when you need full control",
+    description: "Uses every available variable — a full-control starting point. Light/dark adaptive.",
     category: "General",
     email_subject: "🎓 Your Certificate — {{course_name}} · {{organization_name}}",
     previewImage: "/email-templates/certificate-modern.avif",
-    accentColor: "#3ECF8E",
+    accentColor: GREEN,
     layout: "Full details + Certificate + QR + CTA",
     variables: [
       "recipient_name", "organization_name", "course_name", "issue_date",
@@ -557,285 +318,91 @@ export const PREDEFINED_TEMPLATES: PredefinedTemplate[] = [
       "membership_type", "valid_until", "completion_date",
       "certificate_image_url", "verification_url",
     ],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-  <div style="background: linear-gradient(135deg, #3ECF8E 0%, #1a9f6a 100%); padding: 44px 32px; text-align: center;">
-    <h1 style="color: #ffffff; font-size: 28px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.5px;">
-      Congratulations, {{recipient_name}}!
-    </h1>
-    <p style="color: rgba(255,255,255,0.88); font-size: 15px; margin: 0;">{{organization_name}}</p>
-  </div>
-
-  <div style="padding: 40px 32px 32px;">
-    <p style="font-size: 16px; color: #374151; margin: 0 0 16px;">Hi <strong>{{recipient_name}}</strong>,</p>
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 28px;">
-      This certificate captures the full record of your achievement. All relevant details are included below for your reference.
-    </p>
-
-    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px 24px; margin: 0 0 28px;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 6px 12px 6px 0; vertical-align: top; width: 50%;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Course</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{course_name}}</p>
-          </td>
-          <td style="padding: 6px 0 6px 12px; vertical-align: top; width: 50%;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Issue Date</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{issue_date}}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 12px 6px 0; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Event</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{event_name}}</p>
-          </td>
-          <td style="padding: 6px 0 6px 12px; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Event Date</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{event_date}}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 12px 6px 0; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Award</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{award_name}}</p>
-          </td>
-          <td style="padding: 6px 0 6px 12px; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Training</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{training_name}}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 12px 6px 0; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Membership</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{membership_type}}</p>
-          </td>
-          <td style="padding: 6px 0 6px 12px; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Valid Until</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{valid_until}}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 12px 6px 0; vertical-align: top;">
-            <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Completed On</p>
-            <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0;">{{completion_date}}</p>
-          </td>
-          <td style="padding: 6px 0 6px 12px; vertical-align: top;"></td>
-        </tr>
-      </table>
-    </div>
-
-    <div style="margin: 32px 0; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #3ECF8E; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <p style="font-size: 14px; color: #6b7280; text-align: center; margin: 0 0 24px;">
-      🎓 Share your achievement on LinkedIn and inspire others!
-    </p>
-
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0 16px;" />
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: GREEN, ctaText: INK,
+      preheader: "Your certificate and full achievement details.",
+      eyebrow: "Certificate",
+      heading: "Congratulations, {{recipient_name}}",
+      subheading: "Issued by {{organization_name}}",
+      intro: "Here's the complete record of your achievement. All available details are listed below for your reference.",
+      details: [
+        { label: "Course", value: "{{course_name}}" },
+        { label: "Issue Date", value: "{{issue_date}}" },
+        { label: "Event", value: "{{event_name}}" },
+        { label: "Event Date", value: "{{event_date}}" },
+        { label: "Award", value: "{{award_name}}" },
+        { label: "Training", value: "{{training_name}}" },
+        { label: "Membership", value: "{{membership_type}}" },
+        { label: "Valid Until", value: "{{valid_until}}" },
+      ],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Certificate",
+    }),
   },
-
   {
     id: "predefined_dark_slate",
     name: "Dark Slate",
-    description: "Full dark slate background throughout — modern, sleek, high contrast",
+    description: "Sleek, high-contrast styling with a brand-green CTA. Light/dark adaptive.",
     category: "General",
     email_subject: "Your Certificate is Ready — {{organization_name}}",
     previewImage: "/email-templates/certificate-premium.avif",
     accentColor: "#1e293b",
-    layout: "Dark full-bleed + Certificate + CTA",
+    layout: "Minimal + Certificate + CTA",
     variables: ["recipient_name", "organization_name", "course_name", "issue_date", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; border-radius: 10px; overflow: hidden;">
-  <div style="padding: 48px 32px 24px; text-align: center; border-bottom: 1px solid #1e293b;">
-    <p style="font-size: 11px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #3ECF8E; margin: 0 0 20px;">{{organization_name}}</p>
-    <h1 style="color: #f1f5f9; font-size: 32px; font-weight: 800; margin: 0 0 10px; letter-spacing: -0.5px; line-height: 1.2;">
-      {{recipient_name}}
-    </h1>
-    <p style="color: #94a3b8; font-size: 15px; margin: 0;">has completed <strong style="color: #e2e8f0;">{{course_name}}</strong></p>
-  </div>
-
-  <div style="padding: 32px 32px 0;">
-    <p style="font-size: 15px; color: #94a3b8; line-height: 1.7; margin: 0 0 28px; text-align: center;">
-      Your certificate was issued on <strong style="color: #e2e8f0;">{{issue_date}}</strong>. Download it, share it, and keep it as a record of your achievement.
-    </p>
-
-    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px 20px; margin: 0 0 28px; display: flex; align-items: center; justify-content: space-between;">
-      <div>
-        <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Course</p>
-        <p style="font-size: 15px; font-weight: 600; color: #e2e8f0; margin: 0;">{{course_name}}</p>
-      </div>
-      <div style="text-align: right;">
-        <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px;">Issued</p>
-        <p style="font-size: 15px; font-weight: 600; color: #e2e8f0; margin: 0;">{{issue_date}}</p>
-      </div>
-    </div>
-  </div>
-
-  <div style="padding: 0 32px 32px; text-align: center;">
-    <div style="margin: 0 0 32px;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 0 0 1px #334155, 0 8px 32px rgba(0,0,0,0.4);" />
-    </div>
-
-    <div style="margin: 0 0 24px; padding: 20px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; text-align: center;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=e2e8f0&amp;bgcolor=1e293b&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #475569; margin: 8px 0 0;">Scan to verify authenticity</p>
-    </div>
-
-    <a href="{{verification_url}}" style="display: inline-block; background: #3ECF8E; color: #0f172a; font-size: 15px; font-weight: 700; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px; margin: 0 0 28px;">
-      View &amp; Verify Certificate
-    </a>
-
-    <p style="font-size: 14px; color: #475569; text-align: center; margin: 0 0 28px;">
-      🎓 Share your achievement on LinkedIn!
-    </p>
-
-    <hr style="border: none; border-top: 1px solid #1e293b; margin: 0 0 20px;" />
-    <p style="font-size: 12px; color: #334155; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: GREEN, ctaText: INK,
+      preheader: "Your certificate from {{organization_name}} is ready.",
+      eyebrow: "{{organization_name}}",
+      heading: "{{recipient_name}}",
+      subheading: "has completed {{course_name}}",
+      intro: "Your certificate was issued on <strong>{{issue_date}}</strong>. Download it, share it, and keep it as a record of your achievement.",
+      details: [{ label: "Course", value: "{{course_name}}" }, { label: "Issued", value: "{{issue_date}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Certificate",
+    }),
   },
-
   {
     id: "predefined_event_attendance_v2",
     name: "Event Certificate",
-    description: "Clean event-focused layout with event name and date as primary fields",
+    description: "Clean event-focused layout with a sky accent. Light/dark adaptive.",
     category: "Events",
     email_subject: "Certificate of Attendance — {{event_name}}",
     previewImage: "/email-templates/certificate-elegant.avif",
     accentColor: "#0ea5e9",
-    layout: "Sky blue header + Event details + Certificate",
+    layout: "Sky header + Event details + Certificate",
     variables: ["recipient_name", "event_name", "event_date", "organization_name", "certificate_image_url", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-  <div style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); padding: 44px 32px; text-align: center;">
-    <p style="font-size: 11px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: rgba(255,255,255,0.75); margin: 0 0 16px;">Certificate of Attendance</p>
-    <h1 style="color: #ffffff; font-size: 28px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.5px;">
-      {{recipient_name}}
-    </h1>
-    <p style="color: rgba(255,255,255,0.88); font-size: 15px; margin: 0;">attended <strong>{{event_name}}</strong></p>
-  </div>
-
-  <div style="padding: 36px 32px;">
-    <p style="font-size: 15px; color: #374151; margin: 0 0 24px;">
-      Dear <strong>{{recipient_name}}</strong>, thank you for attending <strong>{{event_name}}</strong>. Please find your official certificate of attendance below.
-    </p>
-
-    <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 20px 24px; margin: 0 0 28px;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 4px 0;">
-            <p style="font-size: 12px; color: #075985; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Event</p>
-            <p style="font-size: 15px; font-weight: 600; color: #0c4a6e; margin: 0;">{{event_name}}</p>
-          </td>
-          <td style="padding: 4px 0; text-align: right;">
-            <p style="font-size: 12px; color: #075985; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Date</p>
-            <p style="font-size: 15px; font-weight: 600; color: #0c4a6e; margin: 0;">{{event_date}}</p>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="2" style="padding: 12px 0 0;">
-            <p style="font-size: 12px; color: #075985; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 2px;">Organized by</p>
-            <p style="font-size: 15px; font-weight: 600; color: #0c4a6e; margin: 0;">{{organization_name}}</p>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <div style="margin: 0 0 28px; text-align: center;">
-      <img src="{{certificate_image_url}}" alt="Your Certificate" style="max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.10);" />
-    </div>
-
-    <div style="text-align: center; margin: 0 32px 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to verify certificate authenticity</p>
-    </div>
-
-    <div style="text-align: center; margin: 0 0 28px;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #0ea5e9; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View &amp; Verify Certificate
-      </a>
-    </div>
-
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 16px;" />
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: "#0ea5e9", ctaText: "#ffffff",
+      preheader: "Your certificate of attendance for {{event_name}}.",
+      eyebrow: "Certificate of Attendance",
+      heading: "Thank you for attending, {{recipient_name}}",
+      subheading: "{{event_name}} · organized by {{organization_name}}",
+      intro: "Thank you for attending <strong>{{event_name}}</strong>. Please find your official certificate of attendance below.",
+      details: [{ label: "Event", value: "{{event_name}}" }, { label: "Date", value: "{{event_date}}" }],
+      showCertImage: true, showQr: true,
+      ctaLabel: "View & Verify Certificate",
+    }),
   },
-
   {
     id: "predefined_welcome_member",
     name: "Welcome Member",
-    description: "Warm, minimal welcome email for new members — no certificate image, just membership confirmation",
+    description: "Warm, minimal welcome for new members — membership confirmation, no certificate image. Light/dark adaptive.",
     category: "Membership",
     email_subject: "Welcome to {{organization_name}}, {{recipient_name}}!",
     previewImage: "/email-templates/certificate-premium.avif",
     accentColor: "#10b981",
     layout: "Warm welcome + Membership badge + Verify CTA",
     variables: ["recipient_name", "organization_name", "membership_type", "valid_until", "verification_url"],
-    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-  <div style="background: #ecfdf5; padding: 48px 40px 36px; text-align: center; border-bottom: 1px solid #d1fae5;">
-    <div style="width: 64px; height: 64px; background: #10b981; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-      <span style="font-size: 28px; line-height: 1;">✓</span>
-    </div>
-    <h1 style="font-size: 28px; font-weight: 700; color: #064e3b; margin: 0 0 8px; letter-spacing: -0.5px;">
-      Welcome, {{recipient_name}}!
-    </h1>
-    <p style="font-size: 15px; color: #065f46; margin: 0;">You are now a member of <strong>{{organization_name}}</strong>.</p>
-  </div>
-
-  <div style="padding: 36px 40px;">
-    <p style="font-size: 15px; color: #4b5563; line-height: 1.7; margin: 0 0 28px;">
-      We're thrilled to welcome you as a <strong>{{membership_type}}</strong> member. Your membership is active and valid through <strong>{{valid_until}}</strong>. Your official membership certificate has been issued and is accessible via the link below.
-    </p>
-
-    <div style="background: #f0fdf4; border: 2px solid #6ee7b7; border-radius: 12px; padding: 24px; margin: 0 0 28px; text-align: center;">
-      <p style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 6px;">Your Membership</p>
-      <p style="font-size: 24px; font-weight: 800; color: #064e3b; margin: 0 0 4px;">{{membership_type}}</p>
-      <p style="font-size: 13px; color: #6b7280; margin: 0;">Valid through <strong style="color: #065f46;">{{valid_until}}</strong></p>
-    </div>
-
-    <div style="text-align: center; margin: 0 0 28px; padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-      <a href="{{verification_url}}" style="display: inline-block;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&amp;color=000000&amp;bgcolor=f9fafb&amp;data={{verification_url}}&amp;qzone=1" alt="Scan to verify" style="width: 120px; height: 120px; display: inline-block; border-radius: 4px;" />
-      </a>
-      <p style="font-size: 12px; color: #9ca3af; margin: 8px 0 0;">Scan QR to view your membership certificate</p>
-    </div>
-
-    <div style="text-align: center; margin: 0 0 28px;">
-      <a href="{{verification_url}}" style="display: inline-block; background: #10b981; color: #ffffff; font-size: 15px; font-weight: 600; padding: 13px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.2px;">
-        View My Certificate
-      </a>
-    </div>
-
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 16px;" />
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">
-      © {{organization_name}} · Powered by Authentix
-    </p>
-  </div>
-</div>`,
+    body: buildTemplate({
+      accent: "#10b981", ctaText: INK,
+      preheader: "Welcome to {{organization_name}} — your membership is active.",
+      eyebrow: "Membership Confirmed",
+      heading: "Welcome, {{recipient_name}} ✓",
+      subheading: "You're now a member of {{organization_name}}.",
+      intro: "We're thrilled to welcome you as a <strong>{{membership_type}}</strong> member. Your membership is active and valid through <strong>{{valid_until}}</strong>.",
+      details: [{ label: "Membership", value: "{{membership_type}}" }, { label: "Valid Until", value: "{{valid_until}}" }],
+      showQr: true,
+      ctaLabel: "View My Certificate",
+    }),
   },
 ];
