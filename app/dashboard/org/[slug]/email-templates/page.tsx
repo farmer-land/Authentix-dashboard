@@ -421,9 +421,9 @@ function TemplateThumbnail({ id, body }: { id: string; body: string | null | und
   const rendered = body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? "");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>*{box-sizing:border-box}body{margin:0;padding:0;background:#fff}</style></head><body>${rendered}</body></html>`;
-  // Container is h-28 (112px). Render the iframe at 600px wide and scale it down so the
-  // top of the email (accent strip + heading) fills the thumbnail.
-  const displayH = 112;
+  // Container is h-44 (176px). Render the iframe at 600px wide and scale it down so the
+  // top of the email (accent strip + heading + hero) fills the thumbnail.
+  const displayH = 176;
   return (
     <div ref={ref} className="w-full h-full overflow-hidden bg-white relative">
       <iframe
@@ -498,7 +498,7 @@ function TemplateCard({
       onClick={onEdit}
     >
       {/* Preview area — real rendered thumbnail of the email */}
-      <div className="h-28 overflow-hidden relative shrink-0 border-b border-border/50">
+      <div className="h-44 overflow-hidden relative shrink-0 border-b border-border/50 bg-slate-50">
         <TemplateThumbnail id={template.id} body={template.body} />
         {/* Status badges */}
         <div className="absolute top-2.5 left-2.5 flex gap-1.5">
@@ -736,7 +736,7 @@ export default function EmailTemplatesPage() {
 
       {/* Templates content */}
       {loading ? (
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
             <div key={i} className="rounded-2xl border bg-card overflow-hidden animate-pulse">
               <div className="h-28 bg-muted" />
@@ -786,10 +786,10 @@ export default function EmailTemplatesPage() {
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <CheckCircle2 className="w-4 h-4 text-[#3ECF8E]" />
-                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Saved Templates</h2>
+                <h2 className="text-sm font-semibold text-foreground">Saved Templates</h2>
                 <span className="text-xs text-muted-foreground">({savedTemplates.length})</span>
               </div>
-              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {savedTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
@@ -812,11 +812,11 @@ export default function EmailTemplatesPage() {
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-4 h-4 text-amber-500" />
-                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Continue Working</h2>
+                <h2 className="text-sm font-semibold text-foreground">Continue Working</h2>
                 <span className="text-xs text-muted-foreground">({draftTemplates.length})</span>
                 <span className="text-[10px] text-muted-foreground/50 ml-1">— auto-saved, not yet published</span>
               </div>
-              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {draftTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
