@@ -29,7 +29,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useOrg } from '@/lib/org';
 import { useJobNotifications } from '@/lib/notifications/job-notifications';
-import { downloadFileFromUrl } from '@/lib/utils/download';
+import { downloadFileFromUrl, certificateFileName } from '@/lib/utils/download';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1240,7 +1240,7 @@ function CertPreviewCard({
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${cert.certificate_number}.png`;
+      a.download = certificateFileName(cert);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

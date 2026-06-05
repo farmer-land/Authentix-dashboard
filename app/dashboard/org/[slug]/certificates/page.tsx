@@ -49,7 +49,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
-import { downloadFileFromUrl } from "@/lib/utils/download";
+import { downloadFileFromUrl, certificateFileName } from "@/lib/utils/download";
 
 interface FilterState {
   search: string;
@@ -139,7 +139,7 @@ export default function CertificatesPage() {
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = `${certificate.certificate_number}.png`;
+      a.download = certificateFileName(certificate);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

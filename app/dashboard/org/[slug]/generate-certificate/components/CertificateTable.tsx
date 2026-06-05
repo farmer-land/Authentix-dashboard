@@ -19,7 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { downloadFileFromUrl } from '@/lib/utils/download';
+import { downloadFileFromUrl, certificateFileName } from '@/lib/utils/download';
 
 export interface GeneratedCertificate {
   id: string;
@@ -147,7 +147,7 @@ export function CertificateTable({
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = `${cert.certificate_number}.png`;
+      a.download = certificateFileName(cert);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

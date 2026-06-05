@@ -21,3 +21,22 @@ export async function downloadFileFromUrl(url: string, filename: string): Promis
   document.body.removeChild(a);
   URL.revokeObjectURL(objectUrl);
 }
+
+/**
+ * Build a human-friendly, unique certificate download filename:
+ *   "{Recipient Name}-{certificate_number}.{ext}"
+ * Falls back gracefully when the name or number is missing, and sanitizes
+ * characters that are invalid in filenames. The certificate number keeps the
+ * name unique even when two recipients share the same name.
+ */
+export function certificateFileName(
+  cert: { recipient_name?: string | null; certificate_number?: string | null },
+  ext = "png",
+): string {
+  const clean = (s: string) =>
+    s.trim().replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, " ").trim().replace(/ /g, "_");
+  const namePart = clean(cert.recipient_name ?? "") || "Certificate";
+  const numPart = clean(cert.certificate_number ?? "");
+  const base = numPart ? `${namePart}-${numPart}` : namePart;
+  return `${base}.${ext}`;
+}
