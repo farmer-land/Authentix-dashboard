@@ -34,6 +34,7 @@ import {
   useDuplicateDeliveryTemplate,
 } from "@/lib/hooks/queries/delivery";
 import { useOrg } from "@/lib/org";
+import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PREDEFINED_TEMPLATES, type PredefinedTemplate } from "./PREDEFINED_TEMPLATES";
 import { cn } from "@/lib/utils";
@@ -82,8 +83,23 @@ const BASE_MOCK: Record<string, string> = {
   membership_type: "Gold Member",
   valid_until: "December 31, 2026",
   completion_date: "March 22, 2026",
-  verification_url: "#",
+  // Must be a real URL — a bare "#" truncates the QR API's ?data=# as a URL
+  // fragment, leaving the QR empty/broken in previews.
+  verification_url: "https://verify.digicertificates.in/sample",
 };
+
+/**
+ * Preview variables — overlay real organization info (name, logo) on top of the
+ * mock data so previews reflect the actual org instead of the placeholder academy.
+ */
+function buildPreviewMock(org?: { name?: string | null; logo_url?: string | null } | null): Record<string, string> {
+  return {
+    ...BASE_MOCK,
+    certificate_image_url: CERT_IMAGES[0]!,
+    ...(org?.name ? { organization_name: org.name } : {}),
+    ...(org?.logo_url ? { organization_logo: org.logo_url } : {}),
+  };
+}
 
 // ── SampleChooser ─────────────────────────────────────────────────────────────
 
@@ -96,6 +112,7 @@ function SampleChooser({
   purpose: "certificate" | "broadcast";
   onUse: (t: PredefinedTemplate) => void;
 }) {
+  const { organization } = useOrganization();
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
   const [activeIdx, setActiveIdx] = useState(0);
   const [certImg, setCertImg] = useState(CERT_IMAGES[0]);
@@ -113,7 +130,7 @@ function SampleChooser({
   const prev = () => setActiveIdx(i => (i - 1 + filteredTemplates.length) % filteredTemplates.length);
   const next = () => setActiveIdx(i => (i + 1) % filteredTemplates.length);
 
-  const mockVars = { ...BASE_MOCK, certificate_image_url: certImg };
+  const mockVars = { ...buildPreviewMock(organization), certificate_image_url: certImg };
   const renderedHtml = activeTemplate
     ? activeTemplate.body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, key: string) => (mockVars as Record<string, string>)[key.trim()] ?? "")
     : "";
@@ -372,6 +389,7 @@ function NameDialog({
  */
 function TemplatePreview({ body }: { body: string | null | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { organization } = useOrganization();
   const [scale, setScale] = useState(0.5);
 
   useEffect(() => {
@@ -394,7 +412,7 @@ function TemplatePreview({ body }: { body: string | null | undefined }) {
     );
   }
 
-  const mock: Record<string, string> = { ...BASE_MOCK, certificate_image_url: CERT_IMAGES[0]! };
+  const mock = buildPreviewMock(organization);
   const rendered = body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? "");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   // Strip the email's outer grey canvas so the actual content fills the preview.
@@ -690,7 +708,7 @@ export default function EmailTemplatesPage() {
 
       {/* Templates content */}
       {loading ? (
-        <div className="grid gap-5 justify-center [grid-template-columns:repeat(auto-fill,minmax(260px,300px))]">
+        <div className="grid gap-5 justify-center grid-cols-[repeat(auto-fill,minmax(260px,300px))]">
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
             <div key={i} className="rounded-2xl border bg-card overflow-hidden animate-pulse">
               <div className="h-52 bg-muted" />
@@ -739,7 +757,7 @@ export default function EmailTemplatesPage() {
                 <h2 className="text-sm font-semibold text-foreground">Saved Templates</h2>
                 <span className="text-xs text-muted-foreground">({savedTemplates.length})</span>
               </div>
-              <div className="grid gap-5 justify-center [grid-template-columns:repeat(auto-fill,minmax(260px,300px))]">
+              <div className="grid gap-5 justify-center grid-cols-[repeat(auto-fill,minmax(260px,300px))]">
                 {savedTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
@@ -766,7 +784,7 @@ export default function EmailTemplatesPage() {
                 <span className="text-xs text-muted-foreground">({draftTemplates.length})</span>
                 <span className="text-[10px] text-muted-foreground/50 ml-1">— auto-saved, not yet published</span>
               </div>
-              <div className="grid gap-5 justify-center [grid-template-columns:repeat(auto-fill,minmax(260px,300px))]">
+              <div className="grid gap-5 justify-center grid-cols-[repeat(auto-fill,minmax(260px,300px))]">
                 {draftTemplates.map(template => (
                   <TemplateCard
                     key={template.id}
