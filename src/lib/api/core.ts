@@ -157,31 +157,56 @@ export async function apiRequest<T>(
   const isLongRunningOperation =
     endpoint.includes("/certificates/generate") ||
     endpoint.includes("/certificates/generation-jobs");
-  const timeoutDuration = isLongRunningOperation ? 300000 : 10000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+  // 20s (was 10s) absorbs backend cold-starts without falsely timing out reads.
+  const timeoutDuration = isLongRunningOperation ? 300000 : 20000;
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...options,
-      headers,
-      credentials: "include",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new ApiError("TIMEOUT", "Request timed out. Please try again.", { url, endpoint });
+  // Reads (GET/HEAD) are safe to retry on transient failures — network drop, timeout,
+  // or a cold-backend 502/503/504. This makes the whole app resilient to cold starts:
+  // one blip no longer surfaces as lost data / a crash. Writes are never retried here.
+  const method = (options.method ?? "GET").toUpperCase();
+  const isIdempotent = method === "GET" || method === "HEAD";
+  const maxAttempts = isIdempotent ? 3 : 1;
+
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "include",
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      // Retry idempotent reads on gateway/cold-start errors.
+      if (isIdempotent && [502, 503, 504].includes(response.status) && attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      break;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const isLast = attempt >= maxAttempts - 1;
+      if (isIdempotent && !isLast) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new ApiError("TIMEOUT", "Request timed out. Please try again.", { url, endpoint });
+      }
+      const errorMessage = error instanceof Error ? error.message : "Network error";
+      logger.error("API network error", { url, endpoint, errorMessage });
+      throw new ApiError(
+        "NETWORK_ERROR",
+        "Failed to connect to server. Please check your connection.",
+        { url, endpoint },
+      );
     }
-    const errorMessage = error instanceof Error ? error.message : "Network error";
-    logger.error("API network error", { url, endpoint, errorMessage });
-    throw new ApiError(
-      "NETWORK_ERROR",
-      "Failed to connect to server. Please check your connection.",
-      { url, endpoint },
-    );
+  }
+  // Unreachable in practice (loop either returns a response or throws), but satisfies TS.
+  if (!response) {
+    throw new ApiError("NETWORK_ERROR", "Failed to connect to server. Please check your connection.", { url, endpoint });
   }
 
   if (response.status === 204) {
