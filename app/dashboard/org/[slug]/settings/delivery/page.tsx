@@ -528,6 +528,8 @@ export default function EmailDeliverySettingsPage() {
   // Only the parent-owner org may use the Authentix default sender. For everyone else we
   // never surface our domain email — they must connect their own integration.
   const isPlatformOwner = !!organization?.is_platform_owner;
+  // Owner-only: reveal the collapsed "send from your own domain" card on demand.
+  const [ownDomainOpen, setOwnDomainOpen] = useState(false);
   const {
     loading,
     integrations,
@@ -674,6 +676,12 @@ export default function EmailDeliverySettingsPage() {
   const senderState: "platform-default" | "connected" | "needs-setup" =
     usingPlatformDefault ? "platform-default" : hasActiveIntegration ? "connected" : "needs-setup";
 
+  // For the platform owner with no custom integration, "send from your own domain" is pure
+  // opt-in — collapse it behind a small toggle so the page isn't cluttered with a setup
+  // prompt for something they already have. Everyone else needs the card visible.
+  const collapseOwnDomain = isPlatformOwner && !hasActiveIntegration;
+  const showIntegrationsCard = !collapseOwnDomain || ownDomainOpen;
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
@@ -763,7 +771,27 @@ export default function EmailDeliverySettingsPage() {
         </div>
       )}
 
+      {/* ── Send from your own domain — collapsed for the platform owner (opt-in) ── */}
+      {collapseOwnDomain && !ownDomainOpen && (
+        <button
+          onClick={() => setOwnDomainOpen(true)}
+          className="w-full flex items-center justify-between rounded-xl border border-dashed bg-muted/20 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <Server className="w-4 h-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Send from your own domain</p>
+              <p className="text-xs text-muted-foreground">Optional — you already send from the Authentix addresses above.</p>
+            </div>
+          </div>
+          <span className="text-xs font-medium text-[#3ECF8E] flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> Add
+          </span>
+        </button>
+      )}
+
       {/* ── Your Email Integrations ─────────────────────────────────────────── */}
+      {showIntegrationsCard && (
       <Card className={hasActiveIntegration ? "border-[#3ECF8E]/40 shadow-sm" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -896,6 +924,7 @@ export default function EmailDeliverySettingsPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* ── Sender addresses (purpose senders) — pick one at send time ── */}
       {(hasActiveIntegration || isPlatformOwner) && <SendersCard />}

@@ -269,7 +269,12 @@ export function UsageCard() {
                 <div className="space-y-1.5">
                   {resendRows.map((r, i) => {
                     const to = Array.isArray(r.to) ? r.to.join(", ") : (r.to ?? "—");
-                    const when = r.created_at ? new Date(r.created_at).toLocaleString() : "";
+                    // Resend returns e.g. "2026-06-05 18:25:20.563037+00" — normalise to ISO
+                    // (space→T, trim microseconds) so Date parses reliably across browsers.
+                    const rawWhen = r.created_at ?? "";
+                    const iso = rawWhen.replace(" ", "T").replace(/(\.\d{3})\d+/, "$1");
+                    const parsed = iso ? new Date(iso) : null;
+                    const when = parsed && !isNaN(parsed.getTime()) ? parsed.toLocaleString() : "";
                     const isOpen = expandedId === r.id;
                     const isScheduled = r.last_event === "scheduled";
                     const atts = r.id ? rowAttachments[r.id] : undefined;
