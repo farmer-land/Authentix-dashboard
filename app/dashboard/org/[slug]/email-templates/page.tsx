@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -366,94 +366,6 @@ function NameDialog({
 
 // ── Template card ─────────────────────────────────────────────────────────────
 
-const CARD_GRADIENTS: [string, string][] = [
-  ["#6366f1", "#8b5cf6"],   // indigo → violet
-  ["#0ea5e9", "#06b6d4"],   // sky → cyan
-  ["#10b981", "#14b8a6"],   // emerald → teal
-  ["#f59e0b", "#f97316"],   // amber → orange
-  ["#ec4899", "#f43f5e"],   // pink → rose
-  ["#3b82f6", "#6366f1"],   // blue → indigo
-  ["#22c55e", "#10b981"],   // green → emerald
-  ["#a855f7", "#ec4899"],   // purple → pink
-  ["#64748b", "#475569"],   // slate
-  ["#f97316", "#ef4444"],   // orange → red
-];
-
-function cardGradient(id: string): [string, string] {
-  const hash = id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return CARD_GRADIENTS[hash % CARD_GRADIENTS.length]!;
-}
-
-function TemplateGradientTile({ id }: { id: string }) {
-  const [from, to] = cardGradient(id);
-  return (
-    <div
-      className="w-full h-full flex items-center justify-center"
-      style={{ background: `linear-gradient(135deg, ${from} 0%, ${to} 100%)` }}
-    >
-      <Mail className="w-7 h-7 text-white/60" />
-    </div>
-  );
-}
-
-/**
- * Live thumbnail of an email template — renders the actual body (with sample data)
- * in a scaled-down iframe so each card shows the real design, like the certificate
- * template picker. Falls back to a gradient tile when there's no body.
- */
-function TemplateThumbnail({ id, body }: { id: string; body: string | null | undefined }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.46);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => { const w = el.clientWidth; if (w) setScale(w / 600); };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  if (!body || !body.trim()) return <TemplateGradientTile id={id} />;
-
-  const mock: Record<string, string> = { ...BASE_MOCK, certificate_image_url: CERT_IMAGES[0]! };
-  const rendered = body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? "");
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  // Strip the email's outer canvas (grey padding) so the actual content fills the
-  // thumbnail edge-to-edge — otherwise the scaled preview is mostly empty background.
-  const thumbReset = `
-    *{box-sizing:border-box}
-    html,body{margin:0;padding:0;background:#ffffff;}
-    .ax-wrap{background:#ffffff!important;padding:0!important;}
-    .ax-card{border:none!important;border-radius:0!important;box-shadow:none!important;}
-    .ax-foot{display:none!important;}`;
-  const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>${thumbReset}</style></head><body>${rendered}</body></html>`;
-  // Container is h-44 (176px). Render the iframe at 600px wide and scale it down so the
-  // top of the email (accent strip + heading + hero) fills the thumbnail.
-  const displayH = 176;
-  return (
-    <div ref={ref} className="w-full h-full overflow-hidden bg-white relative">
-      <iframe
-        key={id}
-        srcDoc={srcDoc}
-        title="Template preview"
-        scrolling="no"
-        tabIndex={-1}
-        sandbox="allow-same-origin"
-        style={{
-          width: 600,
-          height: displayH / scale,
-          border: "none",
-          transform: `scale(${scale})`,
-          transformOrigin: "top left",
-          pointerEvents: "none",
-        }}
-      />
-    </div>
-  );
-}
-
 function TemplateCard({
   template,
   isDraft,
@@ -483,6 +395,22 @@ function TemplateCard({
     [...((template.body ?? "").matchAll(/\{\{(\s*[\w.]+\s*)\}\}/g))].map(m => m[1]!.trim())
   )].slice(0, 4);
 
+  // Accent color — read the template's own top-strip colour, fallback to brand green.
+  const accent = (template.body ?? "").match(/height:\s*4px;\s*background:\s*([^;"']+)/i)?.[1]?.trim() || "#3ECF8E";
+
+  // Plain-text snippet of the email body (tags stripped, variables filled with sample data).
+  const snippet = (() => {
+    let s = (template.body ?? "")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => BASE_MOCK[k.trim()] ?? "")
+      .replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/&[a-z]+;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    // Drop a leading "Certificate of …" eyebrow duplicate if it repeats the name
+    return s.slice(0, 150);
+  })();
+
   const updatedAt = new Date(template.updated_at);
   const now = new Date();
   const diffMs = now.getTime() - updatedAt.getTime();
@@ -505,63 +433,72 @@ function TemplateCard({
       )}
       onClick={onEdit}
     >
-      {/* Preview area — real rendered thumbnail of the email */}
-      <div className="h-44 overflow-hidden relative shrink-0 border-b border-border/50 bg-white">
-        <TemplateThumbnail id={template.id} body={template.body} />
-        {/* Soft fade at the bottom so the cropped email blends into the card */}
-        <div className="absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-white to-transparent pointer-events-none" />
+      {/* Accent header — brand/template colour with an envelope + mock recipient line */}
+      <div className="relative shrink-0 px-4 pt-4 pb-3" style={{ background: accent }}>
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Mail className="w-3.5 h-3.5 text-white" />
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-white/85">Email</span>
+        </div>
+        <p className="mt-2.5 text-sm font-semibold text-white leading-snug line-clamp-2">{cleanSubject}</p>
+
         {/* Status badges */}
-        <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+        <div className="absolute top-3 right-3 flex gap-1.5">
           {template.is_default && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#3ECF8E]/15 text-[#3ECF8E] border border-[#3ECF8E]/30">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/20 text-white">
               <CheckCircle2 className="w-2.5 h-2.5" /> Default
             </span>
           )}
           {isDraft && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/20 text-white">
               <Clock className="w-2.5 h-2.5" /> Draft
             </span>
           )}
           {!template.is_active && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-black/20 text-white">
               Inactive
             </span>
           )}
         </div>
-        {/* Actions menu — top right, visible on hover */}
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-7 h-7 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 flex items-center justify-center hover:bg-background transition-colors">
-                <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={onEdit}>
-                <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit template
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onSendCampaign}>
-                <Send className="w-3.5 h-3.5 mr-2" /> Send as campaign
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDuplicate} disabled={duplicating}>
-                {duplicating ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Copy className="w-3.5 h-3.5 mr-2" />}
-                Duplicate
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDelete} disabled={deleting} className="text-destructive focus:text-destructive">
-                {deleting ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
       {/* Info */}
-      <div className="flex flex-col flex-1 px-4 pt-3 pb-4 gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate leading-snug">{template.name}</p>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">{cleanSubject}</p>
+      <div className="flex flex-col flex-1 px-4 pt-3 pb-3.5 gap-2.5">
+        <div className="min-w-0 flex items-start justify-between gap-2">
+          <p className="text-sm font-semibold leading-snug line-clamp-1">{template.name}</p>
+          {/* Actions menu */}
+          <div onClick={e => e.stopPropagation()} className="shrink-0 -mr-1 -mt-0.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={onEdit}>
+                  <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit template
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onSendCampaign}>
+                  <Send className="w-3.5 h-3.5 mr-2" /> Send as campaign
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDuplicate} disabled={duplicating}>
+                  {duplicating ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Copy className="w-3.5 h-3.5 mr-2" />}
+                  Duplicate
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDelete} disabled={deleting} className="text-destructive focus:text-destructive">
+                  {deleting ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+
+        {/* Body snippet */}
+        {snippet && (
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{snippet}</p>
+        )}
 
         {/* Variables */}
         {vars.length > 0 && (
@@ -575,13 +512,14 @@ function TemplateCard({
         )}
 
         {/* Footer row */}
-        <div className="flex items-center justify-between mt-auto pt-1" onClick={e => e.stopPropagation()}>
-          <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+        <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-border/40" onClick={e => e.stopPropagation()}>
+          <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
             <Clock className="w-2.5 h-2.5" /> {timeAgo}
           </span>
           <Button
             size="sm"
-            className="h-7 text-xs gap-1.5 bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
+            variant="ghost"
+            className="h-7 text-xs gap-1.5 text-[#3ECF8E] hover:text-[#34b87a] hover:bg-[#3ECF8E]/10"
             onClick={onEdit}
           >
             <Edit2 className="w-3 h-3" /> Edit
@@ -749,10 +687,11 @@ export default function EmailTemplatesPage() {
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
             <div key={i} className="rounded-2xl border bg-card overflow-hidden animate-pulse">
-              <div className="h-28 bg-muted" />
+              <div className="h-18 bg-muted" />
               <div className="px-4 pt-3 pb-4 space-y-2">
-                <div className="h-3 bg-muted rounded w-3/4" />
-                <div className="h-2.5 bg-muted/60 rounded w-1/2" />
+                <div className="h-3 bg-muted rounded w-2/3" />
+                <div className="h-2.5 bg-muted/60 rounded w-full" />
+                <div className="h-2.5 bg-muted/60 rounded w-4/5" />
                 <div className="flex gap-1 pt-1">
                   <div className="h-4 w-16 bg-muted/50 rounded" />
                   <div className="h-4 w-12 bg-muted/50 rounded" />
