@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -396,6 +396,56 @@ function TemplateGradientTile({ id }: { id: string }) {
   );
 }
 
+/**
+ * Live thumbnail of an email template — renders the actual body (with sample data)
+ * in a scaled-down iframe so each card shows the real design, like the certificate
+ * template picker. Falls back to a gradient tile when there's no body.
+ */
+function TemplateThumbnail({ id, body }: { id: string; body: string | null | undefined }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.46);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => { const w = el.clientWidth; if (w) setScale(w / 600); };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  if (!body || !body.trim()) return <TemplateGradientTile id={id} />;
+
+  const mock: Record<string, string> = { ...BASE_MOCK, certificate_image_url: CERT_IMAGES[0]! };
+  const rendered = body.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_, k: string) => mock[k.trim()] ?? "");
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${origin}/"><style>*{box-sizing:border-box}body{margin:0;padding:0;background:#fff}</style></head><body>${rendered}</body></html>`;
+  // Container is h-28 (112px). Render the iframe at 600px wide and scale it down so the
+  // top of the email (accent strip + heading) fills the thumbnail.
+  const displayH = 112;
+  return (
+    <div ref={ref} className="w-full h-full overflow-hidden bg-white relative">
+      <iframe
+        key={id}
+        srcDoc={srcDoc}
+        title="Template preview"
+        scrolling="no"
+        tabIndex={-1}
+        sandbox="allow-same-origin"
+        style={{
+          width: 600,
+          height: displayH / scale,
+          border: "none",
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          pointerEvents: "none",
+        }}
+      />
+    </div>
+  );
+}
+
 function TemplateCard({
   template,
   isDraft,
@@ -447,9 +497,9 @@ function TemplateCard({
       )}
       onClick={onEdit}
     >
-      {/* Preview area */}
-      <div className="h-28 overflow-hidden relative shrink-0">
-        <TemplateGradientTile id={template.id} />
+      {/* Preview area — real rendered thumbnail of the email */}
+      <div className="h-28 overflow-hidden relative shrink-0 border-b border-border/50">
+        <TemplateThumbnail id={template.id} body={template.body} />
         {/* Status badges */}
         <div className="absolute top-2.5 left-2.5 flex gap-1.5">
           {template.is_default && (
