@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Save, Loader2, AlertCircle, Monitor, Smartphone,
+  Save, Loader2, AlertCircle, CheckCircle2, Monitor, Smartphone,
   SendHorizonal, Send, FlaskConical,
   SlidersHorizontal, X, Layers,
   Eye, EyeOff, Undo2, Redo2, Keyboard, Megaphone,
@@ -751,6 +751,59 @@ export default function EmailTemplateEditorPage() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Certificate placeholder checklist — real-time validation */}
+                    {(() => {
+                      const present = new Set(variables);
+                      const REQUIRED = [
+                        { v: "recipient_name", label: "Recipient name" },
+                        { v: "verification_url", label: "Certificate link" },
+                      ];
+                      const RECOMMENDED = [
+                        { v: "organization_name", label: "Organization" },
+                        { v: "issue_date", label: "Issue date" },
+                      ];
+                      const missingReq = REQUIRED.filter(r => !present.has(r.v));
+                      return (
+                        <div className="space-y-2 rounded-md border border-border bg-muted/20 p-2.5">
+                          <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            Certificate placeholders
+                          </p>
+                          <div className="space-y-1">
+                            {[...REQUIRED.map(r => ({ ...r, required: true })), ...RECOMMENDED.map(r => ({ ...r, required: false }))].map(({ v, label, required }) => {
+                              const ok = present.has(v);
+                              return (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onMouseDown={e => { e.preventDefault(); if (!ok) insertSubjectVar(v); }}
+                                  className="w-full flex items-center gap-1.5 text-left group/ph"
+                                  title={ok ? `${label} is included` : `Add {{${v}}} — click to insert in subject`}
+                                >
+                                  {ok ? (
+                                    <CheckCircle2 className="w-3 h-3 text-[#3ECF8E] shrink-0" />
+                                  ) : (
+                                    <AlertCircle className={`w-3 h-3 shrink-0 ${required ? "text-red-500" : "text-amber-500"}`} />
+                                  )}
+                                  <span className={`text-[10px] ${ok ? "text-muted-foreground line-through/0" : "text-foreground"}`}>
+                                    {label}
+                                    {!required && <span className="text-muted-foreground/50"> (optional)</span>}
+                                  </span>
+                                  <code className="ml-auto font-mono text-[9px] text-muted-foreground/60">{`{{${v}}}`}</code>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {missingReq.length > 0 ? (
+                            <p className="text-[9px] text-red-500/90">
+                              Add the required placeholders so recipients can be personalised and reach their certificate.
+                            </p>
+                          ) : (
+                            <p className="text-[9px] text-[#3ECF8E]">All required placeholders are included. ✓</p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Preheader Text */}
                     <div className="space-y-2">
