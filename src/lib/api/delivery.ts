@@ -465,8 +465,8 @@ export const deliveryApi = {
 
   // ── Usage metering ────────────────────────────────────────────────────────────
 
-  getUsage: async (): Promise<{ month: number; today: number; monthStart: string; dayStart: string }> => {
-    const response = await apiRequest<{ month: number; today: number; monthStart: string; dayStart: string }>(
+  getUsage: async (): Promise<{ month: number; today: number; last30: number; total: number; monthStart: string; dayStart: string; last30Start: string }> => {
+    const response = await apiRequest<{ month: number; today: number; last30: number; total: number; monthStart: string; dayStart: string; last30Start: string }>(
       "/delivery/usage",
     );
     return response.data!;

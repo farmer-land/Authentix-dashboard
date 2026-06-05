@@ -57,7 +57,7 @@ export function UsageCard() {
   const planKey = `email_plan:${slug}`;
   const customKey = `email_plan_custom:${slug}`;
 
-  const [usage, setUsage] = useState<{ month: number; today: number } | null>(null);
+  const [usage, setUsage] = useState<{ month: number; today: number; last30: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<string>("free");
@@ -75,7 +75,7 @@ export function UsageCard() {
     setError(null);
     try {
       const u = await api.delivery.getUsage();
-      setUsage({ month: u.month, today: u.today });
+      setUsage({ month: u.month, today: u.today, last30: u.last30, total: u.total });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load usage");
     } finally {
@@ -150,10 +150,23 @@ export function UsageCard() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Exact counts — always visible, so the card is never misleadingly empty
+                just because the monthly quota window reset at the 1st. */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">Total sent (all time)</p>
+                <p className="text-lg font-semibold tabular-nums">{fmt(usage.total)}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">Last 30 days</p>
+                <p className="text-lg font-semibold tabular-nums">{fmt(usage.last30)}</p>
+              </div>
+            </div>
+
             <Bar
               used={usage.month}
               limit={monthLimit}
-              label="This month"
+              label="This billing month"
               sub={monthLimit === 0 ? "Set a monthly limit to track headroom." : undefined}
             />
             {dayLimit > 0 && <Bar used={usage.today} limit={dayLimit} label="Today" />}
