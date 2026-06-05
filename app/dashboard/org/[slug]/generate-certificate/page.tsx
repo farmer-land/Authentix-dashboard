@@ -893,13 +893,30 @@ export default function GenerateCertificatePage() {
 
     let fileUrl = selectedTemplate.preview_url;
 
-    // Get editor data to access source_file with mime_type
-    let editorData = null;
+    // Get editor data to access source_file with mime_type.
+    // Retry a few times: editorData carries the template FIELDS — if this fetch fails
+    // (transient network / backend cold start) the template would load with zero fields.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let editorData: any = null;
+    let editorDataFailed = false;
     if (selectedTemplate.id) {
+      for (let attempt = 0; attempt < 3 && !editorData; attempt++) {
+        try {
+          editorData = await api.templates.getEditorData(selectedTemplate.id);
+        } catch (err) {
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+          } else {
+            editorDataFailed = true;
+            console.warn('Error fetching template editor data after retries:', err);
+          }
+        }
+      }
+      // Bail if this request was superseded by a newer selection while we were retrying.
+      if (selectRequestRef.current !== requestId) { setIsTemplateLoading(false); return; }
       try {
-        editorData = await api.templates.getEditorData(selectedTemplate.id);
         // Use source_file URL if available, otherwise get preview URL
-        if (editorData.source_file?.url) {
+        if (editorData?.source_file?.url) {
           fileUrl = editorData.source_file.url;
         } else {
           try {
@@ -911,7 +928,7 @@ export default function GenerateCertificatePage() {
           }
         }
       } catch (error) {
-        console.warn('Error fetching template editor data:', error);
+        console.warn('Error resolving template file URL:', error);
         // Fallback to preview URL if available
         if (selectedTemplate.preview_url) {
           fileUrl = selectedTemplate.preview_url;
@@ -973,6 +990,17 @@ export default function GenerateCertificatePage() {
       lastLoadedVersionIdRef.current = resolvedVersionId;
     } else {
       lastLoadedVersionIdRef.current = null;
+    }
+
+    // If editorData failed to load after retries, do NOT proceed — loading the template
+    // with zero fields is the "fields are missing" bug. Surface an error and return to
+    // the chooser so the user can retry instead of landing in a broken design.
+    if (editorDataFailed && !isResumingRef.current) {
+      if (selectRequestRef.current !== requestId) { setIsTemplateLoading(false); return; }
+      setIsTemplateLoading(false);
+      setCurrentStep('template');
+      toast.error('Could not load the template right now. Please try again.');
+      return;
     }
 
     // Map backend fields from DB — always use editorData (authoritative).
@@ -2097,10 +2125,13 @@ export default function GenerateCertificatePage() {
 
       const headers = Object.keys(rows[0]!);
 
-      // All fields across the active template(s)
+      // All fields across the active template(s). Fall back to loadedFieldsRef when the
+      // `fields` state hasn't settled yet (e.g. user clicked "use previous data" right
+      // after opening the template) — otherwise every saved mapping gets filtered out.
+      const liveFields = fields.length > 0 ? fields : loadedFieldsRef.current;
       const allFields = templateMode === 'multi' && templateConfigs.length > 0
-        ? templateConfigs.map((c, i) => i === activeTemplateIndex ? fields : c.fields).flat()
-        : fields;
+        ? templateConfigs.map((c, i) => i === activeTemplateIndex ? liveFields : c.fields).flat()
+        : liveFields;
       const currentFieldIds = new Set(allFields.map(f => f.id));
 
       // Smart re-mapping: start from the saved mapping, but only for fields that
@@ -2135,11 +2166,18 @@ export default function GenerateCertificatePage() {
       // Stay on the data step so the user can review/adjust mappings before generating.
       // (DataSelector shows the mapping UI once importedData is set and showUpload → false.)
     } catch (error) {
-      // If the import no longer exists (deleted from Imports page), silently remove it
-      // from the list so it won't show again, then surface a user-friendly error.
-      setSavedImports(savedImports.filter(i => i.id !== importId));
-      console.warn('Import no longer available:', importId, error);
-      throw new Error('This import has been deleted. Please upload a new file.');
+      // Only treat a genuine NOT_FOUND/404 as "deleted" — remove it from the list.
+      // Transient errors (network, cold start) must NOT drop a still-valid import.
+      const code = error instanceof ApiError ? error.code : undefined;
+      const status = (error as { status?: number } | null)?.status;
+      const isGone = code === 'NOT_FOUND' || status === 404;
+      if (isGone) {
+        setSavedImports(savedImports.filter(i => i.id !== importId));
+        console.warn('Import no longer available:', importId, error);
+        throw new Error('This import has been deleted. Please upload a new file.');
+      }
+      console.warn('Failed to load import (transient):', importId, error);
+      throw new Error('Could not load this data right now. Please try again.');
     }
   };
 
