@@ -1923,6 +1923,10 @@ export function ExportSection({
   const [, setStatusMsgIndex] = useState(0);
   const isMountedRef = useRef(true);
   useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
+  // Dedupe the generated-certificate count: completion handlers fire multiple times
+  // (initial poll + each realtime UPDATE), so additive counting tripled the total.
+  const primaryCountedRef = useRef(false);
+  const countedExtraJobsRef = useRef<Set<string>>(new Set());
 
   // Escape key dismisses a stuck generating overlay (job submitted but polling hangs)
   useEffect(() => {
@@ -2017,7 +2021,11 @@ export function ExportSection({
           setAllCertJobIds(prev => prev.includes(firstJobId) ? prev : [...prev, firstJobId]);
         }
       }
-      setTotalGenerated(prev => prev + total);
+      // Count this batch job's total exactly once (handler re-fires on every realtime update).
+      if (!primaryCountedRef.current) {
+        primaryCountedRef.current = true;
+        setTotalGenerated(prev => prev + total);
+      }
       setDownloadUrl(url ?? null);
       if (row.completed_at) {
         setDownloadExpiresAt(new Date(new Date(row.completed_at).getTime() + CERT_DOWNLOAD_TTL_MS));
@@ -2191,7 +2199,11 @@ export function ExportSection({
           if (fallback) setAllCertJobIds(prev => prev.includes(fallback) ? prev : [...prev, fallback]);
         }
         const extraTotal = (result?.total_certificates as number | undefined) ?? 0;
-        if (extraTotal > 0) setTotalGenerated(prev => prev + extraTotal);
+        // Count each extra job's total exactly once (poll + realtime can both fire).
+        if (extraTotal > 0 && !countedExtraJobsRef.current.has(ejId)) {
+          countedExtraJobsRef.current.add(ejId);
+          setTotalGenerated(prev => prev + extraTotal);
+        }
       }
       void ejId; // used only for channel naming
     };
@@ -2543,6 +2555,8 @@ export function ExportSection({
     setProgressLabel('');
     setGeneratedCertificates([]);
     setTotalGenerated(0);
+    primaryCountedRef.current = false;
+    countedExtraJobsRef.current = new Set();
     setGenerationSummary([]);
     // Clear stale cert-gen job IDs from any previous run
     setCertGenJobId(null);
