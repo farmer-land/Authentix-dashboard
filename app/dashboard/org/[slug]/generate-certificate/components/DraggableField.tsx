@@ -428,7 +428,10 @@ export function DraggableField({
             fontWeight: field.fontWeight,
             fontStyle: field.fontStyle,
             textAlign: field.textAlign,
-            padding: `${(field.bgPaddingV ?? 4) * scale}px ${(field.bgPaddingH ?? 8) * scale}px`,
+            // No default padding — content fills the bounding box.
+          // bgPaddingH/V are explicit user-set values (set via RightPanel when background
+          // colour is enabled); default 0 keeps the field box and content aligned.
+          padding: `${(field.bgPaddingV ?? 0) * scale}px ${(field.bgPaddingH ?? 0) * scale}px`,
             backgroundColor: field.backgroundColor || undefined,
           } : {}),
         }}

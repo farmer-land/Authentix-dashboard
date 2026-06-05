@@ -756,6 +756,9 @@ export function InfiniteCanvas({
     if (!field || field.locked) return;
     let nx = field.x + deltaX / scale;
     let ny = field.y + deltaY / scale;
+    // Clamp to certificate bounds so fields can't be dragged outside the template.
+    nx = Math.max(0, Math.min(nx, templateWidth - field.width));
+    ny = Math.max(0, Math.min(ny, templateHeight - field.height));
     if (snapToGrid) {
       nx = Math.round(nx / SNAP_SIZE) * SNAP_SIZE;
       ny = Math.round(ny / SNAP_SIZE) * SNAP_SIZE;
@@ -767,7 +770,9 @@ export function InfiniteCanvas({
       for (const fid of multiSelectedIds) {
         const f = currentFields.find(ff => ff.id === fid);
         if (!f || f.locked) continue;
-        onFieldUpdateRef.current(fid, { x: f.x + deltaX / scale, y: f.y + deltaY / scale });
+        const mx = Math.max(0, Math.min(f.x + deltaX / scale, templateWidth - f.width));
+        const my = Math.max(0, Math.min(f.y + deltaY / scale, templateHeight - f.height));
+        onFieldUpdateRef.current(fid, { x: mx, y: my });
       }
       return;
     }
@@ -818,27 +823,37 @@ export function InfiniteCanvas({
   ) => {
     const field = fieldsRef.current.find(f => f.id === id);
     if (field?.locked) return;
+
+    // Resolve the new position (left/top-edge handles shift x/y).
+    const resolvedX = newCanvasX !== undefined ? newCanvasX : field?.x ?? 0;
+    const resolvedY = newCanvasY !== undefined ? newCanvasY : field?.y ?? 0;
+
+    // Clamp position to certificate bounds (can't drag edge past origin or past far edge).
+    const clampedX = Math.max(0, Math.min(resolvedX, templateWidth - SNAP_SIZE));
+    const clampedY = Math.max(0, Math.min(resolvedY, templateHeight - SNAP_SIZE));
+
     let w = width / scale;
     let h = height / scale;
     if (snapToGrid) {
       w = Math.round(w / SNAP_SIZE) * SNAP_SIZE;
       h = Math.round(h / SNAP_SIZE) * SNAP_SIZE;
     }
-    const newW = Math.max(SNAP_SIZE, w);
-    const newH = Math.max(SNAP_SIZE, h);
+    // Clamp size: minimum SNAP_SIZE, maximum = remaining space from the clamped position.
+    const newW = Math.max(SNAP_SIZE, Math.min(w, templateWidth - clampedX));
+    const newH = Math.max(SNAP_SIZE, Math.min(h, templateHeight - clampedY));
+
     const updates: Record<string, unknown> = { width: newW, height: newH };
-    // Scale font size relative to the dimensions at resize-start (not the last tick) so
-    // the font tracks the full drag delta, not just the per-tick delta.
+    // Scale font size proportionally with width.
     if (field && !['image', 'qr_code'].includes(field.type) && initialCanvasWidth > 0) {
       const ratio = newW / initialCanvasWidth;
       updates.fontSize = Math.max(6, Math.round(initialFontSize * ratio));
     }
-    // Left/top-edge handles also shift the field position (canvas units, pre-computed in DraggableField)
-    if (newCanvasX !== undefined) updates.x = newCanvasX;
-    if (newCanvasY !== undefined) updates.y = newCanvasY;
+    // Apply clamped position (always write x/y so position clamping takes effect).
+    if (newCanvasX !== undefined) updates.x = clampedX;
+    if (newCanvasY !== undefined) updates.y = clampedY;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onFieldUpdateRef.current(id, updates as any);
-  }, [scale, snapToGrid]);
+  }, [scale, snapToGrid, templateWidth, templateHeight]);
 
   const handleFieldRotate = useCallback((id: string, rotation: number) => {
     onFieldUpdateRef.current(id, { rotation });
