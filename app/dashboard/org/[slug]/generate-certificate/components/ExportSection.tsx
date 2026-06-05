@@ -666,11 +666,11 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
                 {/* Variables */}
                 <div className="p-4 border-b">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Variables Used</p>
-                  {previewTemplate.variables.length === 0 ? (
+                  {(previewTemplate.variables?.length ?? 0) === 0 ? (
                     <p className="text-xs text-muted-foreground">No variables in this template.</p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      {previewTemplate.variables.map(v => (
+                      {(previewTemplate.variables ?? []).map(v => (
                         <span key={v} className="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground border">
                           {`{{${v}}}`}
                         </span>
@@ -858,13 +858,13 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
                       {t.email_subject && (
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{t.email_subject}</p>
                       )}
-                      {t.variables.length > 0 && (
+                      {(t.variables?.length ?? 0) > 0 && (
                         <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                          {t.variables.slice(0, 3).map(v => (
+                          {(t.variables ?? []).slice(0, 3).map(v => (
                             <span key={v} className="text-[10px] bg-muted/70 border px-1.5 py-0.5 rounded font-mono text-muted-foreground">{`{{${v}}}`}</span>
                           ))}
-                          {t.variables.length > 3 && (
-                            <span className="text-[10px] text-muted-foreground">+{t.variables.length - 3} more</span>
+                          {(t.variables?.length ?? 0) > 3 && (
+                            <span className="text-[10px] text-muted-foreground">+{(t.variables?.length ?? 0) - 3} more</span>
                           )}
                         </div>
                       )}
