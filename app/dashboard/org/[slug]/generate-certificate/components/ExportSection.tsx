@@ -495,6 +495,18 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
   // Subject override (if set) can satisfy a placeholder too — re-check against it.
   const effectiveMissingRequired = missingRequired.filter(p => !(subjectOverride && subjectOverride.includes(`{{${p}}}`)));
 
+  // Empty subject/body validation (scenarios: empty subject, empty body, incomplete template).
+  // The built-in synthetic template is always complete, so it's exempt.
+  const stripHtmlText = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&[a-z]+;/gi, ' ').trim();
+  const emptyContentTemplates = templatesInUse.filter(t =>
+    t.id !== BUILTIN_TEMPLATE_ID && (
+      !stripHtmlText(t.body ?? '') ||
+      (!(t.email_subject ?? '').trim() && !subjectOverride.trim())
+    )
+  );
+  // Hard block (cannot acknowledge) — an empty email is never valid to send.
+  const hasEmptyContent = emptyContentTemplates.length > 0;
+
   // Wait until the org query resolves so isPlatformOwner is accurate before branching.
   useEffect(() => { if (!orgLoading) check(); }, [orgLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1214,8 +1226,21 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
               </div>
             )}
 
+            {/* Empty subject/body — hard block, cannot be acknowledged away */}
+            {hasEmptyContent && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900/50">
+                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-red-800 dark:text-red-300">This template has no email content</p>
+                  <p className="text-[11px] text-red-700 dark:text-red-400 mt-0.5">
+                    The subject or body is empty. Open the template and add content before sending.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Required-placeholder validation — block until added or acknowledged */}
-            {effectiveMissingRequired.length > 0 && (
+            {!hasEmptyContent && effectiveMissingRequired.length > 0 && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900/50">
                 <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                 <div className="min-w-0 space-y-1.5">
@@ -1254,7 +1279,7 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
               </Button>
               <Button
                 onClick={() => setStep('test_email')}
-                disabled={effectiveMissingRequired.length > 0 && !ackPlaceholders}
+                disabled={hasEmptyContent || (effectiveMissingRequired.length > 0 && !ackPlaceholders)}
                 className="flex-1 gap-2"
               >
                 Continue
