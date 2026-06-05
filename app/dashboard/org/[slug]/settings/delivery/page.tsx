@@ -667,13 +667,18 @@ export default function EmailDeliverySettingsPage() {
   // Only the parent owner can fall back to the Authentix default sender.
   const usingPlatformDefault = isPlatformOwner && !hasActiveIntegration;
 
+  // Drives the adaptive copy/CTA so the platform owner is never told to "set up"
+  // a sender they already have, while customers get clear setup guidance.
+  const senderState: "platform-default" | "connected" | "needs-setup" =
+    usingPlatformDefault ? "platform-default" : hasActiveIntegration ? "connected" : "needs-setup";
+
   return (
-    <div className="space-y-8 max-w-3xl mx-auto">
+    <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Email Delivery</h1>
         <p className="text-muted-foreground mt-1.5 text-base">
-          Configure your email sender and manage delivery settings
+          Choose how certificate emails reach your recipients.
         </p>
       </div>
 
@@ -684,16 +689,95 @@ export default function EmailDeliverySettingsPage() {
         </Alert>
       )}
 
+      {/* ── Status hero — adapts to who's looking and what's connected ─────── */}
+      {!loading && (
+        <div className={`relative overflow-hidden rounded-2xl border p-5 sm:p-6 ${
+          senderState === "needs-setup"
+            ? "border-amber-500/30 bg-linear-to-br from-amber-500/7 to-transparent"
+            : "border-[#3ECF8E]/30 bg-linear-to-br from-[#3ECF8E]/8 to-transparent"
+        }`}>
+          <div className="flex items-start gap-4">
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+              senderState === "needs-setup" ? "bg-amber-500/10" : "bg-[#3ECF8E]/10"
+            }`}>
+              {senderState === "needs-setup"
+                ? <AlertCircle className="h-5 w-5 text-amber-600" />
+                : <CheckCircle2 className="h-5 w-5 text-[#3ECF8E]" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              {senderState === "platform-default" && (
+                <>
+                  <h2 className="text-lg font-semibold leading-tight">You&apos;re ready to send</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Certificate emails go out from Authentix&apos;s verified sender —
+                    nothing to configure. Connecting your own domain below is optional.
+                  </p>
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-lg border bg-background/60 px-3 py-1.5">
+                    <Mail className="h-3.5 w-3.5 text-[#3ECF8E]" />
+                    <span className="font-mono text-xs font-medium">{PLATFORM_DEFAULT_EMAIL}</span>
+                    <Badge variant="outline" className="ml-1 text-[10px]">Managed by Authentix</Badge>
+                  </div>
+                </>
+              )}
+              {senderState === "connected" && (
+                <>
+                  <h2 className="text-lg font-semibold leading-tight">Your sender is connected</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Certificate emails send from your own domain. You can add more senders or
+                    switch the default below anytime.
+                  </p>
+                  {activeDefault && (
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-lg border bg-background/60 px-3 py-1.5">
+                      <Mail className="h-3.5 w-3.5 text-[#3ECF8E]" />
+                      <span className="font-mono text-xs font-medium">{activeDefault.from_email}</span>
+                      <Badge className="ml-1 bg-[#3ECF8E]/10 border-[#3ECF8E]/30 text-[#3ECF8E] hover:bg-[#3ECF8E]/10 text-[10px]">
+                        {providerMeta(activeDefault.provider).label}
+                      </Badge>
+                    </div>
+                  )}
+                </>
+              )}
+              {senderState === "needs-setup" && (
+                <>
+                  <h2 className="text-lg font-semibold leading-tight">Connect a sender to start sending</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Send certificate emails from your own domain. Pick a provider you already
+                    use — Resend, Google Workspace, Microsoft 365, AWS SES, or any SMTP server.
+                    It takes a couple of minutes.
+                  </p>
+                  {!showAddForm && (
+                    <Button
+                      size="sm"
+                      onClick={() => { setShowAddForm(true); setEditingId(null); }}
+                      className="mt-3 gap-1.5 bg-[#3ECF8E] hover:bg-[#34b87a] text-white"
+                    >
+                      <Plus className="w-4 h-4" /> Connect your email
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Your Email Integrations ─────────────────────────────────────────── */}
       <Card className={hasActiveIntegration ? "border-[#3ECF8E]/40 shadow-sm" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">Your Email Integration</CardTitle>
+              <CardTitle className="text-lg">
+                {isPlatformOwner && integrations.length === 0 ? "Send from your own domain" : "Your senders"}
+                {isPlatformOwner && integrations.length === 0 && (
+                  <span className="ml-2 align-middle text-xs font-normal text-muted-foreground">(optional)</span>
+                )}
+              </CardTitle>
               <CardDescription className="mt-0.5">
                 {integrations.length === 0
-                  ? "Connect Resend, Google Workspace, Microsoft 365, AWS SES, or custom SMTP."
-                  : `${integrations.length} integration${integrations.length !== 1 ? "s" : ""} · ${activeDefault ? `Sending from ${activeDefault.from_email}` : "None active"}`}
+                  ? (isPlatformOwner
+                      ? "Prefer your own branding? Connect Resend, Google Workspace, Microsoft 365, AWS SES, or SMTP."
+                      : "Connect Resend, Google Workspace, Microsoft 365, AWS SES, or custom SMTP.")
+                  : `${integrations.length} sender${integrations.length !== 1 ? "s" : ""} · ${activeDefault ? `Default: ${activeDefault.from_email}` : "None active"}`}
               </CardDescription>
             </div>
             <Button
@@ -704,7 +788,7 @@ export default function EmailDeliverySettingsPage() {
             >
               {showAddForm
                 ? <><ChevronUp className="w-4 h-4" /> Collapse</>
-                : <><Plus className="w-4 h-4" /> Add Integration</>}
+                : <><Plus className="w-4 h-4" /> Add sender</>}
             </Button>
           </div>
         </CardHeader>
@@ -781,19 +865,18 @@ export default function EmailDeliverySettingsPage() {
               ))}
 
               {integrations.length === 0 && !showAddForm && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Server className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                  {isPlatformOwner ? (
-                    <>
-                      <p className="text-sm">You&apos;re ready to send.</p>
-                      <p className="text-xs mt-0.5">Certificates send from the Authentix default sender below. Add your own integration to send from your domain.</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm">No email connected yet.</p>
-                      <p className="text-xs mt-0.5">Connect Resend, Google Workspace, Microsoft 365, AWS SES, or custom SMTP to start sending certificates from your own domain.</p>
-                    </>
-                  )}
+                <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center">
+                  <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-background border">
+                    <Server className="w-4 h-4 text-muted-foreground/60" />
+                  </div>
+                  <p className="text-sm font-medium">
+                    {isPlatformOwner ? "No custom sender yet" : "No sender connected"}
+                  </p>
+                  <p className="mx-auto mt-0.5 max-w-sm text-xs text-muted-foreground">
+                    {isPlatformOwner
+                      ? "You don't need one — the Authentix sender handles delivery. Add your own only if you want emails from your domain."
+                      : "Add a provider above to send certificate emails from your own domain."}
+                  </p>
                 </div>
               )}
 
@@ -818,8 +901,10 @@ export default function EmailDeliverySettingsPage() {
       {/* ── Resend domain management — only for an active Resend integration ── */}
       {resendIntegration && <DomainManager integrationId={resendIntegration.id} />}
 
-      {/* ── Authentix Default (fallback) — parent owner only; never exposed to other orgs ── */}
-      {isPlatformOwner && (
+      {/* ── Authentix Default (fallback) — parent owner only; never exposed to other orgs.
+           When the default IS in use, the hero already covers it, so only show this card as
+           the "fallback available" note once a custom sender is active. ── */}
+      {isPlatformOwner && hasActiveIntegration && (
       <Card className={usingPlatformDefault ? "border-[#3ECF8E]/40 shadow-sm" : ""}>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
