@@ -5,6 +5,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import Lottie from 'lottie-react';
 import generatedNewAnimationData from '../assets/generated-new.json';
 import sean2AnimationData from '../../../../../../public/template/generation-sean-2.json';
+import cityAnimationData from '../../../../../../public/template/city.json';
 import { CertificateTemplate, CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
 import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -2601,14 +2602,35 @@ export function ExportSection({
                     className="flex flex-col items-center gap-8 relative"
                     style={{ zIndex: 1, animation: 'genFadeSlide 0.3s ease-out both' }}
                   >
-                    {/* Car animation — brand-tinted */}
-                    <div style={{ filter: 'hue-rotate(130deg) saturate(1.8) brightness(1.05)' }}>
-                      <Lottie
-                        animationData={sean2AnimationData as object}
-                        loop autoplay
-                        style={{ width: 340, height: Math.round(340 * 316 / 794) }}
-                        rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
-                      />
+                    {/* City backdrop + car driving in front of it */}
+                    <div style={{ position: 'relative', width: 520, height: 260 }}>
+                      {/* City skyline — background layer (2:1, dimmed so it doesn't overpower the car/counter) */}
+                      <div style={{ position: 'absolute', inset: 0, opacity: 0.55, zIndex: 0 }}>
+                        <Lottie
+                          animationData={cityAnimationData as object}
+                          loop autoplay
+                          style={{ width: 520, height: 260 }}
+                          rendererSettings={{ preserveAspectRatio: 'xMidYMid slice' }}
+                        />
+                      </div>
+                      {/* Car — foreground, brand-tinted, sitting on the road at the bottom */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 8,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          zIndex: 1,
+                          filter: 'hue-rotate(130deg) saturate(1.8) brightness(1.05)',
+                        }}
+                      >
+                        <Lottie
+                          animationData={sean2AnimationData as object}
+                          loop autoplay
+                          style={{ width: 340, height: Math.round(340 * 316 / 794) }}
+                          rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
+                        />
+                      </div>
                     </div>
 
                     {/* Big counter */}
