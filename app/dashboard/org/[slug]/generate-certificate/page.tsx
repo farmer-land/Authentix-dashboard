@@ -843,17 +843,27 @@ export default function GenerateCertificatePage() {
       };
     }
 
-    // Load the template
+    // Load the template — this fetches the AUTHORITATIVE current fields from the DB
+    // (getEditorData) into loadedFieldsRef.
     await handleTemplateSelectSafe(templateToSelect);
 
-    // If loadFields is true and we have fields from recent usage, use them
-    if (loadFields && recentTemplate.fields && recentTemplate.fields.length > 0) {
+    // Only fall back to the recent-usage snapshot if the live load returned no fields
+    // (e.g. brand-new template). Never overwrite freshly-loaded DB fields with this
+    // cached snapshot — it can be stale and would show outdated fields.
+    if (
+      loadFields &&
+      loadedFieldsRef.current.length === 0 &&
+      recentTemplate.fields &&
+      recentTemplate.fields.length > 0
+    ) {
       const mappedFields = recentTemplate.fields.map(mapDbFieldToFrontend);
       setFields(mappedFields);
+      loadedFieldsRef.current = mappedFields;
     }
 
-    // If it's in-progress, set the version ID
-    if (recentTemplate.template_version_id) {
+    // If it's in-progress, set the version ID — but only when the live load didn't
+    // already resolve one (don't override the authoritative current version).
+    if (recentTemplate.template_version_id && !lastLoadedVersionIdRef.current) {
       setTemplateVersionId(recentTemplate.template_version_id);
     }
   };
@@ -1791,6 +1801,10 @@ export default function GenerateCertificatePage() {
     setSaveStatus('saving');
 
     const doSave = async () => {
+      // Guard: only persist when there are genuinely unsaved edits. This makes the
+      // unmount flush and saveNow() calls no-ops when nothing changed, preventing a
+      // stale closure from re-writing an old template's fields.
+      if (!fieldsDirtyRef.current) return;
       // Track field_keys to ensure uniqueness
       const usedFieldKeys = new Set<string>();
       
@@ -1998,6 +2012,9 @@ export default function GenerateCertificatePage() {
         });
 
         await api.templates.saveFields(templateId, versionId, fieldsToSave);
+        // Mark clean only after a successful save so later flushes don't redundantly
+        // re-save the same fields. Any new edit sets the flag true again.
+        fieldsDirtyRef.current = false;
         setSaveStatus('saved');
         setLastSavedAt(new Date());
         trackEvent('templates_saved', {
