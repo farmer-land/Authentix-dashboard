@@ -74,6 +74,8 @@ export type {
   WebhookDeliveryStatus,
   ResendDomain,
   ResendDomainRecord,
+  DeliverySender,
+  CreateSenderDto,
 } from "./delivery";
 
 // ── Domain API modules ────────────────────────────────────────────────────────

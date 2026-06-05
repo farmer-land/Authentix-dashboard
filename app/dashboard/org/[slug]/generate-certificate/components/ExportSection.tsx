@@ -6,7 +6,7 @@ import Lottie from 'lottie-react';
 import generatedNewAnimationData from '../assets/generated-new.json';
 import finalGenerationAnimationData from '../../../../../../public/template/final-generation.json';
 import { CertificateTemplate, CertificateField, ImportedData, FieldMapping } from '@/lib/types/certificate';
-import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage } from '@/lib/api/client';
+import { api, type DeliveryIntegration, type DeliveryTemplate, type DeliveryMessage, type DeliverySender } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -462,6 +462,9 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
   const [previewTemplate, setPreviewTemplate] = useState<DeliveryTemplate | null>(null);
   const [subjectOverride, setSubjectOverride] = useState('');
   const [fromNameOverride, setFromNameOverride] = useState('');
+  // Named "purpose" senders the org has registered; chosen at send time.
+  const [senders, setSenders] = useState<DeliverySender[]>([]);
+  const [selectedSenderId, setSelectedSenderId] = useState<string>('');
   const [testEmail, setTestEmail] = useState('');
   const [testSending, setTestSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
@@ -473,6 +476,7 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
 
   const selectedIntegration = integrations.find(i => i.id === selectedIntegrationId) ?? null;
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
+  const selectedSender = senders.find(s => s.id === selectedSenderId) ?? null;
 
   // ── Required-placeholder validation ──────────────────────────────────────────
   // A certificate delivery email should personalise the recipient and link the cert.
@@ -567,10 +571,15 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
   const check = async () => {
     setStep('checking');
     try {
-      const [intList, tplList] = await Promise.all([
+      const [intList, tplList, senderList] = await Promise.all([
         api.delivery.listIntegrations(),
         api.delivery.listTemplates(),
+        api.delivery.listSenders().catch(() => [] as DeliverySender[]),
       ]);
+
+      setSenders(senderList);
+      const defaultSender = senderList.find(s => s.is_default) ?? senderList[0];
+      if (defaultSender) setSelectedSenderId(defaultSender.id);
 
       const activeIntegrations = intList.filter(i => i.is_active && i.channel === 'email');
       let activeTemplates = tplList.filter(t => t.is_active && t.channel === 'email');
@@ -645,6 +654,7 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
           template_id: templateIdForJob(cjId),
           subject_override: subjectOverride.trim() || undefined,
           from_name_override: fromNameOverride.trim() || undefined,
+          from_email_override: selectedSender?.from_email || undefined,
           use_platform_default: usePlatformDefault || undefined,
         });
         totalSent += result.sent;
@@ -691,6 +701,7 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
         template_id: (selectedTemplateId && selectedTemplateId !== BUILTIN_TEMPLATE_ID) ? selectedTemplateId : undefined,
         subject_override: subjectOverride.trim() || undefined,
         from_name_override: fromNameOverride.trim() || undefined,
+        from_email_override: selectedSender?.from_email || undefined,
         use_platform_default: usePlatformDefault || undefined,
       });
       toast.success(`Test email sent to ${testEmail}`);
@@ -702,10 +713,11 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
     }
   };
 
-  const effectiveFromName = fromNameOverride.trim() || selectedIntegration?.from_name || '';
+  const effectiveFromEmail = selectedSender?.from_email || selectedIntegration?.from_email || '';
+  const effectiveFromName = fromNameOverride.trim() || selectedSender?.from_name || selectedIntegration?.from_name || '';
   const effectiveSender = effectiveFromName
-    ? `${effectiveFromName} <${selectedIntegration?.from_email ?? ''}>`
-    : selectedIntegration?.from_email ?? '';
+    ? `${effectiveFromName} <${effectiveFromEmail}>`
+    : effectiveFromEmail;
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1186,6 +1198,27 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
                 </div>
               );
             })()}
+
+            {/* Send-from picker — only when the org has registered purpose senders */}
+            {senders.length > 0 && (
+              <div className="space-y-1.5 p-3 rounded-lg border bg-muted/20">
+                <Label className="text-xs font-medium">Send from</Label>
+                <select
+                  value={selectedSenderId}
+                  onChange={e => setSelectedSenderId(e.target.value)}
+                  className="w-full h-9 text-sm rounded-md border bg-background px-2.5"
+                >
+                  {senders.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.label} — {s.from_email}{s.is_default ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Choose which sender address this batch goes out from.
+                </p>
+              </div>
+            )}
 
             {/* Advanced overrides toggle */}
             <button

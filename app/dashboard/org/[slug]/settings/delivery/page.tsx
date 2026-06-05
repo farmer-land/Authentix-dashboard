@@ -23,6 +23,7 @@ import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useDeliverySettingsState } from "./state/useDeliverySettingsState";
 import { DomainManager } from "./DomainManager";
 import { UsageCard } from "./UsageCard";
+import { SendersCard } from "./SendersCard";
 
 // ── Provider metadata ──────────────────────────────────────────────────────
 
@@ -894,6 +895,9 @@ export default function EmailDeliverySettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Sender addresses (purpose senders) — pick one at send time ── */}
+      {(hasActiveIntegration || isPlatformOwner) && <SendersCard />}
 
       {/* ── Email usage vs plan limits — shown once any sender is active ── */}
       {(hasActiveIntegration || isPlatformOwner) && <UsageCard />}

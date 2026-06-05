@@ -123,7 +123,26 @@ export interface SendEmailDto {
   template_id?: string;
   subject_override?: string;
   from_name_override?: string;
+  from_email_override?: string;
   use_platform_default?: boolean;
+}
+
+export interface DeliverySender {
+  id: string;
+  organization_id: string;
+  label: string;
+  from_email: string;
+  from_name: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSenderDto {
+  label: string;
+  from_email: string;
+  from_name?: string | null;
+  is_default?: boolean;
 }
 
 export interface TestSendDto {
@@ -132,6 +151,7 @@ export interface TestSendDto {
   integration_id?: string;
   subject_override?: string;
   from_name_override?: string;
+  from_email_override?: string;
   use_platform_default?: boolean;
 }
 
@@ -450,6 +470,33 @@ export const deliveryApi = {
       "/delivery/usage",
     );
     return response.data!;
+  },
+
+  // ── Senders (named "From" identities) ─────────────────────────────────────────
+
+  listSenders: async (): Promise<DeliverySender[]> => {
+    const response = await apiRequest<{ senders: DeliverySender[] }>("/delivery/senders");
+    return response.data!.senders;
+  },
+
+  createSender: async (dto: CreateSenderDto): Promise<DeliverySender> => {
+    const response = await apiRequest<{ sender: DeliverySender }>(
+      "/delivery/senders",
+      { method: "POST", body: JSON.stringify(dto) },
+    );
+    return response.data!.sender;
+  },
+
+  updateSender: async (id: string, dto: Partial<CreateSenderDto>): Promise<DeliverySender> => {
+    const response = await apiRequest<{ sender: DeliverySender }>(
+      `/delivery/senders/${id}`,
+      { method: "PUT", body: JSON.stringify(dto) },
+    );
+    return response.data!.sender;
+  },
+
+  deleteSender: async (id: string): Promise<void> => {
+    await apiRequest(`/delivery/senders/${id}`, { method: "DELETE" });
   },
 
   // ── Resend domains ──────────────────────────────────────────────────────────
