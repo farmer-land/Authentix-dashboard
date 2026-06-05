@@ -22,6 +22,7 @@ import { useOrg } from "@/lib/org";
 import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useDeliverySettingsState } from "./state/useDeliverySettingsState";
 import { DomainManager } from "./DomainManager";
+import { UsageCard } from "./UsageCard";
 
 // ── Provider metadata ──────────────────────────────────────────────────────
 
@@ -810,6 +811,9 @@ export default function EmailDeliverySettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Email usage vs plan limits — shown once any sender is active ── */}
+      {(hasActiveIntegration || isPlatformOwner) && <UsageCard />}
 
       {/* ── Resend domain management — only for an active Resend integration ── */}
       {resendIntegration && <DomainManager integrationId={resendIntegration.id} />}

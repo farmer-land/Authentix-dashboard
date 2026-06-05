@@ -443,6 +443,15 @@ export const deliveryApi = {
     return response.data!.integration;
   },
 
+  // ── Usage metering ────────────────────────────────────────────────────────────
+
+  getUsage: async (): Promise<{ month: number; today: number; monthStart: string; dayStart: string }> => {
+    const response = await apiRequest<{ month: number; today: number; monthStart: string; dayStart: string }>(
+      "/delivery/usage",
+    );
+    return response.data!;
+  },
+
   // ── Resend domains ──────────────────────────────────────────────────────────
 
   listDomains: async (integrationId: string): Promise<ResendDomain[]> => {
