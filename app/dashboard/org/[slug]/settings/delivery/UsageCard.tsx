@@ -78,6 +78,42 @@ export function UsageCard() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
 
+  // Per-row expansion: detail + attachments + cancel for scheduled sends.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [rowAttachments, setRowAttachments] = useState<Record<string, Array<Record<string, unknown>>>>({});
+  const [rowLoading, setRowLoading] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const toggleRow = async (id?: string) => {
+    if (!id) return;
+    if (expandedId === id) { setExpandedId(null); return; }
+    setExpandedId(id);
+    if (!rowAttachments[id]) {
+      setRowLoading(id);
+      try {
+        const res = await api.delivery.listResendEmailAttachments(id);
+        setRowAttachments(prev => ({ ...prev, [id]: Array.isArray(res.data) ? res.data : [] }));
+      } catch {
+        setRowAttachments(prev => ({ ...prev, [id]: [] }));
+      } finally {
+        setRowLoading(null);
+      }
+    }
+  };
+
+  const cancelSend = async (id?: string) => {
+    if (!id) return;
+    setCancellingId(id);
+    try {
+      await api.delivery.cancelResendEmail(id);
+      setResendRows(prev => (prev ?? []).map(r => (r.id === id ? { ...r, last_event: "canceled" } : r)));
+    } catch (e) {
+      setResendError(e instanceof Error ? e.message : "Failed to cancel");
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const toggleResend = async () => {
     const next = !showResend;
     setShowResend(next);
@@ -234,16 +270,58 @@ export function UsageCard() {
                   {resendRows.map((r, i) => {
                     const to = Array.isArray(r.to) ? r.to.join(", ") : (r.to ?? "—");
                     const when = r.created_at ? new Date(r.created_at).toLocaleString() : "";
+                    const isOpen = expandedId === r.id;
+                    const isScheduled = r.last_event === "scheduled";
+                    const atts = r.id ? rowAttachments[r.id] : undefined;
                     return (
-                      <div key={r.id ?? i} className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-1.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-medium">{r.subject || "(no subject)"}</p>
-                          <p className="truncate text-[10px] text-muted-foreground">{to}{when ? ` · ${when}` : ""}</p>
-                        </div>
-                        {r.last_event && (
-                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
-                            {r.last_event}
-                          </span>
+                      <div key={r.id ?? i} className="rounded-md border bg-muted/20">
+                        <button
+                          onClick={() => toggleRow(r.id)}
+                          className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium">{r.subject || "(no subject)"}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{to}{when ? ` · ${when}` : ""}</p>
+                          </div>
+                          {r.last_event && (
+                            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
+                              {r.last_event}
+                            </span>
+                          )}
+                        </button>
+                        {isOpen && (
+                          <div className="border-t px-2.5 py-2 space-y-2">
+                            {rowLoading === r.id ? (
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <Loader2 className="w-3 h-3 animate-spin" /> Loading details…
+                              </div>
+                            ) : (
+                              <>
+                                <div>
+                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Attachments</p>
+                                  {atts && atts.length > 0 ? (
+                                    <ul className="mt-1 space-y-0.5">
+                                      {atts.map((a, j) => (
+                                        <li key={j} className="truncate text-[11px]">{(a.filename as string) ?? (a.name as string) ?? `attachment ${j + 1}`}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="mt-0.5 text-[11px] text-muted-foreground/60">No attachments.</p>
+                                  )}
+                                </div>
+                                {isScheduled && (
+                                  <button
+                                    onClick={() => cancelSend(r.id)}
+                                    disabled={cancellingId === r.id}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-red-500/30 px-2 py-1 text-[11px] text-red-600 hover:bg-red-500/5"
+                                  >
+                                    {cancellingId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                                    Cancel scheduled send
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     );

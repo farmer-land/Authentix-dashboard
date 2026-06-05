@@ -511,6 +511,24 @@ export const deliveryApi = {
     return response.data ?? {};
   },
 
+  getResendEmail: async (id: string): Promise<Record<string, unknown>> => {
+    const response = await apiRequest<Record<string, unknown>>(`/delivery/resend/emails/${id}`);
+    return response.data ?? {};
+  },
+
+  cancelResendEmail: async (id: string): Promise<void> => {
+    await apiRequest(`/delivery/resend/emails/${id}/cancel`, { method: "POST", body: JSON.stringify({}) });
+  },
+
+  rescheduleResendEmail: async (id: string, scheduledAt: string): Promise<void> => {
+    await apiRequest(`/delivery/resend/emails/${id}`, { method: "PATCH", body: JSON.stringify({ scheduled_at: scheduledAt }) });
+  },
+
+  listResendEmailAttachments: async (id: string): Promise<{ data?: Array<Record<string, unknown>> }> => {
+    const response = await apiRequest<{ data?: Array<Record<string, unknown>> }>(`/delivery/resend/emails/${id}/attachments`);
+    return response.data ?? {};
+  },
+
   // ── Resend template sync ──────────────────────────────────────────────────────
 
   // Import a migrating customer's existing Resend templates into our templates.
