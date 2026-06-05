@@ -39,7 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 import { api } from "@/lib/api/client";
-import { Upload, Video, Globe, Mail, Quote, Code } from "lucide-react";
+import { Upload, Video, Globe, Mail, Quote, Code, Star, Reply, MoreVertical } from "lucide-react";
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
@@ -588,15 +588,15 @@ function blockToHtml(block: EmailBlock): string {
 
     case "greeting": {
       const ta = block.textAlign || "left";
-      const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
-      return `<div style="padding:${pV}px ${pH}px;min-height:64px;display:flex;align-items:center;justify-content:${ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start"};${block.bgColor ? `background:${block.bgColor};` : ""}">
+      const pV = block.paddingV ?? 12; const pH = block.paddingH ?? 32;
+      return `<div style="padding:${pV}px ${pH}px;display:flex;align-items:center;justify-content:${ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start"};${block.bgColor ? `background:${block.bgColor};` : ""}">
   <p style="font-size:${block.fontSize || 16}px;color:${block.textColor || "#e5e7eb"};margin:0;text-align:${ta};line-height:${block.lineHeight || 1.7};letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};font-style:${block.fontStyle || "normal"};${ff}">${block.content || "Hi {{recipient_name}},"}</p>
 </div>`;
     }
 
     case "text": {
       const ta = block.textAlign || "left";
-      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const pV = block.paddingV ?? 10; const pH = block.paddingH ?? 32;
       return `<div style="padding:${pV}px ${pH}px;text-align:${ta};${block.bgColor ? `background:${block.bgColor};` : ""}">
   <p style="font-size:${block.fontSize || 15}px;color:${block.textColor || "#d1d5db"};line-height:${block.lineHeight || 1.7};margin:0;letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};font-style:${block.fontStyle || "normal"};${ff}">${block.content || ""}</p>
 </div>`;
@@ -636,7 +636,7 @@ function blockToHtml(block: EmailBlock): string {
     }
 
     case "markdown":
-      return `<div style="padding: 16px 32px;${block.bgColor ? `background:${block.bgColor};` : ""}">${markdownToEmailHtml(block.content ?? "", block.textColor ?? "#d1d5db")}</div>`;
+      return `<div style="padding: 10px 32px;${block.bgColor ? `background:${block.bgColor};` : ""}">${markdownToEmailHtml(block.content ?? "", block.textColor ?? "#d1d5db")}</div>`;
 
     case "two_column":
       return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;${block.bgColor ? `background:${block.bgColor};` : ""}">
@@ -1492,7 +1492,7 @@ function MarkdownBlockView({
   const rendered = markdownToEmailHtml(draft || "*Click to write markdown…*", block.textColor ?? "#d1d5db");
 
   return (
-    <div style={{ padding: "16px 32px", background: block.bgColor ?? "transparent" }}>
+    <div style={{ padding: "10px 32px", background: block.bgColor ?? "transparent" }}>
       {editing ? (
         <div className="relative">
           {/* Markdown formatting toolbar */}
@@ -1699,9 +1699,9 @@ function BlockLiveView({
 
     case "greeting": {
       const ta = (block.textAlign || "left") as React.CSSProperties["textAlign"];
-      const pV = block.paddingV ?? 20; const pH = block.paddingH ?? 32;
+      const pV = block.paddingV ?? 12; const pH = block.paddingH ?? 32;
       return (
-        <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", display: "flex", alignItems: "center", justifyContent: ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start", minHeight: 64 }}>
+        <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", display: "flex", alignItems: "center", justifyContent: ta === "center" ? "center" : ta === "right" ? "flex-end" : "flex-start" }}>
           <EditableText
             value={block.content || ""}
             onChange={v => u({ content: v })}
@@ -1716,7 +1716,7 @@ function BlockLiveView({
 
     case "text": {
       const ta = (block.textAlign || "left") as React.CSSProperties["textAlign"];
-      const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
+      const pV = block.paddingV ?? 10; const pH = block.paddingH ?? 32;
       return (
         <div style={{ padding: `${pV}px ${pH}px`, background: block.bgColor || "transparent", textAlign: ta }}>
           <EditableText
@@ -4095,23 +4095,39 @@ export function EmailBlockBuilder({
         className="max-w-[600px] mx-auto rounded-lg overflow-hidden ring-1 ring-white/10"
         style={{ boxShadow: "0 24px 64px -20px rgba(0,0,0,0.65), 0 6px 18px -8px rgba(0,0,0,0.45)" }}
       >
-        {/* Email client mock header */}
-        <div className="bg-linear-to-b from-zinc-800 to-zinc-800/70 border-b border-white/5 px-5 py-4">
-          <div className="flex items-start gap-3.5">
+        {/* Real Gmail-style message header (white chrome, like an opened email) */}
+        <div className="bg-white border-b border-zinc-200 px-5 pt-4 pb-3.5">
+          {/* Subject row + message actions */}
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <input
+              value={subject}
+              onChange={e => onSubjectChange?.(e.target.value)}
+              className="flex-1 min-w-0 text-[20px] leading-snug font-normal text-zinc-900 bg-transparent border-none outline-none cursor-text hover:bg-zinc-100 focus:bg-zinc-100 rounded px-1 -ml-1 transition-colors"
+              placeholder="Your Certificate from {{organization_name}}"
+              title="Click to edit subject"
+            />
+            <div className="flex items-center gap-3 text-zinc-400 shrink-0 mt-1.5 select-none">
+              <Star className="w-4 h-4" />
+              <Reply className="w-4 h-4" />
+              <MoreVertical className="w-4 h-4" />
+            </div>
+          </div>
+          {/* Sender row */}
+          <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-[#3ECF8E] flex items-center justify-center text-white text-sm font-bold shrink-0 select-none">
               {senderName.trim()[0]?.toUpperCase() || "A"}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
                 {senderOptions && senderOptions.length > 0 ? (
                   <select
                     value={senderName}
                     onChange={e => onSenderNameChange?.(e.target.value)}
-                    className="text-sm font-semibold text-zinc-100 bg-zinc-700/60 border border-zinc-600/60 outline-none rounded px-2 py-0.5 max-w-[220px] cursor-pointer hover:bg-zinc-700 focus:bg-zinc-700 transition-colors appearance-none"
+                    className="text-[13px] font-bold text-zinc-900 bg-transparent border-none outline-none max-w-[200px] cursor-pointer hover:bg-zinc-100 focus:bg-zinc-100 rounded px-1 -ml-1 transition-colors appearance-none"
                     title="Select sender"
                   >
                     {senderOptions.map(opt => (
-                      <option key={opt.email} value={opt.name} className="bg-zinc-800 text-zinc-100">
+                      <option key={opt.email} value={opt.name} className="bg-white text-zinc-900">
                         {opt.name}{opt.email ? ` <${opt.email}>` : ""}
                       </option>
                     ))}
@@ -4120,30 +4136,20 @@ export function EmailBlockBuilder({
                   <input
                     value={senderName}
                     onChange={e => onSenderNameChange?.(e.target.value)}
-                    className="text-sm font-semibold text-zinc-100 bg-transparent border-none outline-none min-w-0 w-auto max-w-[220px] cursor-text hover:bg-zinc-700/40 focus:bg-zinc-700/60 rounded px-1 -ml-1 transition-colors"
+                    className="text-[13px] font-bold text-zinc-900 bg-transparent border-none outline-none min-w-0 w-auto max-w-[200px] cursor-text hover:bg-zinc-100 focus:bg-zinc-100 rounded px-1 -ml-1 transition-colors"
                     placeholder="Sender Name"
                     title="Click to edit sender name"
                   />
                 )}
-                <span className="text-[11px] text-zinc-600 shrink-0">via Authentix</span>
+                <span className="text-[12px] text-zinc-500 truncate">
+                  &lt;{senderOptions?.find(o => o.name === senderName)?.email ?? "certificates@yourdomain.com"}&gt;
+                </span>
               </div>
-              {senderOptions && senderOptions.length > 0 && (
-                <p className="text-[10px] text-zinc-600 mt-0.5">
-                  {senderOptions.find(o => o.name === senderName)?.email ?? ""}
-                </p>
-              )}
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[11px] text-zinc-600 shrink-0 font-medium">Subject:</span>
-                <input
-                  value={subject}
-                  onChange={e => onSubjectChange?.(e.target.value)}
-                  className="text-[13px] text-zinc-300 bg-transparent border-none outline-none flex-1 min-w-0 cursor-text hover:bg-zinc-700/40 focus:bg-zinc-700/60 rounded px-1 -ml-0.5 transition-colors"
-                  placeholder="Your Certificate from {{organization_name}}"
-                  title="Click to edit subject — or use Settings panel"
-                />
-              </div>
+              <p className="text-[12px] text-zinc-500 leading-tight mt-0.5 flex items-center gap-0.5">
+                to me <ChevronDown className="w-3 h-3" />
+              </p>
             </div>
-            <span className="text-[11px] text-zinc-700 select-none shrink-0 mt-0.5">just now</span>
+            <span className="text-[12px] text-zinc-500 select-none shrink-0">just now</span>
           </div>
         </div>
 
