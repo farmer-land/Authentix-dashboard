@@ -574,7 +574,7 @@ export function EmailEditor({
           {/* Floating right panel — block properties */}
           {rightPanelVisible && (
             <div
-              className="absolute z-40 right-4 top-3 flex flex-col bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+              className="absolute z-40 right-4 top-3 flex flex-col bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden"
               style={{ height: "calc(100% - 24px)", width: rightPanelWidth }}
             >
               {/* Left-edge resize handle */}
@@ -587,17 +587,17 @@ export function EmailEditor({
                   dragStartWidthRight.current = rightPanelWidth;
                 }}
               />
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 border-b border-border/40 shrink-0 select-none">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <p className="flex-1 text-xs font-semibold text-foreground">Properties</p>
+              <div className="flex items-center gap-2 px-4 py-3 bg-zinc-900 border-b border-zinc-800 shrink-0 select-none">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <p className="flex-1 text-sm font-bold text-white">Properties</p>
                 <button
                   onClick={() => setRightPanelVisible(false)}
-                  className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted transition-colors shrink-0"
+                  className="text-zinc-500 hover:text-white rounded p-0.5 hover:bg-zinc-800 transition-colors shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
                 <BlockPropertiesPanel
                   block={blocks.find(b => b.id === selectedId) ?? null}
                   onChange={updated => handleBlocksChange(blocks.map(b => b.id === updated.id ? updated : b))}
@@ -626,8 +626,6 @@ export function EmailEditor({
               paddingLeft: leftPanelVisible ? leftPanelWidth + 16 : 0,
               paddingRight: rightPanelVisible ? rightPanelWidth + 16 : 0,
               backgroundColor: "#0d0d0d",
-              backgroundImage: "radial-gradient(circle, #2a2a2a 1.5px, transparent 1.5px)",
-              backgroundSize: "22px 22px",
             }}
             onClick={e => { if (e.target === e.currentTarget) setSelectedId(null); }}
           >
