@@ -61,7 +61,8 @@ export type BlockType =
   | "footer"
   | "video"
   | "table"
-  | "iframe";
+  | "iframe"
+  | "html";
 
 export interface EmailBlock {
   id: string;
@@ -313,6 +314,7 @@ export function defaultBlock(type: BlockType): EmailBlock {
     case "video": return { id, type, videoUrl: "", videoType: "youtube", videoCaptionText: "" };
     case "table": return { id, type, tableHeaders: ["Column 1", "Column 2", "Column 3"], tableRows: [["", "", ""], ["", "", ""]], tableBgColor: "#1e1e1e", tableHeaderBgColor: "transparent", tableHeaderTextColor: "#3ECF8E", tableBorderColor: "#3f3f46" };
     case "iframe": return { id, type, iframeUrl: "", iframeHeight: 400, iframeTitle: "Embedded content", iframeSandbox: "allow-scripts allow-same-origin allow-forms", iframeFallbackText: "View this content online →" };
+    case "html": return { id, type, content: "" };
   }
 }
 
@@ -544,6 +546,8 @@ function blockToHtml(block: EmailBlock): string {
   void fs;
 
   switch (block.type) {
+    // Raw HTML block — emits its content verbatim (used for imported / predefined templates).
+    case "html": return block.content ?? "";
     case "header": {
       const pV = block.paddingV ?? 44;
       const pH = block.paddingH ?? 32;
@@ -745,6 +749,15 @@ const BLOCKS_JSON_MARKER = "__blocks_v1__";
 
 export function blocksToHtml(blocks: EmailBlock[], emailBg?: EmailBackground, preheader?: string, utm?: { source?: string; medium?: string; campaign?: string }): string {
   if (!blocks.length) return "";
+
+  // A single raw-HTML block (imported / predefined template) is emitted verbatim — wrapping
+  // it in the editor's container would double-frame the email. Re-embed the editor-state
+  // marker so it restores as an html block on next open.
+  if (blocks.length === 1 && blocks[0]!.type === "html") {
+    const editorMeta = { v: 2, blocks, preheader: preheader ?? '', emailBg: emailBg ?? null, utm: utm ?? {} };
+    const marker = `<!-- ${BLOCKS_JSON_MARKER}:${JSON.stringify(editorMeta)} -->`;
+    return `${marker}\n${blocks[0]!.content ?? ""}`;
+  }
 
   // Determine if any block needs mobile-hide support
   const needsMobileHide = blocks.some(b => b.hideOnMobile);
@@ -1144,6 +1157,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   video: "Video / GIF",
   table: "Table",
   iframe: "Embed / iFrame",
+  html: "Custom HTML",
 };
 
 // ── Shared variable dropdown portal (autocomplete + swap) ────────────────────
@@ -1601,6 +1615,14 @@ function BlockLiveView({
   const ff = block.fontFamily || "inherit";
 
   switch (block.type) {
+    // Raw HTML block — render the imported/predefined email markup as-is in the canvas.
+    case "html":
+      return (
+        <div
+          style={{ background: "#ffffff" }}
+          dangerouslySetInnerHTML={{ __html: block.content ?? "" }}
+        />
+      );
     case "header": {
       const pV = block.paddingV ?? 44; const pH = block.paddingH ?? 32;
       const bgCss = (() => {

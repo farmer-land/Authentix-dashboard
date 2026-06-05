@@ -320,11 +320,15 @@ export default function EmailTemplateEditorPage() {
             if (editorState.utm.medium) setUtmMedium(editorState.utm.medium);
             if (editorState.utm.campaign) setUtmCampaign(editorState.utm.campaign);
           }
+        } else if (savedHtml && savedHtml.trim()) {
+          // No embedded block JSON but there IS raw HTML (predefined sample or imported
+          // template). Wrap it in a single raw-HTML block so the design renders in the
+          // canvas and is preserved on save — instead of showing a blank/“choose template”.
+          setBlocks([{ ...defaultBlock("html"), id: nanoid(8), content: savedHtml }]);
+          setTemplateHadBody(true);
         } else {
-          // No embedded block JSON — template may have raw HTML (from predefined templates).
-          // Keep blocks empty so the canvas is blank, but suppress the starter gallery.
+          // Genuinely empty template — leave blocks empty (starter gallery may show).
           setBlocks([]);
-          if (savedHtml && savedHtml.trim()) setTemplateHadBody(true);
         }
       }
 
