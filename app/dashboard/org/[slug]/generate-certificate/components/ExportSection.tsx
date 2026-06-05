@@ -2459,12 +2459,12 @@ export function ExportSection({
             /* ── Success ── */
             <div className="flex flex-col items-center gap-8">
               {/* Celebration animation */}
-              <div style={{ animation: 'genZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both', width: 220, height: 220 }}>
+              <div style={{ animation: 'genZoomIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both', width: 300, height: 300 }}>
                 <Lottie
                   animationData={generatedNewAnimationData}
                   loop={false}
                   autoplay
-                  style={{ width: 220, height: 220 }}
+                  style={{ width: 300, height: 300 }}
                   rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
                 />
               </div>
@@ -2616,7 +2616,7 @@ export function ExportSection({
                       <div className="flex items-baseline" style={{ gap: 10 }}>
                         <span
                           className="tabular-nums font-black"
-                          style={{ fontSize: 96, lineHeight: 1, color: '#fff', letterSpacing: '-5px', fontVariantNumeric: 'tabular-nums' }}
+                          style={{ fontSize: 96, lineHeight: 1, color: '#3ECF8E', letterSpacing: '-5px', fontVariantNumeric: 'tabular-nums', textShadow: '0 0 28px rgba(62,207,142,0.45)' }}
                         >
                           {animCount}
                         </span>
