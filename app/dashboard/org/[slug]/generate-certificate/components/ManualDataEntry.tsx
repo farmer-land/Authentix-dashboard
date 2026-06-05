@@ -64,7 +64,7 @@ export function ManualDataEntry({ fields, onDataSubmit, onDataChange, initialDat
             key: fieldKey,
             label: field.label,
             required: false,
-            isDate: field.type === 'start_date' || field.type === 'end_date',
+            isDate: field.type === 'date' || field.type === 'start_date' || field.type === 'end_date',
           });
         }
       });
