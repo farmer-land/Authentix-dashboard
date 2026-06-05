@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 import { api } from "@/lib/api/client";
 import { Upload, Video, Globe, Mail, Quote, Code, Star, Reply, MoreVertical } from "lucide-react";
+import { TiptapRichText } from "./TiptapRichText";
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
@@ -1494,130 +1495,17 @@ function MarkdownBlockView({
   return (
     <div style={{ padding: "10px 32px", background: block.bgColor ?? "transparent" }}>
       {editing ? (
-        <div className="relative">
-          {/* Markdown formatting toolbar */}
-          <div className="flex items-center gap-0.5 mb-2 flex-wrap bg-zinc-800/60 rounded-lg px-2 py-1.5 border border-zinc-700/50">
-            {[
-              { label: "B",    title: "Bold (**text**)",        syntax: ["**", "**"] as [string, string] },
-              { label: "I",    title: "Italic (*text*)",        syntax: ["*", "*"] as [string, string] },
-              { label: "~~",   title: "Strikethrough",          syntax: ["~~", "~~"] as [string, string] },
-              { label: "`",    title: "Inline code",            syntax: ["`", "`"] as [string, string] },
-            ].map(fmt => (
-              <button key={fmt.label} type="button" title={fmt.title}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
-                  if (!ta) return;
-                  const s = ta.selectionStart; const end = ta.selectionEnd;
-                  const sel = draft.slice(s, end) || "text";
-                  const next = draft.slice(0, s) + fmt.syntax[0] + sel + fmt.syntax[1] + draft.slice(end);
-                  setDraft(next);
-                  requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + fmt.syntax[0].length, s + fmt.syntax[0].length + sel.length); });
-                }}
-                className="px-1.5 h-6 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
-                {fmt.label}
-              </button>
-            ))}
-            <div className="w-px h-4 bg-zinc-600 mx-0.5" />
-            {[
-              { label: "H1", title: "Heading 1", prefix: "# " },
-              { label: "H2", title: "Heading 2", prefix: "## " },
-              { label: "H3", title: "Heading 3", prefix: "### " },
-            ].map(h => (
-              <button key={h.label} type="button" title={h.title}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
-                  if (!ta) return;
-                  const s = ta.selectionStart;
-                  const lineStart = draft.lastIndexOf("\n", s - 1) + 1;
-                  const next = draft.slice(0, lineStart) + h.prefix + draft.slice(lineStart);
-                  setDraft(next);
-                  requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + h.prefix.length, s + h.prefix.length); });
-                }}
-                className="px-1.5 h-6 text-[10px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
-                {h.label}
-              </button>
-            ))}
-            <div className="w-px h-4 bg-zinc-600 mx-0.5" />
-            {[
-              { label: "—", title: "Bullet list",   prefix: "- " },
-              { label: "1.", title: "Ordered list",  prefix: "1. " },
-              { label: "❝",  title: "Blockquote",    prefix: "> " },
-              { label: "—",  title: "Divider",       full: "\n---\n" },
-            ].map((item, i) => (
-              <button key={i} type="button" title={item.title}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
-                  if (!ta) return;
-                  if (item.full) {
-                    const s = ta.selectionStart;
-                    const next = draft.slice(0, s) + item.full + draft.slice(s);
-                    setDraft(next);
-                    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + item.full!.length, s + item.full!.length); });
-                  } else if (item.prefix) {
-                    const s = ta.selectionStart;
-                    const lineStart = draft.lastIndexOf("\n", s - 1) + 1;
-                    const next = draft.slice(0, lineStart) + item.prefix + draft.slice(lineStart);
-                    setDraft(next);
-                    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + item.prefix!.length, s + item.prefix!.length); });
-                  }
-                }}
-                className="px-1.5 h-6 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
-                {item.label}
-              </button>
-            ))}
-            <div className="w-px h-4 bg-zinc-600 mx-0.5" />
-            <button type="button" title="Image ![alt](url)"
-              onMouseDown={e => {
-                e.preventDefault();
-                const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
-                if (!ta) return;
-                const s = ta.selectionStart;
-                const insert = "![alt text](https://example.com/image.jpg)";
-                const next = draft.slice(0, s) + insert + draft.slice(s);
-                setDraft(next);
-                requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + 2, s + 10); });
-              }}
-              className="px-1.5 h-6 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
-              🖼
-            </button>
-            <button type="button" title="Link [text](url)"
-              onMouseDown={e => {
-                e.preventDefault();
-                const ta = e.currentTarget.closest("div")?.parentElement?.querySelector("textarea") as HTMLTextAreaElement | null;
-                if (!ta) return;
-                const s = ta.selectionStart; const end = ta.selectionEnd;
-                const sel = draft.slice(s, end) || "link text";
-                const insert = `[${sel}](https://example.com)`;
-                const next = draft.slice(0, s) + insert + draft.slice(end);
-                setDraft(next);
-                requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + sel.length + 3, s + insert.length - 1); });
-              }}
-              className="px-1.5 h-6 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors">
-              🔗
-            </button>
-          </div>
-          <textarea
-            autoFocus
+        <div className="relative" onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+          {/* Tiptap WYSIWYG — paste from ChatGPT / Claude / Gemini (markdown) formats instantly */}
+          <TiptapRichText
             value={draft}
-            onChange={e => setDraft(e.target.value)}
+            onChange={setDraft}
             onBlur={commit}
-            onKeyDown={e => {
-              if (e.key === "Escape") commit();
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") commit();
-              e.stopPropagation();
-            }}
-            rows={Math.max(6, draft.split("\n").length + 1)}
-            placeholder={"# Heading\n**bold**, *italic*, [link](url)\n- list item\n> blockquote\n\n{{variable}}\n\n![image](https://url)"}
-            className="w-full font-mono text-xs p-3 border-2 border-[#3ECF8E]/50 rounded-lg bg-card text-foreground focus:outline-none focus:border-[#3ECF8E] resize-y leading-relaxed"
-            style={{ minHeight: 120 }}
+            textColor={block.textColor ?? "#d1d5db"}
+            placeholder="Write here… or paste from ChatGPT / Claude / Gemini"
           />
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[10px] text-muted-foreground font-mono">
-              Markdown · <kbd className="bg-muted border rounded px-1 py-px">⌘↵</kbd> or click outside to save
-            </span>
+            <span className="text-[10px] text-muted-foreground">Rich text · paste from AI works · click outside to save</span>
             <span className="text-[10px] text-muted-foreground">{draft.length} chars</span>
           </div>
         </div>
