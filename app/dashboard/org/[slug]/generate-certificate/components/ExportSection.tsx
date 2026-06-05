@@ -19,7 +19,7 @@ import { format, isValid } from 'date-fns';
 import {
   Download, Loader2, CheckCircle2, AlertCircle, Calendar, Plus, X,
   FileText, ChevronDown, ChevronUp, Settings2, Eye, ChevronLeft, ChevronRight,
-  ShieldCheck, Mail, Send, ExternalLink, Bell, ArrowRight,
+  Mail, Send, ExternalLink, Bell, ArrowRight,
   FileArchive, FileCheck, Info, RefreshCw,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -423,6 +423,10 @@ type SendModalStep = 'checking' | 'no_template' | 'no_integration' | 'select_tem
 
 function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
+  const { organization, loading: orgLoading } = useOrganization();
+  // Only the parent-owner org may use the Authentix default sender. Every other org must
+  // configure its own email integration — we never expose our domain sender to them.
+  const isPlatformOwner = !!organization?.is_platform_owner;
   const [step, setStep] = useState<SendModalStep>('checking');
   const [integrations, setIntegrations] = useState<DeliveryIntegration[]>([]);
   const [templates, setTemplates] = useState<DeliveryTemplate[]>([]);
@@ -442,7 +446,8 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
   const selectedIntegration = integrations.find(i => i.id === selectedIntegrationId) ?? null;
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
 
-  useEffect(() => { check(); }, []);
+  // Wait until the org query resolves so isPlatformOwner is accurate before branching.
+  useEffect(() => { if (!orgLoading) check(); }, [orgLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const check = async () => {
     setStep('checking');
@@ -464,7 +469,14 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
       setSelectedTemplateId(defaultTpl.id);
 
       if (activeIntegrations.length === 0) {
-        setStep('no_integration');
+        // Parent owner can fall back to the Authentix default sender — no setup needed.
+        // Everyone else must configure their own integration first.
+        if (isPlatformOwner) {
+          setUsePlatformDefault(true);
+          setStep('select_template');
+        } else {
+          setStep('no_integration');
+        }
         return;
       }
 
@@ -691,7 +703,7 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
         <>
         <DialogTitle className="flex items-center gap-2">
           <Mail className="w-5 h-5 text-primary" />
-          {step === 'select_template' ? 'Choose Email Template' : step === 'no_integration' ? 'Choose How to Send' : 'Send via Email'}
+          {step === 'select_template' ? 'Choose Email Template' : step === 'no_integration' ? 'Set Up Email Sending' : 'Send via Email'}
         </DialogTitle>
 
         {/* Checking */}
@@ -733,31 +745,26 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
           </div>
         )}
 
-        {/* No integration — user picks platform default or sets up their own */}
+        {/* No integration — non-owner orgs must connect their own email provider.
+            (Platform owner never reaches this step: check() auto-uses the default sender.) */}
         {step === 'no_integration' && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              No custom email integration is connected. Choose how you'd like to send certificates:
-            </p>
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => { setUsePlatformDefault(true); setStep('select_template'); }}
-                className="w-full text-left p-4 rounded-lg border-2 border-[#3ECF8E]/30 bg-[#3ECF8E]/5 hover:border-[#3ECF8E]/60 hover:bg-[#3ECF8E]/10 transition-all"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-md bg-[#3ECF8E]/10 shrink-0">
-                    <ShieldCheck className="w-5 h-5 text-[#3ECF8E]" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">Use Authentix Default Email</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Send from our verified sender — no setup required.</p>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
-                </div>
-              </button>
-              <button
-                type="button"
+            <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+              <div className="p-2 rounded-md bg-primary/10 shrink-0">
+                <Mail className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">Connect your email to send certificates</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Certificates are sent from your own verified sender so recipients see your
+                  organization&apos;s identity. Set up an email provider once — it takes a minute.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button
+                className="flex-1 gap-2"
                 onClick={() => {
                   try {
                     sessionStorage.setItem('pendingSendJob', JSON.stringify({
@@ -769,22 +776,9 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
                   } catch { /* storage unavailable */ }
                   router.push(orgPath('/settings/delivery'));
                 }}
-                className="w-full text-left p-4 rounded-lg border-2 border-border hover:border-border/60 hover:bg-muted/30 transition-all"
               >
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-md bg-muted shrink-0">
-                    <Settings2 className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">Set Up My Own Email</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Connect your own email provider for full control over sender identity.</p>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
-                </div>
-              </button>
-            </div>
-            <div className="flex justify-end">
-              <Button variant="ghost" onClick={onClose} className="text-muted-foreground">Cancel</Button>
+                Set up email <ExternalLink className="w-3.5 h-3.5" />
+              </Button>
             </div>
           </div>
         )}
@@ -856,8 +850,10 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
               })}
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={integrations.length === 0 ? () => setStep('no_integration') : onClose} className="shrink-0 gap-1.5">
-                {integrations.length === 0 ? <><ChevronLeft className="w-4 h-4" />Back</> : 'Cancel'}
+              {/* Owners auto-use the default sender (no no_integration step), so just Cancel.
+                  Non-owners with no integration came from the setup prompt — let them go Back. */}
+              <Button variant="outline" onClick={(integrations.length === 0 && !isPlatformOwner) ? () => setStep('no_integration') : onClose} className="shrink-0 gap-1.5">
+                {(integrations.length === 0 && !isPlatformOwner) ? <><ChevronLeft className="w-4 h-4" />Back</> : 'Cancel'}
               </Button>
               <Button
                 onClick={() => setStep('confirm')}
@@ -885,18 +881,35 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
             {/* Integration selector */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Send From</Label>
-              {usePlatformDefault ? (
-                <div className="flex items-center gap-2 p-2.5 rounded-md border bg-[#3ECF8E]/5 border-[#3ECF8E]/20 text-sm">
-                  <Mail className="w-3.5 h-3.5 text-[#3ECF8E] shrink-0" />
-                  <span className="truncate text-[#3ECF8E] font-medium flex-1">Authentix Default Email</span>
-                  <button
-                    type="button"
-                    onClick={() => setStep('no_integration')}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0 transition-colors"
-                  >
-                    Change
-                  </button>
-                </div>
+              {isPlatformOwner ? (
+                /* Parent owner: choose which email to send from — Authentix default + any own integrations. */
+                <Select
+                  value={usePlatformDefault ? '__platform__' : selectedIntegrationId}
+                  onValueChange={(v) => {
+                    if (v === '__platform__') { setUsePlatformDefault(true); }
+                    else { setUsePlatformDefault(false); setSelectedIntegrationId(v); }
+                  }}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Select sender…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__platform__">
+                      <span className="flex items-center gap-2">
+                        <span>Authentix Default</span>
+                        <span className="text-xs text-muted-foreground">verified sender</span>
+                      </span>
+                    </SelectItem>
+                    {integrations.map(i => (
+                      <SelectItem key={i.id} value={i.id}>
+                        <span className="flex items-center gap-2">
+                          <span>{i.display_name}</span>
+                          <span className="text-xs text-muted-foreground">{i.from_email}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : integrations.length === 1 ? (
                 <div className="flex items-center gap-2 p-2.5 rounded-md border bg-muted/30 text-sm">
                   <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

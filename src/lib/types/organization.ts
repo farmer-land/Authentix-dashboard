@@ -42,6 +42,8 @@ export interface Organization extends OrganizationLogoFields {
   certificate_prefix?: string | null;
   certificate_number_format?: string | null;
   features: string[];
+  /** True only for the parent-owner org — may use the Authentix default email sender. */
+  is_platform_owner?: boolean;
   created_at: string;
   updated_at: string;
 }
