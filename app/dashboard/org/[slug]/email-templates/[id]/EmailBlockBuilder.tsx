@@ -1625,12 +1625,14 @@ function BlockLiveView({
   const ff = block.fontFamily || "inherit";
 
   switch (block.type) {
-    // Raw HTML block — render the imported/predefined email markup as-is in the canvas.
+    // Raw HTML block (imported/predefined email markup). Run it through applyPreviewMocks so
+    // {{certificate_image_url}}, {{verification_url}} and the qrserver QR resolve to preview
+    // images in the canvas instead of rendering as broken/literal placeholders.
     case "html":
       return (
         <div
           style={{ background: "#ffffff" }}
-          dangerouslySetInnerHTML={{ __html: block.content ?? "" }}
+          dangerouslySetInnerHTML={{ __html: applyPreviewMocks(block.content ?? "") }}
         />
       );
     case "header": {
