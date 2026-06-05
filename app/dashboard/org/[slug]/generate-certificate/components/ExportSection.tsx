@@ -421,6 +421,23 @@ interface SendEmailModalProps {
 
 type SendModalStep = 'checking' | 'no_template' | 'no_integration' | 'select_template' | 'confirm' | 'test_email' | 'sending' | 'done' | 'error';
 
+// Synthetic ID for the platform built-in email template. When this template is selected,
+// the send call omits template_id so the backend uses its own built-in default.
+const BUILTIN_TEMPLATE_ID = '__builtin_default__';
+const BUILTIN_EMAIL_TEMPLATE: DeliveryTemplate = {
+  id: BUILTIN_TEMPLATE_ID,
+  organization_id: '',
+  channel: 'email',
+  name: 'Default Certificate Email',
+  is_default: true,
+  is_active: true,
+  email_subject: 'Your certificate from {{organization_name}}',
+  body: 'Built-in default email — recipients receive their certificate with a verification link.',
+  variables: ['recipient_name', 'organization_name', 'verification_url'],
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
 function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
   const { organization, loading: orgLoading } = useOrganization();
@@ -458,12 +475,24 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
       ]);
 
       const activeIntegrations = intList.filter(i => i.is_active && i.channel === 'email');
-      const activeTemplates = tplList.filter(t => t.is_active && t.channel === 'email');
+      let activeTemplates = tplList.filter(t => t.is_active && t.channel === 'email');
 
       setIntegrations(activeIntegrations);
-      setTemplates(activeTemplates);
 
-      if (activeTemplates.length === 0) { setStep('no_template'); return; }
+      if (activeTemplates.length === 0) {
+        // Parent owner is never blocked on "no template": inject a synthetic built-in
+        // template. When selected, send with no template_id → backend uses its built-in
+        // default. Other orgs still see the "create a template" prompt.
+        if (isPlatformOwner) {
+          activeTemplates = [BUILTIN_EMAIL_TEMPLATE];
+        } else {
+          setTemplates([]);
+          setStep('no_template');
+          return;
+        }
+      }
+
+      setTemplates(activeTemplates);
 
       const defaultTpl = activeTemplates.find(t => t.is_default) ?? activeTemplates[0]!;
       setSelectedTemplateId(defaultTpl.id);
@@ -505,7 +534,8 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
         const result = await api.delivery.sendJobEmails({
           generation_job_id: cjId,
           integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
-          template_id: selectedTemplate.id,
+          // Built-in synthetic template → omit template_id so the backend uses its default.
+          template_id: selectedTemplate.id === BUILTIN_TEMPLATE_ID ? undefined : selectedTemplate.id,
           subject_override: subjectOverride.trim() || undefined,
           from_name_override: fromNameOverride.trim() || undefined,
           use_platform_default: usePlatformDefault || undefined,
@@ -543,7 +573,7 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
       await api.delivery.testSend({
         test_email: testEmail.trim(),
         integration_id: usePlatformDefault ? undefined : (selectedIntegrationId || undefined),
-        template_id: selectedTemplateId || undefined,
+        template_id: (selectedTemplateId && selectedTemplateId !== BUILTIN_TEMPLATE_ID) ? selectedTemplateId : undefined,
         subject_override: subjectOverride.trim() || undefined,
         from_name_override: fromNameOverride.trim() || undefined,
         use_platform_default: usePlatformDefault || undefined,
