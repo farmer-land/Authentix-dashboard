@@ -499,6 +499,17 @@ export const deliveryApi = {
     await apiRequest(`/delivery/senders/${id}`, { method: "DELETE" });
   },
 
+  // ── Resend template sync ──────────────────────────────────────────────────────
+
+  // Import a migrating customer's existing Resend templates into our templates.
+  importResendTemplates: async (integrationId: string): Promise<{ imported: number; skipped: number }> => {
+    const response = await apiRequest<{ imported: number; skipped: number }>(
+      "/delivery/resend/templates/import",
+      { method: "POST", body: JSON.stringify({ integration_id: integrationId }) },
+    );
+    return response.data!;
+  },
+
   // ── Resend domains ──────────────────────────────────────────────────────────
 
   listDomains: async (integrationId: string): Promise<ResendDomain[]> => {

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   Mail, Plus, Edit2, Trash2, Loader2, AlertCircle,
   Copy, Sparkles, ChevronLeft, ChevronRight, Clock, CheckCircle2, PenLine, Megaphone,
-  Award, CalendarDays, Users, Newspaper, FileText, MoreHorizontal, Send,
+  Award, CalendarDays, Users, Newspaper, FileText, MoreHorizontal, Send, Download,
 } from "lucide-react";
 
 // ── Template purpose inference ─────────────────────────────────────────────────
@@ -29,10 +29,12 @@ import { toast } from "sonner";
 import { type DeliveryTemplate } from "@/lib/api/client";
 import {
   useDeliveryTemplates,
+  useDeliveryIntegrations,
   useCreateDeliveryTemplate,
   useDeleteDeliveryTemplate,
   useDuplicateDeliveryTemplate,
 } from "@/lib/hooks/queries/delivery";
+import { api } from "@/lib/api/client";
 import { useOrg } from "@/lib/org";
 import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -575,10 +577,32 @@ export default function EmailTemplatesPage() {
   // Saved IDs from localStorage (scoped by org slug)
   const [savedIds, setSavedIds] = useState<Set<string>>(() => getSavedIds(slug));
 
-  const { templates: rawTemplates, loading, error: fetchError } = useDeliveryTemplates();
+  const { templates: rawTemplates, loading, error: fetchError, refetch: refetchTemplates } = useDeliveryTemplates();
+  const { integrations } = useDeliveryIntegrations();
   const createTemplate = useCreateDeliveryTemplate();
   const deleteTemplate = useDeleteDeliveryTemplate();
   const duplicateTemplate = useDuplicateDeliveryTemplate();
+
+  // For migrating customers: import their existing Resend templates into ours.
+  const resendIntegration = integrations.find(i => i.is_active && i.provider === "resend");
+  const [importing, setImporting] = useState(false);
+  const handleImportFromResend = async () => {
+    if (!resendIntegration) return;
+    setImporting(true);
+    try {
+      const { imported, skipped } = await api.delivery.importResendTemplates(resendIntegration.id);
+      toast.success(
+        imported > 0
+          ? `Imported ${imported} template${imported !== 1 ? "s" : ""} from Resend${skipped ? ` (${skipped} already linked)` : ""}`
+          : `No new templates to import${skipped ? ` (${skipped} already linked)` : ""}`,
+      );
+      await refetchTemplates();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to import from Resend");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // Sort by updated_at desc
   const templates = [...rawTemplates].sort(
@@ -684,6 +708,13 @@ export default function EmailTemplatesPage() {
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
+          {resendIntegration && (
+            <Button variant="outline" onClick={handleImportFromResend} disabled={importing}
+              title="Import templates from your Resend account">
+              {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              Import from Resend
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setShowSamplePurposeDialog(true)}>
             <Sparkles className="w-4 h-4 mr-2" />
             Browse Samples
