@@ -499,6 +499,18 @@ export const deliveryApi = {
     await apiRequest(`/delivery/senders/${id}`, { method: "DELETE" });
   },
 
+  // ── Resend logs / sent-email history (read-only) ───────────────────────────────
+
+  listResendEmails: async (params?: { integrationId?: string; limit?: number }): Promise<{ data?: Array<Record<string, unknown>> }> => {
+    const qs = new URLSearchParams();
+    if (params?.integrationId) qs.set("integration_id", params.integrationId);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const response = await apiRequest<{ data?: Array<Record<string, unknown>> }>(
+      `/delivery/resend/emails${qs.toString() ? `?${qs}` : ""}`,
+    );
+    return response.data ?? {};
+  },
+
   // ── Resend template sync ──────────────────────────────────────────────────────
 
   // Import a migrating customer's existing Resend templates into our templates.

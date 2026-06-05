@@ -11,9 +11,18 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Gauge, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Gauge, Loader2, AlertCircle, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { useOrg } from "@/lib/org";
+
+// A sent-email row as returned by Resend's List Sent Emails API (loosely typed).
+interface ResendEmailRow {
+  id?: string;
+  to?: string[] | string;
+  subject?: string;
+  last_event?: string;
+  created_at?: string;
+}
 
 // Resend plan presets (monthly / daily caps). Daily 0 = no separate daily cap.
 const PLANS: Record<string, { label: string; month: number; day: number }> = {
@@ -62,6 +71,30 @@ export function UsageCard() {
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<string>("free");
   const [customMonth, setCustomMonth] = useState<number>(0);
+
+  // Resend's own recent sends — the real source of truth, lazy-loaded on expand.
+  const [showResend, setShowResend] = useState(false);
+  const [resendRows, setResendRows] = useState<ResendEmailRow[] | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendError, setResendError] = useState<string | null>(null);
+
+  const toggleResend = async () => {
+    const next = !showResend;
+    setShowResend(next);
+    if (next && resendRows === null && !resendLoading) {
+      setResendLoading(true);
+      setResendError(null);
+      try {
+        const res = await api.delivery.listResendEmails({ limit: 10 });
+        const rows = Array.isArray(res.data) ? (res.data as ResendEmailRow[]) : [];
+        setResendRows(rows);
+      } catch (e) {
+        setResendError(e instanceof Error ? e.message : "Couldn't load Resend history");
+      } finally {
+        setResendLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     try {
@@ -178,6 +211,50 @@ export function UsageCard() {
             )}
           </div>
         )}
+
+        {/* Resend's own recent send history — exact source of truth */}
+        <div className="border-t pt-3">
+          <button
+            onClick={toggleResend}
+            className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>Recent sends (from Resend)</span>
+            {showResend ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          {showResend && (
+            <div className="mt-2.5">
+              {resendLoading ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground justify-center">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading from Resend…
+                </div>
+              ) : resendError ? (
+                <p className="text-[11px] text-amber-600">{resendError}</p>
+              ) : resendRows && resendRows.length > 0 ? (
+                <div className="space-y-1.5">
+                  {resendRows.map((r, i) => {
+                    const to = Array.isArray(r.to) ? r.to.join(", ") : (r.to ?? "—");
+                    const when = r.created_at ? new Date(r.created_at).toLocaleString() : "";
+                    return (
+                      <div key={r.id ?? i} className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-1.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium">{r.subject || "(no subject)"}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{to}{when ? ` · ${when}` : ""}</p>
+                        </div>
+                        {r.last_event && (
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
+                            {r.last_event}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground/60">No sends found on the connected Resend account yet.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         <p className="text-[11px] text-muted-foreground/60">
           Counts emails sent through Authentix this period. Resend doesn&apos;t expose a live quota API, so pick the plan
