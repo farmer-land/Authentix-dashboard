@@ -122,6 +122,7 @@ ${preheader(o.preheader)}
         </div>
       </div>
       <p class="ax-foot" style="margin:18px 0 0;text-align:center;font-size:12px;color:#9aa3af;">© {{organization_name}} · Secured by Authentix</p>
+      <p class="ax-foot" style="margin:6px 0 0;text-align:center;font-size:11px;color:#9aa3af;"><a href="{{unsubscribe_url}}" style="color:#9aa3af;text-decoration:underline;">Unsubscribe</a></p>
     </td></tr>
   </table>
 </div>`;

@@ -86,6 +86,7 @@ const BASE_MOCK: Record<string, string> = {
   // Must be a real URL — a bare "#" truncates the QR API's ?data=# as a URL
   // fragment, leaving the QR empty/broken in previews.
   verification_url: "https://verify.digicertificates.in/sample",
+  unsubscribe_url: "#",
 };
 
 /**
