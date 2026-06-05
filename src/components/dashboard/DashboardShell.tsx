@@ -51,7 +51,7 @@ import { NotificationPanel } from "@/components/dashboard/NotificationPanel";
 import { JobNotificationProvider } from "@/lib/notifications/job-notifications";
 import { BillingStatusBanner } from "@/components/dashboard/BillingStatusBanner";
 import { useOrganization } from "@/lib/hooks/queries/organizations";
-import { effectiveFeatures } from "@/lib/feature-flags";
+import { effectiveFeatures, ALL_FEATURES } from "@/lib/feature-flags";
 
 // ============================================================================
 // Types
@@ -206,8 +206,12 @@ function SidebarNav({ slug, pathname, expanded, pendingJobsCount, activeCertJobs
   const basePath = `/dashboard/org/${slug}`;
   const { organization } = useOrganization();
 
-  // Build effective feature set — includes synthetic flags (contacts, email_templates, etc.)
-  const features = effectiveFeatures(organization?.features ?? ['certs', 'cert_delivery_email']);
+  // Build effective feature set — includes synthetic flags (contacts, email_templates, etc.).
+  // The parent-owner org always has every feature (campaigns, automations, etc.).
+  const baseFeatures = organization?.is_platform_owner
+    ? ALL_FEATURES
+    : (organization?.features ?? ['certs', 'cert_delivery_email']);
+  const features = effectiveFeatures(baseFeatures);
 
   // Filter groups: keep groups that have at least one visible item
   const visibleGroups = NAVIGATION_GROUPS.map(group => ({
