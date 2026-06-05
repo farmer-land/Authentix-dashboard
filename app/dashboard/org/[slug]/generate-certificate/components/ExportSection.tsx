@@ -501,6 +501,57 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
   // Re-validate (clear the acknowledgement) whenever the chosen template(s) change.
   useEffect(() => { setAckPlaceholders(false); }, [selectedTemplateId, useDifferentPerCert, perJobTemplate]);
 
+  // Banner shown when a previously-selected sender/template was removed in another tab.
+  const [staleConfigNote, setStaleConfigNote] = useState<string | null>(null);
+
+  // Lightweight refresh of integrations + templates (without resetting the step), then
+  // reconcile the current selections. Covers: user edits/deletes a template or integration
+  // in another tab while this dialog is open.
+  const refreshConfig = async () => {
+    try {
+      const [intList, tplList] = await Promise.all([
+        api.delivery.listIntegrations(),
+        api.delivery.listTemplates(),
+      ]);
+      const activeIntegrations = intList.filter(i => i.is_active && i.channel === 'email');
+      let activeTemplates = tplList.filter(t => t.is_active && t.channel === 'email');
+      if (activeTemplates.length === 0 && isPlatformOwner) activeTemplates = [BUILTIN_EMAIL_TEMPLATE];
+      setIntegrations(activeIntegrations);
+      setTemplates(activeTemplates);
+
+      const notes: string[] = [];
+      // Selected sender removed/disabled?
+      if (!usePlatformDefault && selectedIntegrationId && !activeIntegrations.some(i => i.id === selectedIntegrationId)) {
+        if (isPlatformOwner) { setUsePlatformDefault(true); setSelectedIntegrationId(''); }
+        else if (activeIntegrations.length > 0) {
+          setSelectedIntegrationId((activeIntegrations.find(i => i.is_default) ?? activeIntegrations[0]!).id);
+        } else { setSelectedIntegrationId(''); }
+        notes.push('the email sender');
+      }
+      // Selected template removed?
+      if (selectedTemplateId && selectedTemplateId !== BUILTIN_TEMPLATE_ID && !activeTemplates.some(t => t.id === selectedTemplateId)) {
+        const def = activeTemplates.find(t => t.is_default) ?? activeTemplates[0];
+        setSelectedTemplateId(def?.id ?? '');
+        notes.push('the selected template');
+      }
+      setStaleConfigNote(notes.length ? `Heads up — ${notes.join(' and ')} changed elsewhere and your selection was updated. Please review before sending.` : null);
+    } catch { /* transient — ignore */ }
+  };
+
+  // Refresh when the user returns to this tab while configuring (not mid-send/done).
+  useEffect(() => {
+    const active = step === 'select_template' || step === 'confirm' || step === 'test_email';
+    if (!active) return;
+    const onFocus = () => { if (document.visibilityState !== 'hidden') refreshConfig(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selectedIntegrationId, selectedTemplateId, usePlatformDefault, isPlatformOwner]);
+
   const check = async () => {
     setStep('checking');
     try {
@@ -605,7 +656,15 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
       } catch { /* silently ignore */ }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      setErrorMsg(err.message ?? 'Failed to send emails');
+      // Map known backend failures to clear, actionable messages.
+      const code = err?.code as string | undefined;
+      if (code === 'NO_INTEGRATION') {
+        setErrorMsg('The email sender is no longer available (it may have been removed or disabled). Choose another sender and try again.');
+      } else if (code === 'NO_TEMPLATE') {
+        setErrorMsg('The selected email template is no longer available. Pick another template and try again.');
+      } else {
+        setErrorMsg(err?.message ?? 'Failed to send emails. Your certificates are safe — you can retry sending anytime.');
+      }
       setStep('error');
     }
   };
@@ -995,6 +1054,14 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
         {/* Confirm — Modal 2 */}
         {step === 'confirm' && (usePlatformDefault || selectedIntegration) && selectedTemplate && (
           <div className="space-y-4">
+            {/* Config-changed-elsewhere notice */}
+            {staleConfigNote && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/50">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">{staleConfigNote}</p>
+              </div>
+            )}
+
             {/* Recipient count pill */}
             <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
               <span className="text-sm font-medium">Recipients</span>
