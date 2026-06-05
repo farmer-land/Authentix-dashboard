@@ -2429,6 +2429,10 @@ export function ExportSection({
           @keyframes genCountPop  { 0%{transform:scale(0.6);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
           @keyframes genMsgFade   { from{opacity:0;transform:translateY(4px)} to{opacity:0.6;transform:translateY(0)} }
           @keyframes shimmer      { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+          /* Seamless leftward scroll of the duplicated city track → car looks like it's driving forward */
+          @keyframes genCityScroll { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+          /* Subtle car bob to sell the motion */
+          @keyframes genCarBob     { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-3px)} }
         `}</style>
 
         {/* Bottom CTA — while generating animation plays */}
@@ -2602,25 +2606,43 @@ export function ExportSection({
                     className="flex flex-col items-center gap-8 relative"
                     style={{ zIndex: 1, animation: 'genFadeSlide 0.3s ease-out both' }}
                   >
-                    {/* City backdrop + car driving in front of it */}
-                    <div style={{ position: 'relative', width: 520, height: 260 }}>
-                      {/* City skyline — background layer (2:1, dimmed so it doesn't overpower the car/counter) */}
-                      <div style={{ position: 'absolute', inset: 0, opacity: 0.55, zIndex: 0 }}>
+                    {/* City backdrop scrolling behind a stationary car → "driving" parallax */}
+                    <div style={{ position: 'relative', width: 520, height: 260, overflow: 'hidden' }}>
+                      {/* Scrolling track: two city copies side by side, translated -50% on loop
+                          for a seamless, gap-free scroll. Dimmed so it doesn't overpower the counter. */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '200%',
+                          display: 'flex',
+                          opacity: 0.55,
+                          zIndex: 0,
+                          animation: 'genCityScroll 9s linear infinite',
+                        }}
+                      >
                         <Lottie
                           animationData={cityAnimationData as object}
                           loop autoplay
-                          style={{ width: 520, height: 260 }}
+                          style={{ width: '50%', height: 260, flexShrink: 0 }}
+                          rendererSettings={{ preserveAspectRatio: 'xMidYMid slice' }}
+                        />
+                        <Lottie
+                          animationData={cityAnimationData as object}
+                          loop autoplay
+                          style={{ width: '50%', height: 260, flexShrink: 0 }}
                           rendererSettings={{ preserveAspectRatio: 'xMidYMid slice' }}
                         />
                       </div>
-                      {/* Car — foreground, brand-tinted, sitting on the road at the bottom */}
+                      {/* Car — foreground, stays in place with a subtle bob while the city scrolls past */}
                       <div
                         style={{
                           position: 'absolute',
                           bottom: 8,
                           left: '50%',
-                          transform: 'translateX(-50%)',
                           zIndex: 1,
+                          transform: 'translateX(-50%)',
+                          animation: 'genCarBob 1.1s ease-in-out infinite',
                           filter: 'hue-rotate(130deg) saturate(1.8) brightness(1.05)',
                         }}
                       >
