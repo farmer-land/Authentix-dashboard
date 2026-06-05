@@ -810,7 +810,7 @@ export function InfiniteCanvas({
     // ─────────────────────────────────────────────────────────────────────
 
     onFieldUpdateRef.current(id, { x: nx, y: ny });
-  }, [scale, snapToGrid, multiSelectedIds]);
+  }, [scale, snapToGrid, multiSelectedIds, templateWidth, templateHeight]);
 
   const handleFieldResize = useCallback((
     id: string,

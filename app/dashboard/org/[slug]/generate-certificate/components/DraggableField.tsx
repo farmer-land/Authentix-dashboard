@@ -374,69 +374,68 @@ export function DraggableField({
     ] : []),
   ];
 
+  const isTextField = field.type !== 'image' && field.type !== 'qr_code';
+  const borderRadius = field.type === 'image'
+    ? (field.cornerRadius ? `${field.cornerRadius}px` : '2px')
+    : (field.bgCornerRadius ? `${field.bgCornerRadius * scale}px` : '2px');
+
   return (
     <div
       ref={fieldRef}
-      className={`
-        absolute pointer-events-auto group
-        ${isSelected ? 'z-50' : 'z-10'}
-        ${field.locked ? 'cursor-not-allowed' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}
-        ${!isSelected && !isMultiSelected ? 'hover:outline-[1.5px] hover:outline-dashed hover:outline-primary/40' : ''}
-      `}
+      className={`absolute pointer-events-auto ${isSelected ? 'z-50' : 'z-10'}`}
       style={{
-        // ── Outer wrapper: positioning + handle layer ─────────────────────────
-        // overflow:visible so handles that extend outside the field boundary
-        // are not clipped. The inner content div handles overflow:hidden.
         left: scaledX,
         top: scaledY,
         width: scaledWidth,
         height: scaledHeight,
+        // overflow:visible — handles extend outside the field box and must not be clipped.
+        // Image/QR content is clipped by their own inner wrapper instead.
         overflow: 'visible',
         transform: field.rotation ? `rotate(${field.rotation}deg)` : undefined,
         transformOrigin: 'center',
         opacity: field.locked ? 0.75 : 1,
+        cursor: field.locked ? 'not-allowed' : isDragging ? 'grabbing' : 'grab',
       }}
       onMouseDown={handleMouseDown}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect(e);
-      }}
+      onClick={(e) => { e.stopPropagation(); onSelect(e); }}
     >
-      {/* ── Inner content box ────────────────────────────────────────────────
-          Exact field dimensions, clips content (overflow:hidden).
-          Selection ring lives here so it's flush with the field boundary. */}
+      {/* ── Content layer (position:absolute inset-0, same size as outer) ── */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: field.type === 'image' ? 'center' : (field.textAlign === 'center' ? 'center' : field.textAlign === 'right' ? 'flex-end' : 'flex-start'),
-          borderRadius: field.type === 'image'
-            ? (field.cornerRadius ? `${field.cornerRadius}px` : '2px')
-            : (field.bgCornerRadius ? `${field.bgCornerRadius * scale}px` : '2px'),
+          borderRadius,
+          // Text fields: overflow visible so text always shows regardless of font vs box size.
+          // Image/QR: overflow hidden so content clips to the box.
+          overflow: isTextField ? 'visible' : 'hidden',
+          // Selection ring on the content box (flush with field boundary).
           boxShadow: isSelected
             ? '0 0 0 1.5px var(--primary), 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent)'
             : isMultiSelected
             ? '0 0 0 1px var(--primary)'
-            : undefined,
-          ...(field.type !== 'image' ? {
+            : 'none',
+          // Subtle dashed outline when hovering but not selected (like Figma).
+          outline: (!isSelected && !isMultiSelected) ? undefined : undefined,
+          // Text layout.
+          ...(isTextField ? {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: field.textAlign === 'center' ? 'center' : field.textAlign === 'right' ? 'flex-end' : 'flex-start',
             fontSize: scaledFontSize,
             fontFamily: field.fontFamily,
             color: field.color,
             fontWeight: field.fontWeight,
             fontStyle: field.fontStyle,
             textAlign: field.textAlign,
-            // No default padding — content fills the bounding box.
-          // bgPaddingH/V are explicit user-set values (set via RightPanel when background
-          // colour is enabled); default 0 keeps the field box and content aligned.
-          padding: `${(field.bgPaddingV ?? 0) * scale}px ${(field.bgPaddingH ?? 0) * scale}px`,
+            padding: `${(field.bgPaddingV ?? 0) * scale}px ${(field.bgPaddingH ?? 0) * scale}px`,
             backgroundColor: field.backgroundColor || undefined,
-          } : {}),
+          } : {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }),
         }}
       >
-        {/* Field Content */}
         {field.type === 'qr_code' ? (
           <div className="w-full h-full flex items-center justify-center p-1" style={{ opacity: (field.opacity ?? 100) / 100 }}>
             <QRCodePreview
@@ -447,7 +446,7 @@ export function DraggableField({
             />
           </div>
         ) : field.type === 'image' ? (
-          <div className="w-full h-full overflow-hidden" style={{ opacity: (field.opacity ?? 100) / 100, borderRadius: field.cornerRadius ? `${field.cornerRadius}px` : undefined }}>
+          <div className="w-full h-full" style={{ opacity: (field.opacity ?? 100) / 100, borderRadius }}>
             {field.imageUrl ? (
               <img
                 src={field.imageUrl}
@@ -460,19 +459,12 @@ export function DraggableField({
                 }}
               />
             ) : (
-              <div
-                className="w-full h-full flex flex-col items-center justify-center gap-1"
-                style={{ background: 'rgba(245,158,11,0.06)', border: '1.5px dashed rgba(245,158,11,0.45)', borderRadius: 'inherit' }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
-                  style={{ width: 22, height: 22, color: 'rgba(245,158,11,0.65)' }}>
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="m21 15-5-5L5 21" />
+              <div className="w-full h-full flex flex-col items-center justify-center gap-1"
+                style={{ background: 'rgba(245,158,11,0.06)', border: '1.5px dashed rgba(245,158,11,0.45)', borderRadius }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} style={{ width: 22, height: 22, color: 'rgba(245,158,11,0.65)' }}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" />
                 </svg>
-                <span style={{ fontSize: 8, color: 'rgba(245,158,11,0.7)', textAlign: 'center', lineHeight: 1.3, paddingInline: 4 }}>
-                  Re-upload image
-                </span>
+                <span style={{ fontSize: 8, color: 'rgba(245,158,11,0.7)', textAlign: 'center', lineHeight: 1.3, paddingInline: 4 }}>Re-upload image</span>
               </div>
             )}
           </div>
