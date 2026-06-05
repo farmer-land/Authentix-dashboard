@@ -115,9 +115,11 @@ export function DataSelector({
   const [loadImportError, setLoadImportError] = useState<string | null>(null);
   const [showAdditionalRows, setShowAdditionalRows] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('Uploading…');
-  const [templateCardDismissed, setTemplateCardDismissed] = useState(() => {
-    try { return sessionStorage.getItem('gencert_template_card_dismissed') === '1'; } catch { return false; }
-  });
+  // Sample strip is always visible — don't persist dismissal across visits.
+  // Removing the dismissed state so the strip reliably shows each time the user
+  // enters the data step (previously it would hide after one dismiss for the
+  // entire browser session, leaving only stale "Use previous data" cards visible).
+  const templateCardDismissed = false;
   const [pendingMapping, setPendingMapping] = useState<{
     fieldId: string;
     columnName: string;
@@ -554,129 +556,21 @@ export function DataSelector({
             </p>
           </div>
 
-          {/* Sample download strip */}
-          {!templateCardDismissed && (
-            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border border-border/60">
-              <Download className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground flex-1 min-w-0">
-                Need a sample?{' '}
-                <button
-                  onClick={() => { downloadSampleFile(); setTemplateCardDismissed(true); try { sessionStorage.setItem('gencert_template_card_dismissed', '1'); } catch { /**/ } }}
-                  className="text-primary underline-offset-2 hover:underline"
-                >
-                  .xlsx
-                </button>
-                {' or '}
-                <button
-                  onClick={() => { downloadSampleFileCSV(); setTemplateCardDismissed(true); try { sessionStorage.setItem('gencert_template_card_dismissed', '1'); } catch { /**/ } }}
-                  className="text-primary underline-offset-2 hover:underline"
-                >
-                  .csv
-                </button>
-                {' '}— headers match your certificate field names
-              </span>
-              <button
-                onClick={() => {
-                  setTemplateCardDismissed(true);
-                  try { sessionStorage.setItem('gencert_template_card_dismissed', '1'); } catch { /* ignore */ }
-                }}
-                className="text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0"
-              >
-                <X className="w-3.5 h-3.5" />
+          {/* Sample download strip — always visible so the user can always get a template */}
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border border-border/60">
+            <Download className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground flex-1 min-w-0">
+              Need a sample?{' '}
+              <button onClick={downloadSampleFile} className="text-primary underline-offset-2 hover:underline">
+                .xlsx
               </button>
-            </div>
-          )}
-
-          {/* Most recent import — shown prominently so the user can reuse it with one click */}
-          {savedImports.length > 0 && !pendingFiles && !isProcessing && entryMode === 'upload' && (() => {
-            const top = savedImports[0]!;
-            const topName = top.file_name ? stripExt(top.file_name) : 'Untitled';
-            const topExpanded = expandedImportId === top.id;
-            const topPreview = importPreviewCache[top.id];
-            return (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Use previous data</p>
-                <div className="rounded-xl border border-primary/25 bg-primary/5 overflow-hidden">
-                  <div className="flex items-center gap-2.5 px-3 py-2.5">
-                    <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{topName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(top.total_rows ?? 0).toLocaleString()} {top.total_rows === 1 ? 'row' : 'rows'}
-                        {top.created_at ? ` · ${new Date(top.created_at).toLocaleDateString()}` : ''}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => void handleToggleExpand(top.id)}
-                      title={topExpanded ? 'Collapse' : 'Preview rows'}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
-                    >
-                      {previewLoading === top.id
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : topExpanded
-                          ? <ChevronUp className="w-3.5 h-3.5" />
-                          : <ChevronDown className="w-3.5 h-3.5" />
-                      }
-                    </button>
-                    <Button
-                      size="sm"
-                      className="h-7 px-3 text-xs shrink-0"
-                      disabled={isProcessing}
-                      onClick={async () => {
-                        if (!onLoadImport) return;
-                        setLoadImportError(null);
-                        setIsProcessing(true);
-                        try {
-                          await onLoadImport(top.id);
-                          setShowUpload(false);
-                        } catch {
-                          setLoadImportError('Failed to load. Please try again.');
-                        } finally {
-                          setIsProcessing(false);
-                        }
-                      }}
-                    >
-                      Use this
-                    </Button>
-                  </div>
-                  {topExpanded && (
-                    <div className="border-t border-primary/15 bg-muted/20 overflow-x-auto">
-                      {!topPreview ? (
-                        <p className="text-xs text-muted-foreground px-3 py-2">Loading preview…</p>
-                      ) : topPreview.length === 0 ? (
-                        <p className="text-xs text-muted-foreground px-3 py-2">No data rows found.</p>
-                      ) : (
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-border">
-                              {Object.keys(topPreview[0]!).map(h => (
-                                <th key={h} className="px-3 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {topPreview.map((row, i) => (
-                              <tr key={i} className="border-b border-border/50 last:border-0">
-                                {Object.values(row).map((v, j) => (
-                                  <td key={j} className="px-3 py-1.5 whitespace-nowrap max-w-40 truncate text-muted-foreground">{String(v ?? '')}</td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {/* Divider before upload zone */}
-                <div className="relative flex items-center gap-3 py-1">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-xs text-muted-foreground">or upload new data</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-              </div>
-            );
-          })()}
+              {' or '}
+              <button onClick={downloadSampleFileCSV} className="text-primary underline-offset-2 hover:underline">
+                .csv
+              </button>
+              {' '}— headers match your certificate field names
+            </span>
+          </div>
 
           {/* Mode toggle */}
           <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
@@ -789,13 +683,99 @@ export function DataSelector({
             />
           )}
 
-          {/* Recent uploads — rest of the list (first is shown as the "Use previous data" card above) */}
+          {/* Use previous data — shown after upload zone so upload is always the primary action */}
+          {savedImports.length > 0 && !pendingFiles && !isProcessing && entryMode === 'upload' && (() => {
+            const top = savedImports[0]!;
+            const topName = top.file_name ? stripExt(top.file_name) : 'Untitled';
+            const topExpanded = expandedImportId === top.id;
+            const topPreview = importPreviewCache[top.id];
+            return (
+              <div className="space-y-2">
+                <div className="relative flex items-center gap-3 py-1">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or use previous data</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-3 py-2.5">
+                    <FileSpreadsheet className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{topName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(top.total_rows ?? 0).toLocaleString()} {top.total_rows === 1 ? 'row' : 'rows'}
+                        {top.created_at ? ` · ${new Date(top.created_at).toLocaleDateString()}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => void handleToggleExpand(top.id)}
+                      title={topExpanded ? 'Collapse' : 'Preview rows'}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                    >
+                      {previewLoading === top.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : topExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-3 text-xs shrink-0"
+                      disabled={isProcessing}
+                      onClick={async () => {
+                        if (!onLoadImport) return;
+                        setLoadImportError(null);
+                        setIsProcessing(true);
+                        try {
+                          await onLoadImport(top.id);
+                          setShowUpload(false);
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : 'Failed to load. Please try again.';
+                          setLoadImportError(msg);
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }}
+                    >
+                      Use this
+                    </Button>
+                  </div>
+                  {topExpanded && (
+                    <div className="border-t border-border/50 bg-muted/20 overflow-x-auto">
+                      {!topPreview ? (
+                        <p className="text-xs text-muted-foreground px-3 py-2">Loading preview…</p>
+                      ) : topPreview.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-3 py-2">No data rows found.</p>
+                      ) : (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-border">
+                              {Object.keys(topPreview[0]!).map(h => (
+                                <th key={h} className="px-3 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {topPreview.map((row, i) => (
+                              <tr key={i} className="border-b border-border/50 last:border-0">
+                                {Object.values(row).map((v, j) => (
+                                  <td key={j} className="px-3 py-1.5 whitespace-nowrap max-w-40 truncate text-muted-foreground">{String(v ?? '')}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {loadImportError && <p className="text-xs text-destructive">{loadImportError}</p>}
+              </div>
+            );
+          })()}
+
+          {/* Older recent uploads */}
           {savedImports.length > 1 && entryMode === 'upload' && !pendingFiles && !isProcessing && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Recent</p>
-              {loadImportError && (
-                <p className="text-xs text-destructive mb-2">{loadImportError}</p>
-              )}
+              <p className="text-xs font-medium text-muted-foreground mb-2">Older uploads</p>
               <div className="rounded-lg border border-border divide-y divide-border overflow-hidden">
                 {savedImports.slice(1, 8).map((importJob) => {
                   const isExpanded = expandedImportId === importJob.id;
