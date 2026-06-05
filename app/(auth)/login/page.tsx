@@ -18,7 +18,7 @@ function SubmitButton({ step }: { step: "email" | "otp" }) {
   return (
     <Button
       type="submit"
-      className="w-full h-10 bg-primary hover:bg-primary/90"
+      className="w-full h-11 rounded-lg bg-primary hover:bg-primary/90 font-medium"
       disabled={pending}
     >
       {pending ? (
@@ -53,28 +53,35 @@ function LoginPageContent() {
   const activeEmail = state.email || urlEmail;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-95">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center mb-4">
+    <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden bg-background">
+      {/* 2026 ambient backdrop — soft brand glow */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-96 w-2xl rounded-full bg-[#3ECF8E]/15 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-background" />
+      </div>
+
+      <div className="relative w-full max-w-100">
+        <div className="text-center mb-7">
+          <div className="inline-flex items-center justify-center mb-5 h-14 w-14 rounded-2xl border bg-card shadow-sm">
             <Image
               src="/brand/authentix-24-24.svg"
-              width={48}
-              height={48}
+              width={32}
+              height={32}
               alt="Authentix"
               priority
             />
           </div>
           {step === "email" ? (
             <>
-              <h1 className="text-2xl font-bold">Welcome back</h1>
+              <h1 className="text-[28px] font-bold tracking-tight leading-tight">Welcome back</h1>
               <p className="text-sm text-muted-foreground mt-2">
-                Enter your email to receive a sign-in code
+                Enter your email to receive a secure sign-in code
               </p>
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-bold">Check your email</h1>
+              <h1 className="text-[28px] font-bold tracking-tight leading-tight">Check your email</h1>
               <p className="text-sm text-muted-foreground mt-2">
                 We sent an 8-digit code to{" "}
                 <span className="font-medium text-foreground">{activeEmail}</span>
@@ -83,7 +90,7 @@ function LoginPageContent() {
           )}
         </div>
 
-        <Card className="p-8 shadow-sm">
+        <Card className="p-7 sm:p-8 shadow-xl shadow-black/5 border-border/60 rounded-2xl backdrop-blur-sm bg-card/80">
           <form action={formAction} className="space-y-5">
             <input type="hidden" name="step" value={step} />
             {step === "otp" && (
@@ -91,8 +98,8 @@ function LoginPageContent() {
             )}
 
             {step === "email" ? (
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium leading-none">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="email" className="text-sm font-medium">
                   Work email
                 </Label>
                 <Input
@@ -103,13 +110,13 @@ function LoginPageContent() {
                   required
                   autoComplete="email"
                   autoFocus
-                  className="h-10"
+                  className="h-11 rounded-lg"
                   defaultValue={urlEmail}
                 />
               </div>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="token" className="text-sm font-medium leading-none">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="token" className="text-sm font-medium">
                   Sign-in code
                 </Label>
                 <Input
@@ -123,7 +130,7 @@ function LoginPageContent() {
                   required
                   autoComplete="one-time-code"
                   autoFocus
-                  className="h-10 text-center tracking-[0.4em] text-lg font-mono"
+                  className="h-12 rounded-lg text-center tracking-[0.4em] text-lg font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
                   Enter the 8-digit code from your email
