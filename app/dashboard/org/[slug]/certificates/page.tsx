@@ -19,12 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   FileCheck,
   Search,
   Download,
@@ -33,11 +27,8 @@ import {
   ChevronRight,
   Eye,
   ExternalLink,
-  MoreHorizontal,
-  QrCode,
   Mail,
   Phone,
-  Calendar,
   X,
   SlidersHorizontal,
   Loader2,
@@ -227,17 +218,35 @@ export default function CertificatesPage() {
     }
   };
 
-  const getStatusBadge = (status: Certificate["status"]) => {
-    const variants: Record<Certificate["status"], { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
-      active: { variant: "default", label: "Active" },
-      revoked: { variant: "destructive", label: "Revoked" },
-      expired: { variant: "secondary", label: "Expired" },
+  // Effective status — a cert stored as "active" but past its expiry should read as Expired
+  // even before the nightly job flips it in the DB.
+  const effectiveStatus = (cert: Certificate): Certificate["status"] => {
+    if (cert.status === "active" && cert.expires_at && new Date(cert.expires_at).getTime() < Date.now()) {
+      return "expired";
+    }
+    return cert.status;
+  };
+
+  const StatusChip = ({ cert }: { cert: Certificate }) => {
+    const status = effectiveStatus(cert);
+    const map: Record<Certificate["status"], { label: string; cls: string; dot: string }> = {
+      active:  { label: "Active",  cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", dot: "bg-emerald-500" },
+      expired: { label: "Expired", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",          dot: "bg-amber-500" },
+      revoked: { label: "Revoked", cls: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",                  dot: "bg-red-500" },
     };
-    const config = variants[status] || variants.active;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+    const c = map[status] ?? map.active;
+    return (
+      <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", c.cls)}>
+        <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} />
+        {c.label}
+      </span>
+    );
   };
 
   const hasActiveFilters = Object.values(appliedFilters).some(v => v !== "");
+  // Hide the Email column entirely when nobody in the result set has email/phone
+  // (e.g. download-only batches) — no point showing an empty column.
+  const showContactCol = certificates.some(c => c.recipient_email || c.recipient_phone);
 
   return (
     <div className="space-y-6">
@@ -310,14 +319,14 @@ export default function CertificatesPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
               <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+                value={filters.status || "all"}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === "all" ? "" : value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="revoked">Revoked</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
@@ -328,14 +337,14 @@ export default function CertificatesPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Category</label>
               <Select
-                value={filters.category}
-                onValueChange={handleCategoryChange}
+                value={filters.category || "all"}
+                onValueChange={(value) => handleCategoryChange(value === "all" ? "" : value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All categories</SelectItem>
+                  <SelectItem value="all">All categories</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
@@ -348,15 +357,15 @@ export default function CertificatesPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Subcategory</label>
               <Select
-                value={filters.subcategory}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, subcategory: value }))}
+                value={filters.subcategory || "all"}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, subcategory: value === "all" ? "" : value }))}
                 disabled={!filters.category}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All subcategories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All subcategories</SelectItem>
+                  <SelectItem value="all">All subcategories</SelectItem>
                   {subcategories.map((sub) => (
                     <SelectItem key={sub.id} value={sub.id}>
                       {sub.name}
@@ -431,129 +440,111 @@ export default function CertificatesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Recipient</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Contact</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Certificate #</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Category</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Issue Date</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Expiry</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
+                <tr className="text-xs uppercase tracking-wide">
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Certificate ID</th>
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Recipient</th>
+                  {showContactCol && (
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Email</th>
+                  )}
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Category</th>
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Issued</th>
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Expiry</th>
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Status</th>
+                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {certificates.map((cert) => (
-                  <tr key={cert.id} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium">{cert.recipient_name}</p>
-                        {cert.subcategory?.name && (
-                          <p className="text-xs text-muted-foreground">{cert.subcategory.name}</p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        {cert.recipient_email && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Mail className="h-3 w-3" />
-                            {cert.recipient_email}
-                          </span>
-                        )}
-                        {cert.recipient_phone && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Phone className="h-3 w-3" />
-                            {cert.recipient_phone}
-                          </span>
-                        )}
-                        {!cert.recipient_email && !cert.recipient_phone && (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                {certificates.map((cert) => {
+                  const verifyUrl = cert.qr_payload_url ?? cert.verification_path ?? null;
+                  return (
+                  <tr key={cert.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                    {/* Certificate ID — first */}
+                    <td className="px-4 py-3 align-middle">
+                      <code className="text-xs font-medium bg-muted px-1.5 py-0.5 rounded">
                         {cert.certificate_number}
                       </code>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        {cert.category?.name && (
-                          <Badge variant="outline" className="text-xs w-fit">
-                            {cert.category.name}
-                          </Badge>
-                        )}
-                        {cert.subcategory?.name && (
-                          <span className="text-xs text-muted-foreground">
-                            {cert.subcategory.name}
-                          </span>
-                        )}
-                        {!cert.category?.name && (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </div>
+                    {/* Recipient name */}
+                    <td className="px-4 py-3 align-middle">
+                      <p className="font-medium">{cert.recipient_name}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>{format(new Date(cert.issued_at), "MMM d, yyyy")}</span>
-                      </div>
+                    {/* Email (+ phone) — only when the dataset has contacts */}
+                    {showContactCol && (
+                      <td className="px-4 py-3 align-middle">
+                        <div className="flex flex-col gap-0.5">
+                          {cert.recipient_email ? (
+                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Mail className="h-3 w-3 shrink-0" />
+                              <span className="truncate max-w-50">{cert.recipient_email}</span>
+                            </span>
+                          ) : null}
+                          {cert.recipient_phone ? (
+                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Phone className="h-3 w-3 shrink-0" />
+                              {cert.recipient_phone}
+                            </span>
+                          ) : null}
+                          {!cert.recipient_email && !cert.recipient_phone && (
+                            <span className="text-xs text-muted-foreground/50">—</span>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                    {/* Category */}
+                    <td className="px-4 py-3 align-middle">
+                      {cert.category?.name ? (
+                        <div className="flex flex-col gap-0.5">
+                          <Badge variant="outline" className="text-xs w-fit">{cert.category.name}</Badge>
+                          {cert.subcategory?.name && (
+                            <span className="text-xs text-muted-foreground">{cert.subcategory.name}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3">
+                    {/* Issued */}
+                    <td className="px-4 py-3 align-middle whitespace-nowrap">
+                      <span className="text-sm">{format(new Date(cert.issued_at), "MMM d, yyyy")}</span>
+                    </td>
+                    {/* Expiry */}
+                    <td className="px-4 py-3 align-middle whitespace-nowrap">
                       {cert.expires_at ? (
                         <span className={cn(
                           "text-sm",
-                          new Date(cert.expires_at) < new Date() && "text-destructive"
+                          new Date(cert.expires_at).getTime() < Date.now() && "text-amber-600 dark:text-amber-400 font-medium",
                         )}>
                           {format(new Date(cert.expires_at), "MMM d, yyyy")}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">Never</span>
+                        <span className="text-muted-foreground/60 text-sm">Never</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      {getStatusBadge(cert.status)}
+                    {/* Status — expiry-aware */}
+                    <td className="px-4 py-3 align-middle">
+                      <StatusChip cert={cert} />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setPreviewCertificate(cert)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Preview
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDownload(cert)}>
-                            <Download className="h-4 w-4 mr-2" />
-                            Download
-                          </DropdownMenuItem>
-                          {(cert.qr_payload_url || cert.verification_path) && (
-                            <DropdownMenuItem
-                              onClick={() => window.open(cert.qr_payload_url ?? cert.verification_path!, "_blank")}
-                            >
-                              <QrCode className="h-4 w-4 mr-2" />
-                              Verify Link
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const url = cert.qr_payload_url ?? cert.verification_path;
-                              if (url) window.open(url, "_blank");
-                            }}
-                            disabled={!cert.qr_payload_url && !cert.verification_path}
-                          >
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Public Page
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    {/* Actions — inline icon buttons */}
+                    <td className="px-4 py-3 align-middle">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Preview"
+                          onClick={() => setPreviewCertificate(cert)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Download"
+                          onClick={() => handleDownload(cert)}>
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Open public verify page"
+                          disabled={!verifyUrl}
+                          onClick={() => { if (verifyUrl) window.open(verifyUrl, "_blank"); }}>
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -651,7 +642,7 @@ export default function CertificatesPage() {
                 )}
                 <div>
                   <p className="text-muted-foreground">Status</p>
-                  <div className="mt-1">{getStatusBadge(previewCertificate.status)}</div>
+                  <div className="mt-1"><StatusChip cert={previewCertificate} /></div>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Verification Link</p>
