@@ -410,6 +410,8 @@ interface SendEmailModalProps {
   jobId: string;
   /** All cert-generation job IDs (one per template config × import file). Used for multi-template / multi-file email send. */
   allCertJobIds?: string[];
+  /** Structured per-job info (id + label + count) — enables a different email template per certificate type. */
+  certJobs?: Array<{ jobId: string; label: string; count: number }>;
   recipientCount: number;
   certPreviewUrl?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -440,9 +442,14 @@ const BUILTIN_EMAIL_TEMPLATE: DeliveryTemplate = {
   updated_at: new Date().toISOString(),
 };
 
-function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
+function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPreviewUrl, firstRecipientRow, certFieldHeaders, subcategoryName, orgPath, onClose, onEmailSent }: SendEmailModalProps) {
   const router = useRouter();
   const { organization, loading: orgLoading } = useOrganization();
+  // Multiple distinct certificate types in this batch → offer a different email template each.
+  const multiCert = (certJobs?.length ?? 0) > 1;
+  // Per-job email template assignment (jobId → templateId). Empty = use the single selected one.
+  const [perJobTemplate, setPerJobTemplate] = useState<Record<string, string>>({});
+  const [useDifferentPerCert, setUseDifferentPerCert] = useState(false);
   // Only the parent-owner org may use the Authentix default sender. Every other org must
   // configure its own email integration — we never expose our domain sender to them.
   const isPlatformOwner = !!organization?.is_platform_owner;
@@ -521,6 +528,14 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
     }
   };
 
+  // Resolve which email template a given cert-gen job should use.
+  // Per-cert mode → the job's assigned template (falling back to the single selection);
+  // otherwise everyone uses the single selected template.
+  const templateIdForJob = (cjId: string): string | undefined => {
+    const chosen = (multiCert && useDifferentPerCert ? perJobTemplate[cjId] : '') || selectedTemplateId;
+    return chosen === BUILTIN_TEMPLATE_ID ? undefined : (chosen || undefined);
+  };
+
   const handleSend = async () => {
     if (!selectedTemplate) return;
     if (!usePlatformDefault && !selectedIntegration) return;
@@ -536,8 +551,9 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
         const result = await api.delivery.sendJobEmails({
           generation_job_id: cjId,
           integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
-          // Built-in synthetic template → omit template_id so the backend uses its default.
-          template_id: selectedTemplate.id === BUILTIN_TEMPLATE_ID ? undefined : selectedTemplate.id,
+          // Per-certificate template when enabled; otherwise the single selected template.
+          // (BUILTIN_TEMPLATE_ID resolves to undefined so the backend uses its default.)
+          template_id: templateIdForJob(cjId),
           subject_override: subjectOverride.trim() || undefined,
           from_name_override: fromNameOverride.trim() || undefined,
           use_platform_default: usePlatformDefault || undefined,
@@ -819,6 +835,56 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
         {step === 'select_template' && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Choose the email template your recipients will receive.</p>
+
+            {/* Multi-certificate: choose one email for all, or a different one per certificate type */}
+            {multiCert && (
+              <div className="rounded-lg border bg-muted/20 p-1 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setUseDifferentPerCert(false)}
+                  className={`flex-1 text-xs font-medium px-3 py-2 rounded-md transition-colors ${!useDifferentPerCert ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Same email for all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseDifferentPerCert(true)}
+                  className={`flex-1 text-xs font-medium px-3 py-2 rounded-md transition-colors ${useDifferentPerCert ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Different per certificate
+                </button>
+              </div>
+            )}
+
+            {/* Per-certificate template assignment */}
+            {multiCert && useDifferentPerCert && (
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
+                {(certJobs ?? []).map(job => (
+                  <div key={job.jobId} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{job.label}</p>
+                      <p className="text-xs text-muted-foreground">{job.count} {job.count === 1 ? 'recipient' : 'recipients'}</p>
+                    </div>
+                    <Select
+                      value={perJobTemplate[job.jobId] ?? selectedTemplateId}
+                      onValueChange={v => setPerJobTemplate(prev => ({ ...prev, [job.jobId]: v }))}
+                    >
+                      <SelectTrigger className="w-52 text-sm shrink-0">
+                        <SelectValue placeholder="Choose template…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Single-template list (default, or non-multi-cert) */}
+            {!(multiCert && useDifferentPerCert) && (
             <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
               {templates.map(t => {
                 const isSelected = t.id === selectedTemplateId;
@@ -881,6 +947,7 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
                 );
               })}
             </div>
+            )}
             <div className="flex gap-2 pt-1">
               {/* Owners auto-use the default sender (no no_integration step), so just Cancel.
                   Non-owners with no integration came from the setup prompt — let them go Back. */}
@@ -971,7 +1038,11 @@ function SendEmailModal({ jobId, allCertJobIds, recipientCount, certPreviewUrl, 
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email Template</Label>
               <div className="flex items-center gap-2 p-2.5 rounded-md border bg-primary/5 border-primary/20">
                 <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="text-sm font-medium flex-1 truncate">{selectedTemplate.name}</span>
+                <span className="text-sm font-medium flex-1 truncate">
+                  {multiCert && useDifferentPerCert
+                    ? `Per certificate · ${certJobs?.length ?? 0} types`
+                    : selectedTemplate.name}
+                </span>
                 <button
                   type="button"
                   onClick={() => setStep('select_template')}
@@ -1745,6 +1816,16 @@ export function ExportSection({
       if (certJobIds.length > 0) {
         setCertGenJobId(certJobIds[0]!);
         setAllCertJobIds(prev => Array.from(new Set([...prev, ...certJobIds])));
+        // Track structured job info for the per-template send picker.
+        const jobs = (resultsArr ?? [])
+          .filter(r => r.job_id)
+          .map(r => ({ jobId: r.job_id as string, label: r.label || 'Certificates', count: r.count ?? 0 }));
+        if (jobs.length > 0) {
+          setCertJobs(prev => {
+            const seen = new Set(prev.map(j => j.jobId));
+            return [...prev, ...jobs.filter(j => !seen.has(j.jobId))];
+          });
+        }
       } else {
         const firstJobId = result?.first_job_id as string | null | undefined;
         if (firstJobId) {
@@ -1887,6 +1968,9 @@ export function ExportSection({
   const [certGenJobId, setCertGenJobId] = useState<string | null>(null);
   // All cert-gen job IDs collected from every background job result (multi-template × multi-file)
   const [allCertJobIds, setAllCertJobIds] = useState<string[]>([]);
+  // Structured per-job info (id + label + count) so the send dialog can offer a different
+  // email template per certificate type when multiple were generated.
+  const [certJobs, setCertJobs] = useState<Array<{ jobId: string; label: string; count: number }>>([]);
   // Background job IDs for import files 2+ (file 1 is tracked by generationJobId)
   const [extraGenerationJobIds, setExtraGenerationJobIds] = useState<string[]>([]);
 
@@ -2279,6 +2363,7 @@ export function ExportSection({
     // Clear stale cert-gen job IDs from any previous run
     setCertGenJobId(null);
     setAllCertJobIds([]);
+    setCertJobs([]);
     setExtraGenerationJobIds([]);
 
     const options: {
@@ -3317,6 +3402,7 @@ export function ExportSection({
               setGenerationJobId(null);
               setCertGenJobId(null);
               setAllCertJobIds([]);
+              setCertJobs([]);
               setExtraGenerationJobIds([]);
               setEmailStatuses(undefined);
             }}
@@ -3381,6 +3467,7 @@ export function ExportSection({
         <SendEmailModal
           jobId={certGenJobId ?? generationJobId}
           allCertJobIds={allCertJobIds.length > 0 ? allCertJobIds : undefined}
+          certJobs={certJobs}
           recipientCount={totalGenerated}
           certPreviewUrl={generatedCertificates[0]?.preview_url ?? null}
           firstRecipientRow={importedData?.rows[0] ?? null}
