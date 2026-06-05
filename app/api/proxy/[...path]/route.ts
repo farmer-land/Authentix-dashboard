@@ -191,6 +191,16 @@ async function proxyRequest(
       if (checkConnectionRefused(fetchError) && fallbackUrl) {
         reqLog.info("Proxy: primary backend unavailable, trying fallback URL");
         response = await fetch(fallbackUrl, fetchOptions);
+      } else if (
+        // Transient connection drop (common when the backend is cold-starting):
+        // "fetch failed" / ECONNRESET / socket hang up. Safe to retry ONCE for
+        // idempotent methods only — never POST/PATCH (would risk duplicate writes).
+        (method === "GET" || method === "HEAD") &&
+        fetchError instanceof Error && fetchError.name === "TypeError"
+      ) {
+        reqLog.info("Proxy: transient connection error on idempotent request — retrying once");
+        await new Promise((r) => setTimeout(r, 400));
+        response = await fetch(backendUrl, fetchOptions);
       } else {
         throw fetchError;
       }
