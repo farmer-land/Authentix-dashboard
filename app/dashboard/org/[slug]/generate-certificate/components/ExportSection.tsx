@@ -379,8 +379,10 @@ function buildPreviewVars(
   return base;
 }
 
-function applyTemplatePreview(html: string, vars: Record<string, string>): string {
-  let result = html;
+function applyTemplatePreview(html: string | null | undefined, vars: Record<string, string>): string {
+  // Guard against templates with no body (e.g. WhatsApp-only or partially-saved rows)
+  // so the preview never crashes the whole send dialog.
+  let result = html ?? '';
   // Replace src/href attribute variables first so URLs resolve before general token replace
   result = result.replace(/(src|href)="([^"]*)"/g, (_full, attr, val: string) => {
     const newVal = val.replace(/\{\{([\w.]+)\}\}/g, (_m, key) =>

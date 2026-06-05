@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { api, type DeliveryIntegration, type DeliveryProviderType } from "@/lib/api/client";
 import Link from "next/link";
 import { useOrg } from "@/lib/org";
+import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useDeliverySettingsState } from "./state/useDeliverySettingsState";
 
 // ── Provider metadata ──────────────────────────────────────────────────────
@@ -519,6 +520,10 @@ const PLATFORM_DEFAULT_EMAIL = "certificates@digicertificates.in";
 
 export default function EmailDeliverySettingsPage() {
   const { orgPath } = useOrg();
+  const { organization } = useOrganization();
+  // Only the parent-owner org may use the Authentix default sender. For everyone else we
+  // never surface our domain email — they must connect their own integration.
+  const isPlatformOwner = !!organization?.is_platform_owner;
   const {
     loading,
     integrations,
@@ -655,7 +660,8 @@ export default function EmailDeliverySettingsPage() {
 
   const activeDefault = integrations.find(i => i.is_default && i.is_active) ?? integrations.find(i => i.is_active);
   const hasActiveIntegration = integrations.filter(i => i.is_active).length > 0;
-  const usingPlatformDefault = !hasActiveIntegration;
+  // Only the parent owner can fall back to the Authentix default sender.
+  const usingPlatformDefault = isPlatformOwner && !hasActiveIntegration;
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -773,8 +779,17 @@ export default function EmailDeliverySettingsPage() {
               {integrations.length === 0 && !showAddForm && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Server className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">No integrations yet.</p>
-                  <p className="text-xs mt-0.5">Connect Resend, Google Workspace, Microsoft 365, AWS SES, or custom SMTP.</p>
+                  {isPlatformOwner ? (
+                    <>
+                      <p className="text-sm">You&apos;re ready to send.</p>
+                      <p className="text-xs mt-0.5">Certificates send from the Authentix default sender below. Add your own integration to send from your domain.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm">No email connected yet.</p>
+                      <p className="text-xs mt-0.5">Connect Resend, Google Workspace, Microsoft 365, AWS SES, or custom SMTP to start sending certificates from your own domain.</p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -793,7 +808,8 @@ export default function EmailDeliverySettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Authentix Default (fallback) ────────────────────────────────────── */}
+      {/* ── Authentix Default (fallback) — parent owner only; never exposed to other orgs ── */}
+      {isPlatformOwner && (
       <Card className={usingPlatformDefault ? "border-[#3ECF8E]/40 shadow-sm" : ""}>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
@@ -830,6 +846,7 @@ export default function EmailDeliverySettingsPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Templates shortcut */}
       <Card className="overflow-hidden">
