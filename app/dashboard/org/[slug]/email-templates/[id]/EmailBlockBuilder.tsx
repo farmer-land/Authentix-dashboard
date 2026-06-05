@@ -39,7 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 import { api } from "@/lib/api/client";
-import { Upload, Video, Globe, Mail } from "lucide-react";
+import { Upload, Video, Globe, Mail, Quote, Code } from "lucide-react";
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
@@ -47,6 +47,8 @@ export type BlockType =
   | "header"
   | "greeting"
   | "text"
+  | "quote"
+  | "code"
   | "image"
   | "markdown"
   | "two_column"
@@ -189,6 +191,8 @@ export const EMAIL_BLOCKS_PALETTE: Array<{ type: BlockType; icon: React.ReactNod
   { type: "header",      icon: <LayoutTemplate className="w-3.5 h-3.5" />,    label: "Header",       desc: "Title banner" },
   { type: "greeting",    icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Greeting",     desc: "Hi {{name}}" },
   { type: "text",        icon: <AlignLeft className="w-3.5 h-3.5" />,         label: "Text",         desc: "Paragraph" },
+  { type: "quote",       icon: <Quote className="w-3.5 h-3.5" />,             label: "Quote",        desc: "Blockquote / callout" },
+  { type: "code",        icon: <Code className="w-3.5 h-3.5" />,              label: "Code",         desc: "Monospace block" },
   { type: "image",       icon: <ImageIcon className="w-3.5 h-3.5" />,         label: "Image",        desc: "Embed image" },
   { type: "markdown",    icon: <Type className="w-3.5 h-3.5" />,              label: "Markdown",     desc: "Rich text / tables" },
   { type: "two_column",  icon: <TableProperties className="w-3.5 h-3.5" />,   label: "Two Columns",  desc: "Side-by-side layout" },
@@ -299,6 +303,8 @@ export function defaultBlock(type: BlockType): EmailBlock {
     case "header":      return { id, type, bgType: "gradient", bgColor: "#3ECF8E", gradientEnd: "#1a9e6b", gradientAngle: 135, titleColor: "#ffffff", title: "Congratulations, {{recipient_name}}!", subtitle: "You've completed {{course_name}}" };
     case "greeting":    return { id, type, content: "Hi {{recipient_name}},", textColor: "#e5e7eb", fontSize: 16, lineHeight: 1.7, textAlign: "left" };
     case "text":        return { id, type, content: "We are delighted to inform you that you have successfully completed this program. Your certificate is ready below.", textColor: "#d1d5db", fontSize: 15, lineHeight: 1.7 };
+    case "quote":       return { id, type, content: "“Education is the most powerful weapon which you can use to change the world.”", textColor: "#d1d5db", fontSize: 15, lineHeight: 1.7, bgColor: "#1e1e1e" };
+    case "code":        return { id, type, content: "GET /api/v1/certificates/{{certificate_number}}\nAuthorization: Bearer <token>", textColor: "#e5e7eb", fontSize: 13 };
     case "image":       return { id, type, imageUrl: "", imageAlt: "", imageAlign: "center", imageWidth: 100, imageBorderRadius: 8 };
     case "markdown":    return { id, type, content: "## Congratulations, **{{recipient_name}}**!\n\nYou have successfully completed **{{course_name}}**.\n\n- 📅 Issued on {{issue_date}}\n- 🔗 [View & verify your certificate]({{verification_url}})\n\n> Your achievement has been recorded and is ready to share.", textColor: "#d1d5db" };
     case "two_column":  return { id, type, leftContent: "**Course Details**\n\nCourse: {{course_name}}\nDate: {{issue_date}}", rightContent: "**About Your Certificate**\n\nThis certificate verifies your achievement. Share it with your network!", leftTextColor: "#d1d5db", rightTextColor: "#d1d5db" };
@@ -593,6 +599,25 @@ function blockToHtml(block: EmailBlock): string {
       const pV = block.paddingV ?? 16; const pH = block.paddingH ?? 32;
       return `<div style="padding:${pV}px ${pH}px;text-align:${ta};${block.bgColor ? `background:${block.bgColor};` : ""}">
   <p style="font-size:${block.fontSize || 15}px;color:${block.textColor || "#d1d5db"};line-height:${block.lineHeight || 1.7};margin:0;letter-spacing:${block.letterSpacing || 0}px;font-weight:${block.fontWeight || "normal"};font-style:${block.fontStyle || "normal"};${ff}">${block.content || ""}</p>
+</div>`;
+    }
+
+    case "quote": {
+      const ta = block.textAlign || "left";
+      const pV = block.paddingV ?? 8; const pH = block.paddingH ?? 32;
+      const accent = block.btnColor || "#3ECF8E";
+      return `<div style="padding:${pV}px ${pH}px;">
+  <blockquote style="margin:0;border-left:3px solid ${accent};background:${block.bgColor || "#1e1e1e"};border-radius:0 6px 6px 0;padding:12px 16px;text-align:${ta};">
+    <p style="font-size:${block.fontSize || 15}px;color:${block.textColor || "#d1d5db"};line-height:${block.lineHeight || 1.7};margin:0;font-style:${block.fontStyle || "italic"};${ff}">${block.content || ""}</p>
+  </blockquote>
+</div>`;
+    }
+
+    case "code": {
+      const pV = block.paddingV ?? 8; const pH = block.paddingH ?? 32;
+      const esc = (block.content ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `<div style="padding:${pV}px ${pH}px;">
+  <pre style="margin:0;background:#0f1115;border:1px solid #2a2f3a;border-radius:6px;padding:14px 16px;overflow-x:auto;"><code style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:${block.fontSize || 13}px;color:${block.textColor || "#e5e7eb"};line-height:1.6;white-space:pre;">${esc}</code></pre>
 </div>`;
     }
 
@@ -1152,6 +1177,8 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   header: "Header",
   greeting: "Greeting",
   text: "Text Block",
+  quote: "Quote",
+  code: "Code",
   image: "Image",
   markdown: "Markdown",
   two_column: "Two Columns",
@@ -1700,6 +1727,44 @@ function BlockLiveView({
             availableVars={availableVars}
             style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: block.lineHeight || 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta, letterSpacing: `${block.letterSpacing || 0}px`, fontWeight: block.fontWeight || "normal", fontStyle: block.fontStyle || "normal" }}
           />
+        </div>
+      );
+    }
+
+    case "quote": {
+      const ta = (block.textAlign || "left") as React.CSSProperties["textAlign"];
+      const pV = block.paddingV ?? 8; const pH = block.paddingH ?? 32;
+      const accent = block.btnColor || "#3ECF8E";
+      return (
+        <div style={{ padding: `${pV}px ${pH}px` }}>
+          <div style={{ borderLeft: `3px solid ${accent}`, background: block.bgColor || "#1e1e1e", borderRadius: "0 6px 6px 0", padding: "12px 16px", textAlign: ta }}>
+            <EditableText
+              value={block.content || ""}
+              onChange={v => u({ content: v })}
+              tag="p"
+              placeholder="Enter a quote…"
+              availableVars={availableVars}
+              style={{ fontSize: block.fontSize || 15, color: block.textColor || "#d1d5db", lineHeight: block.lineHeight || 1.7, margin: 0, fontFamily: ff, display: "block", textAlign: ta, fontStyle: block.fontStyle || "italic" }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    case "code": {
+      const pV = block.paddingV ?? 8; const pH = block.paddingH ?? 32;
+      return (
+        <div style={{ padding: `${pV}px ${pH}px` }}>
+          <div style={{ background: "#0f1115", border: "1px solid #2a2f3a", borderRadius: 6, padding: "14px 16px", overflowX: "auto" }}>
+            <EditableText
+              value={block.content || ""}
+              onChange={v => u({ content: v })}
+              tag="div"
+              placeholder="Paste code…"
+              availableVars={availableVars}
+              style={{ fontFamily: "'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace", fontSize: block.fontSize || 13, color: block.textColor || "#e5e7eb", lineHeight: 1.6, margin: 0, display: "block", whiteSpace: "pre-wrap" }}
+            />
+          </div>
         </div>
       );
     }
@@ -2899,7 +2964,7 @@ export function BlockPropertiesPanel({
       </Section>
     );
 
-    if (type === "text" || type === "greeting" || type === "footer" || type === "linkedin") {
+    if (type === "text" || type === "greeting" || type === "footer" || type === "linkedin" || type === "quote" || type === "code") {
       const ph: Record<string, string> = {
         text: "We are delighted to inform you…",
         greeting: "Hi {{recipient_name}},",
@@ -4016,8 +4081,8 @@ export function EmailBlockBuilder({
 
       {/* Blank-canvas drop zone when user chose "Start with blank canvas" */}
       {blocks.length === 0 && (
-        <div className="max-w-[600px] mx-auto border-2 border-dashed border-zinc-700/70 rounded-2xl flex flex-col items-center justify-center gap-3 py-20 text-center bg-zinc-900/40">
-          <div className="h-11 w-11 rounded-2xl bg-zinc-800 flex items-center justify-center">
+        <div className="max-w-[600px] mx-auto border-2 border-dashed border-zinc-700/70 rounded-lg flex flex-col items-center justify-center gap-3 py-20 text-center bg-zinc-900/40">
+          <div className="h-11 w-11 rounded-lg bg-zinc-800 flex items-center justify-center">
             <Plus className="w-5 h-5 text-zinc-500" />
           </div>
           <p className="text-sm font-medium text-zinc-300">Blank canvas</p>
@@ -4025,10 +4090,10 @@ export function EmailBlockBuilder({
         </div>
       )}
 
-      {/* Artboard — the email card (floating, rounded, soft shadow) */}
+      {/* Artboard — the email card (floating, soft shadow) */}
       {blocks.length > 0 && <div
-        className="max-w-[600px] mx-auto rounded-2xl overflow-hidden ring-1 ring-white/10"
-        style={{ boxShadow: "0 28px 80px -16px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5)" }}
+        className="max-w-[600px] mx-auto rounded-lg overflow-hidden ring-1 ring-white/10"
+        style={{ boxShadow: "0 24px 64px -20px rgba(0,0,0,0.65), 0 6px 18px -8px rgba(0,0,0,0.45)" }}
       >
         {/* Email client mock header */}
         <div className="bg-linear-to-b from-zinc-800 to-zinc-800/70 border-b border-white/5 px-5 py-4">
