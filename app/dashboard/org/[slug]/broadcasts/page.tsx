@@ -17,10 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Megaphone, Plus, Loader2, Send, Trash2, MoreHorizontal, Clock,
+  Megaphone, Plus, Loader2, Send, Trash2, Clock,
   CheckCircle2, AlertCircle, Users, Upload, FileSpreadsheet,
   ChevronRight, ChevronLeft, MailIcon, PenLine, Eye, X, RefreshCw, Info,
   Search,
@@ -129,6 +126,15 @@ const STATUS_CONFIG: Record<BroadcastStatus, { label: string; className: string;
   sending:   { label: "Sending",   className: "border-amber-200 text-amber-700 bg-amber-50 dark:bg-amber-950/20", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
   sent:      { label: "Sent",      className: "border-green-200 text-green-700 bg-green-50 dark:bg-green-950/20", icon: <CheckCircle2 className="h-3 w-3" /> },
   failed:    { label: "Failed",    className: "border-red-200 text-red-700 bg-red-50 dark:bg-red-950/20",         icon: <AlertCircle className="h-3 w-3" /> },
+};
+
+// Solid-tint tile colour for the card's status icon.
+const TILE_CONFIG: Record<BroadcastStatus, string> = {
+  draft:     "bg-muted text-muted-foreground",
+  scheduled: "bg-blue-500/10 text-blue-500",
+  sending:   "bg-amber-500/10 text-amber-500",
+  sent:      "bg-emerald-500/10 text-emerald-500",
+  failed:    "bg-red-500/10 text-red-500",
 };
 
 // ── CSV / Excel parser ─────────────────────────────────────────────────────────
@@ -1546,39 +1552,45 @@ function BroadcastCard({
         className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-muted/20 transition-colors select-none"
         onClick={() => setExpanded(v => !v)}
       >
-        <ChevronRight className={cn(
-          "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
-          expanded && "rotate-90",
-        )} />
+        {/* Status icon tile */}
+        <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center shrink-0", TILE_CONFIG[broadcast.status])}>
+          {cfg.icon}
+        </div>
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold truncate leading-snug">{broadcast.name}</p>
           <p className="text-xs text-muted-foreground truncate mt-0.5">{broadcast.subject}</p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="outline" className={cn("text-xs flex items-center gap-1 shrink-0", cfg.className)}>
-            {cfg.icon} {cfg.label}
-          </Badge>
-          <span className="text-xs text-muted-foreground tabular-nums hidden sm:flex items-center gap-1">
-            <Users className="h-3 w-3" /> {broadcast.total_recipients.toLocaleString()}
-          </span>
-          <span className="text-xs text-muted-foreground hidden md:block tabular-nums shrink-0">{sentDate}</span>
-          <div onClick={e => e.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onDelete} className="text-destructive">
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+        {/* Delivery rate bar — sent campaigns only */}
+        {deliveryRate !== null && (
+          <div className="hidden md:flex flex-col items-end gap-1 w-28 shrink-0">
+            <span className="text-[11px] text-muted-foreground tabular-nums">{deliveryRate}% delivered</span>
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${deliveryRate}%` }} />
+            </div>
           </div>
+        )}
+
+        <Badge variant="outline" className={cn("text-xs flex items-center gap-1 shrink-0", cfg.className)}>
+          {cfg.icon} {cfg.label}
+        </Badge>
+        <span className="text-xs text-muted-foreground tabular-nums hidden sm:flex items-center gap-1 shrink-0">
+          <Users className="h-3 w-3" /> {broadcast.total_recipients.toLocaleString()}
+        </span>
+        <span className="text-xs text-muted-foreground hidden lg:block tabular-nums shrink-0">{sentDate}</span>
+
+        {/* Inline delete (no dropdown) */}
+        <div onClick={e => e.stopPropagation()} className="shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" title="Delete" onClick={onDelete}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
+
+        <ChevronRight className={cn(
+          "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
+          expanded && "rotate-90",
+        )} />
       </div>
 
       {/* ── Expanded details ── */}
@@ -1674,6 +1686,22 @@ export function BroadcastsContent({
   const drafts = broadcasts.filter(b => b.status === "draft");
   const sent   = broadcasts.filter(b => b.status !== "draft");
 
+  // Overview stats for the modern summary strip.
+  const stats = useMemo(() => {
+    const sentOnly = broadcasts.filter(b => b.status === "sent");
+    const recipientsReached = sentOnly.reduce((s, b) => s + (b.delivered_count || 0), 0);
+    const totalSentRecipients = sentOnly.reduce((s, b) => s + (b.total_recipients || 0), 0);
+    const avgDelivery = totalSentRecipients > 0
+      ? Math.round((recipientsReached / totalSentRecipients) * 100)
+      : null;
+    return {
+      total: broadcasts.length,
+      sentCount: sentOnly.length,
+      recipientsReached,
+      avgDelivery,
+    };
+  }, [broadcasts]);
+
   // ── Focused view when entering from contacts page ─────────────────────────
   if (initialSourceRef) {
     return (
@@ -1716,6 +1744,26 @@ export function BroadcastsContent({
           >
             <Plus className="h-4 w-4" /> New campaign
           </Button>
+        </div>
+      )}
+
+      {/* Overview stats strip */}
+      {!showWizard && broadcasts.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: "Campaigns", value: stats.total.toLocaleString(), icon: <Megaphone className="h-4 w-4" />, tint: "text-[#3ECF8E] bg-[#3ECF8E]/10" },
+            { label: "Sent", value: stats.sentCount.toLocaleString(), icon: <Send className="h-4 w-4" />, tint: "text-blue-500 bg-blue-500/10" },
+            { label: "Recipients reached", value: stats.recipientsReached.toLocaleString(), icon: <Users className="h-4 w-4" />, tint: "text-violet-500 bg-violet-500/10" },
+            { label: "Avg delivery", value: stats.avgDelivery === null ? "—" : `${stats.avgDelivery}%`, icon: <CheckCircle2 className="h-4 w-4" />, tint: "text-emerald-500 bg-emerald-500/10" },
+          ].map((s) => (
+            <div key={s.label} className="rounded-2xl border bg-card p-4 flex items-center gap-3">
+              <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center shrink-0", s.tint)}>{s.icon}</div>
+              <div className="min-w-0">
+                <p className="text-xl font-bold tabular-nums leading-none">{s.value}</p>
+                <p className="text-[11px] text-muted-foreground mt-1 truncate">{s.label}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
