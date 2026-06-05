@@ -3963,13 +3963,17 @@ export function EmailBlockBuilder({
   // Track whether the user has actively dismissed the gallery (chose blank canvas).
   // suppressGallery is evaluated each render so async template loads correctly bypass the gallery.
   const [galleryDismissed, setGalleryDismissed] = useState(blocks.length > 0);
+  // When the user explicitly clicks "Change template", force the gallery to show even if
+  // suppressGallery is set (e.g. the current template was loaded from raw/non-block HTML) —
+  // otherwise clearing blocks would just leave a blank canvas with no way back to the samples.
+  const [forceGallery, setForceGallery] = useState(false);
 
-  if (blocks.length === 0 && !galleryDismissed && !suppressGallery) {
+  if (blocks.length === 0 && !galleryDismissed && (!suppressGallery || forceGallery)) {
     return (
       <StarterTemplateGallery
         context={context}
-        onSelect={(selected) => { setGalleryDismissed(true); onChange(selected); }}
-        onDismiss={() => setGalleryDismissed(true)}
+        onSelect={(selected) => { setGalleryDismissed(true); setForceGallery(false); onChange(selected); }}
+        onDismiss={() => { setGalleryDismissed(true); setForceGallery(false); }}
       />
     );
   }
@@ -3990,7 +3994,7 @@ export function EmailBlockBuilder({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => { onChange([]); setGalleryDismissed(false); }}
+            onClick={() => { onChange([]); setGalleryDismissed(false); setForceGallery(true); }}
             className="text-[10px] text-zinc-500 hover:text-[#3ECF8E] transition-colors flex items-center gap-1"
           >
             <LayoutTemplate className="w-3 h-3" />
