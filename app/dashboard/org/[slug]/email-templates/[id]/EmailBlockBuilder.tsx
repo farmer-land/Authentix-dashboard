@@ -39,7 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { nanoid } from "nanoid";
 import { api } from "@/lib/api/client";
-import { Upload, Video, Globe } from "lucide-react";
+import { Upload, Video, Globe, Mail } from "lucide-react";
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
@@ -3982,7 +3982,12 @@ export function EmailBlockBuilder({
 
   return (
     <div
-      className="py-16 px-10 min-h-full"
+      className="py-14 px-10 min-h-full"
+      style={{
+        // Subtle dotted backdrop so the email card visibly "floats" (modern builder feel).
+        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.045) 1px, transparent 1px)",
+        backgroundSize: "22px 22px",
+      }}
       onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
       onDrop={e => {
         e.preventDefault();
@@ -3990,38 +3995,43 @@ export function EmailBlockBuilder({
         if (type) onAddBlock?.(type);
       }}
     >
-      {/* Artboard label — above the email card, like Figma's frame label */}
-      <div className="max-w-[600px] mx-auto mb-2 flex items-center justify-between select-none">
-        <span className="text-[10px] text-zinc-600 font-medium tracking-wide">Email Template</span>
-        <div className="flex items-center gap-3">
+      {/* Floating toolbar pill — above the email card */}
+      <div className="max-w-[600px] mx-auto mb-3 flex items-center justify-between select-none">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/70 border border-white/5 px-2.5 py-1 text-[10px] font-medium text-zinc-400 backdrop-blur-sm">
+          <Mail className="w-3 h-3" />
+          Email preview
+        </span>
+        <div className="inline-flex items-center gap-1 rounded-full bg-zinc-800/70 border border-white/5 px-1 py-1 backdrop-blur-sm">
           <button
             type="button"
             onClick={() => { onChange([]); setGalleryDismissed(false); setForceGallery(true); }}
-            className="text-[10px] text-zinc-500 hover:text-[#3ECF8E] transition-colors flex items-center gap-1"
+            className="rounded-full px-2.5 py-1 text-[10px] font-medium text-zinc-400 hover:text-[#3ECF8E] hover:bg-white/5 transition-colors flex items-center gap-1"
           >
             <LayoutTemplate className="w-3 h-3" />
             Change template
           </button>
-          <span className="text-[10px] text-zinc-700 font-mono">600px</span>
+          <span className="px-2 py-1 text-[10px] font-mono text-zinc-600">600px</span>
         </div>
       </div>
 
       {/* Blank-canvas drop zone when user chose "Start with blank canvas" */}
       {blocks.length === 0 && (
-        <div className="max-w-[600px] mx-auto border-2 border-dashed border-zinc-700 rounded-xl flex flex-col items-center justify-center gap-3 py-20 text-center">
-          <Plus className="w-8 h-8 text-zinc-600" />
-          <p className="text-sm font-medium text-zinc-400">Blank canvas</p>
+        <div className="max-w-[600px] mx-auto border-2 border-dashed border-zinc-700/70 rounded-2xl flex flex-col items-center justify-center gap-3 py-20 text-center bg-zinc-900/40">
+          <div className="h-11 w-11 rounded-2xl bg-zinc-800 flex items-center justify-center">
+            <Plus className="w-5 h-5 text-zinc-500" />
+          </div>
+          <p className="text-sm font-medium text-zinc-300">Blank canvas</p>
           <p className="text-xs text-zinc-600">Drag blocks from the left panel or click to add</p>
         </div>
       )}
 
-      {/* Artboard — the email card */}
+      {/* Artboard — the email card (floating, rounded, soft shadow) */}
       {blocks.length > 0 && <div
-        className="max-w-[600px] mx-auto"
-        style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 20px 60px rgba(0,0,0,0.55)" }}
+        className="max-w-[600px] mx-auto rounded-2xl overflow-hidden ring-1 ring-white/10"
+        style={{ boxShadow: "0 28px 80px -16px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5)" }}
       >
         {/* Email client mock header */}
-        <div className="bg-zinc-800 border-b border-zinc-700/80 px-5 py-4">
+        <div className="bg-linear-to-b from-zinc-800 to-zinc-800/70 border-b border-white/5 px-5 py-4">
           <div className="flex items-start gap-3.5">
             <div className="w-9 h-9 rounded-full bg-[#3ECF8E] flex items-center justify-center text-white text-sm font-bold shrink-0 select-none">
               {senderName.trim()[0]?.toUpperCase() || "A"}
