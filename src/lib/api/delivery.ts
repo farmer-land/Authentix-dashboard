@@ -136,6 +136,22 @@ export interface DeliverySender {
   is_default: boolean;
   created_at: string;
   updated_at: string;
+  /** true = derived from an integration/platform default (read-only); false/absent = editable custom row. */
+  managed?: boolean;
+}
+
+export interface DomainReputation {
+  score: number;
+  grade: "excellent" | "good" | "fair" | "poor" | "unknown";
+  bounceRate: number;
+  complaintRate: number;
+  deliveryRate: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  attempted: number;
+  sampleSize: number;
+  windowDays: number;
 }
 
 export interface CreateSenderDto {
@@ -469,6 +485,13 @@ export const deliveryApi = {
     const response = await apiRequest<{ month: number; today: number; last30: number; total: number; monthStart: string; dayStart: string; last30Start: string }>(
       "/delivery/usage",
     );
+    return response.data!;
+  },
+
+  // ── Domain reputation ─────────────────────────────────────────────────────────
+
+  getReputation: async (): Promise<DomainReputation> => {
+    const response = await apiRequest<DomainReputation>("/delivery/reputation");
     return response.data!;
   },
 

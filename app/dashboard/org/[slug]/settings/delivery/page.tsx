@@ -24,6 +24,7 @@ import { useDeliverySettingsState } from "./state/useDeliverySettingsState";
 import { DomainManager } from "./DomainManager";
 import { UsageCard } from "./UsageCard";
 import { SendersCard } from "./SendersCard";
+import { ReputationCard } from "./ReputationCard";
 
 // ── Provider metadata ──────────────────────────────────────────────────────
 
@@ -901,6 +902,9 @@ export default function EmailDeliverySettingsPage() {
 
       {/* ── Email usage vs plan limits — shown once any sender is active ── */}
       {(hasActiveIntegration || isPlatformOwner) && <UsageCard />}
+
+      {/* ── Domain / sender reputation ── */}
+      {(hasActiveIntegration || isPlatformOwner) && <ReputationCard />}
 
       {/* ── Resend domain management — only for an active Resend integration ── */}
       {resendIntegration && <DomainManager integrationId={resendIntegration.id} />}

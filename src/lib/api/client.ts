@@ -76,6 +76,7 @@ export type {
   ResendDomainRecord,
   DeliverySender,
   CreateSenderDto,
+  DomainReputation,
 } from "./delivery";
 
 // ── Domain API modules ────────────────────────────────────────────────────────

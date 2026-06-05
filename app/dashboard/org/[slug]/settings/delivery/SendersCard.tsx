@@ -174,19 +174,30 @@ export function SendersCard() {
                         <Star className="w-3 h-3 mr-1" /> Default
                       </Badge>
                     )}
+                    {s.managed && (
+                      <Badge variant="secondary" className="text-[10px]">Managed</Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {s.from_name ? `${s.from_name} ‹${s.from_email}›` : s.from_email}
                   </p>
                 </div>
-                {!s.is_default && (
-                  <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={() => handleMakeDefault(s)}>
-                    <Star className="w-3.5 h-3.5" /> Make default
-                  </Button>
+                {/* Managed senders (from an integration / the Authentix default) are read-only —
+                    they already exist as sending identities, so no edit/delete here. */}
+                {s.managed ? (
+                  <span className="text-[11px] text-muted-foreground/60 shrink-0">From integration</span>
+                ) : (
+                  <>
+                    {!s.is_default && (
+                      <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={() => handleMakeDefault(s)}>
+                        <Star className="w-3.5 h-3.5" /> Make default
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" disabled={deletingId === s.id} onClick={() => handleDelete(s.id)}>
+                      {deletingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 text-destructive" />}
+                    </Button>
+                  </>
                 )}
-                <Button variant="ghost" size="sm" disabled={deletingId === s.id} onClick={() => handleDelete(s.id)}>
-                  {deletingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 text-destructive" />}
-                </Button>
               </div>
             ))}
           </div>
