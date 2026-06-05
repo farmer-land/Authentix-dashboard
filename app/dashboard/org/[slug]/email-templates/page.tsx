@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   Mail, Plus, Edit2, Trash2, Loader2, AlertCircle,
   Copy, Sparkles, ChevronLeft, ChevronRight, Clock, CheckCircle2, PenLine, Megaphone,
-  Award, CalendarDays, Users, Newspaper, FileText, MoreHorizontal, Send, Download,
+  Award, CalendarDays, Users, Newspaper, FileText, Send, Download,
 } from "lucide-react";
 
 // ── Template purpose inference ─────────────────────────────────────────────────
@@ -22,9 +22,6 @@ const CERT_PURPOSE_VARS = new Set(["certificate_number", "cert_number", "certifi
 function inferPurpose(variables: string[]): "certificate" | "broadcast" {
   return variables.some(v => CERT_PURPOSE_VARS.has(v)) ? "certificate" : "broadcast";
 }
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { type DeliveryTemplate } from "@/lib/api/client";
 import {
@@ -483,9 +480,9 @@ function TemplateCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col rounded-2xl border bg-card overflow-hidden cursor-pointer transition-all duration-200",
-        "hover:shadow-xl hover:-translate-y-0.5 hover:border-border",
-        isDraft ? "border-dashed border-amber-500/30" : "border-border/60",
+        "group relative flex flex-col rounded-2xl border bg-card overflow-hidden cursor-pointer transition-all duration-300 ease-out",
+        "hover:shadow-xl hover:-translate-y-0.75",
+        isDraft ? "border-dashed border-amber-500/30" : "border-border/60 hover:border-primary/20",
       )}
       onClick={onEdit}
     >
@@ -512,45 +509,52 @@ function TemplateCard({
             </span>
           )}
         </div>
-        {/* Actions menu — top right, on hover */}
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-7 h-7 rounded-lg bg-background/85 backdrop-blur-sm border border-border/60 flex items-center justify-center text-muted-foreground hover:bg-background transition-colors">
-                <MoreHorizontal className="w-3.5 h-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={onEdit}>
-                <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit template
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onSendCampaign}>
-                <Send className="w-3.5 h-3.5 mr-2" /> Send as campaign
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDuplicate} disabled={duplicating}>
-                {duplicating ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Copy className="w-3.5 h-3.5 mr-2" />}
-                Duplicate
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDelete} disabled={deleting} className="text-destructive focus:text-destructive">
-                {deleting ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
       {/* Info */}
-      <div className="flex flex-col flex-1 px-3.5 pt-2.5 pb-3 gap-1.5">
+      <div className="flex flex-col flex-1 px-3.5 pt-2.5 pb-3">
         <p className="text-sm font-semibold leading-snug line-clamp-1">{template.name}</p>
-        <p className="text-xs text-muted-foreground line-clamp-1">{cleanSubject}</p>
-        <div className="flex items-center justify-between mt-auto pt-2">
-          <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
-            <Clock className="w-2.5 h-2.5" /> {timeAgo}
-          </span>
-          <span className="text-[11px] font-medium text-[#3ECF8E] flex items-center gap-1">
-            <Edit2 className="w-3 h-3" /> Edit
-          </span>
+        <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{cleanSubject}</p>
+        <p className="text-[10px] text-muted-foreground/70 flex items-center gap-1 mt-1.5">
+          <Clock className="w-2.5 h-2.5" /> {timeAgo}
+        </p>
+
+        <div className="flex-1" />
+
+        {/* Action row — inline buttons, matching the certificate template (step 1) cards */}
+        <div className="flex items-center gap-1 pt-2.5" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={onSendCampaign}
+            title="Send as campaign"
+            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-muted hover:text-foreground flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100"
+          >
+            <Send className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onDuplicate}
+            disabled={duplicating}
+            title="Duplicate"
+            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-muted hover:text-foreground flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100"
+          >
+            {duplicating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Copy className="w-3 h-3" />}
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={deleting}
+            title="Delete"
+            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-destructive/15 hover:text-destructive flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100"
+          >
+            {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+          </button>
+
+          <div className="flex-1" />
+
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-1 bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground text-[9px] font-bold tracking-wide px-2.5 py-1.5 rounded-lg transition-all border border-primary/20 hover:border-primary"
+          >
+            <Edit2 className="w-2.5 h-2.5 shrink-0" /> Edit
+          </button>
         </div>
       </div>
     </div>
