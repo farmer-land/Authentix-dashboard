@@ -8,6 +8,26 @@ import { apiRequest, API_BASE_URL, extractApiError, ApiError, type ApiResponse }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/** A DNS record Resend requires for a sending domain (SPF / DKIM / DMARC / MX). */
+export interface ResendDomainRecord {
+  record?: string;        // e.g. "SPF", "DKIM", "DMARC"
+  name?: string;          // DNS host/name
+  type?: string;          // "TXT" | "MX" | "CNAME"
+  value?: string;         // DNS value
+  ttl?: string | number;
+  priority?: number;
+  status?: string;        // "verified" | "pending" | "not_started" | "failed"
+}
+
+export interface ResendDomain {
+  id: string;
+  name: string;
+  status?: string;        // "not_started" | "pending" | "verified" | "failed" | "temporary_failure"
+  region?: string;
+  created_at?: string;
+  records?: ResendDomainRecord[];
+}
+
 export interface DeliveryIntegration {
   id: string;
   organization_id: string;
@@ -421,6 +441,46 @@ export const deliveryApi = {
       { method: "PUT", body: JSON.stringify(dto) },
     );
     return response.data!.integration;
+  },
+
+  // ── Resend domains ──────────────────────────────────────────────────────────
+
+  listDomains: async (integrationId: string): Promise<ResendDomain[]> => {
+    const response = await apiRequest<{ data?: ResendDomain[] } | ResendDomain[]>(
+      `/delivery/resend/domains?integration_id=${encodeURIComponent(integrationId)}`,
+    );
+    const d = response.data as { data?: ResendDomain[] } | ResendDomain[] | undefined;
+    if (Array.isArray(d)) return d;
+    return d?.data ?? [];
+  },
+
+  getDomain: async (integrationId: string, domainId: string): Promise<ResendDomain> => {
+    const response = await apiRequest<ResendDomain>(
+      `/delivery/resend/domains/${domainId}?integration_id=${encodeURIComponent(integrationId)}`,
+    );
+    return response.data!;
+  },
+
+  createDomain: async (integrationId: string, name: string, region?: string): Promise<ResendDomain> => {
+    const response = await apiRequest<ResendDomain>("/delivery/resend/domains", {
+      method: "POST",
+      body: JSON.stringify({ integration_id: integrationId, name, region }),
+    });
+    return response.data!;
+  },
+
+  verifyDomain: async (integrationId: string, domainId: string): Promise<ResendDomain> => {
+    const response = await apiRequest<ResendDomain>(`/delivery/resend/domains/${domainId}/verify`, {
+      method: "POST",
+      body: JSON.stringify({ integration_id: integrationId }),
+    });
+    return response.data!;
+  },
+
+  deleteDomain: async (integrationId: string, domainId: string): Promise<void> => {
+    await apiRequest(`/delivery/resend/domains/${domainId}?integration_id=${encodeURIComponent(integrationId)}`, {
+      method: "DELETE",
+    });
   },
 
   deleteIntegration: async (id: string): Promise<void> => {

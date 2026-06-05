@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useOrg } from "@/lib/org";
 import { useOrganization } from "@/lib/hooks/queries/organizations";
 import { useDeliverySettingsState } from "./state/useDeliverySettingsState";
+import { DomainManager } from "./DomainManager";
 
 // ── Provider metadata ──────────────────────────────────────────────────────
 
@@ -660,6 +661,8 @@ export default function EmailDeliverySettingsPage() {
 
   const activeDefault = integrations.find(i => i.is_default && i.is_active) ?? integrations.find(i => i.is_active);
   const hasActiveIntegration = integrations.filter(i => i.is_active).length > 0;
+  // Active Resend integration drives in-app domain management.
+  const resendIntegration = integrations.find(i => i.is_active && i.provider === "resend");
   // Only the parent owner can fall back to the Authentix default sender.
   const usingPlatformDefault = isPlatformOwner && !hasActiveIntegration;
 
@@ -807,6 +810,9 @@ export default function EmailDeliverySettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Resend domain management — only for an active Resend integration ── */}
+      {resendIntegration && <DomainManager integrationId={resendIntegration.id} />}
 
       {/* ── Authentix Default (fallback) — parent owner only; never exposed to other orgs ── */}
       {isPlatformOwner && (
