@@ -635,23 +635,34 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
   };
 
   const handleSend = async () => {
-    if (!selectedTemplate) return;
-    if (!usePlatformDefault && !selectedIntegration) return;
+    // Need a sender. (Template can fall back to the built-in default on the backend, so we
+    // don't hard-block on it — that previously made Send silently do nothing.)
+    if (!usePlatformDefault && !selectedIntegration) {
+      setErrorMsg('Choose an email sender first.');
+      setStep('error');
+      return;
+    }
     setStep('sending');
     // Send emails for every cert-gen job ID (covers multi-template and multi-file batches).
     // Fall back to the primary jobId if allCertJobIds is empty or not provided.
     const jobIds = allCertJobIds && allCertJobIds.length > 0 ? allCertJobIds : [jobId];
+    // Bundle: with a single shared template, send ONE email per recipient with ALL their
+    // certs attached (extra_generation_job_ids). With per-cert templates, send per job.
+    const bundle = multiCert && !useDifferentPerCert && jobIds.length > 1;
     try {
       let totalSent = 0;
       let totalFailed = 0;
       const allMessages: Array<{ to_email?: string; status: string }> = [];
-      for (const cjId of jobIds) {
+      const sendGroups = bundle ? [jobIds] : jobIds.map(id => [id]);
+      for (const group of sendGroups) {
+        const [primaryId, ...rest] = group;
         const result = await api.delivery.sendJobEmails({
-          generation_job_id: cjId,
+          generation_job_id: primaryId!,
+          extra_generation_job_ids: rest.length > 0 ? rest : undefined,
           integration_id: usePlatformDefault ? undefined : selectedIntegration!.id,
           // Per-certificate template when enabled; otherwise the single selected template.
           // (BUILTIN_TEMPLATE_ID resolves to undefined so the backend uses its default.)
-          template_id: templateIdForJob(cjId),
+          template_id: templateIdForJob(primaryId!),
           subject_override: subjectOverride.trim() || undefined,
           from_name_override: fromNameOverride.trim() || undefined,
           from_email_override: selectedSender?.from_email || undefined,

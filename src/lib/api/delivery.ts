@@ -124,6 +124,7 @@ export interface SendEmailDto {
   subject_override?: string;
   from_name_override?: string;
   from_email_override?: string;
+  extra_generation_job_ids?: string[];
   use_platform_default?: boolean;
 }
 
