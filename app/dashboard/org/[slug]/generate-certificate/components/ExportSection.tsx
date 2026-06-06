@@ -983,7 +983,7 @@ function SendEmailModal({ jobId, allCertJobIds, certJobs, recipientCount, certPr
                   <div key={job.jobId} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{job.label}</p>
-                      <p className="text-xs text-muted-foreground">{job.count} {job.count === 1 ? 'recipient' : 'recipients'}</p>
+                      <p className="text-xs text-muted-foreground">{job.count} {job.count === 1 ? 'certificate' : 'certificates'}</p>
                     </div>
                     <Select
                       value={perJobTemplate[job.jobId] ?? selectedTemplateId}
@@ -3677,7 +3677,16 @@ export function ExportSection({
           jobId={certGenJobId ?? generationJobId}
           allCertJobIds={allCertJobIds.length > 0 ? allCertJobIds : undefined}
           certJobs={certJobs}
-          recipientCount={totalGenerated}
+          // Count UNIQUE recipients (one email per person), not certificates — a recipient with
+          // 3 certs across 3 templates is 1 recipient / 1 bundled email, not 3.
+          recipientCount={(() => {
+            const keys = new Set(
+              generatedCertificates
+                .map(c => (c.recipient_email || c.recipient_id || c.recipient_name || "").toLowerCase())
+                .filter(Boolean),
+            );
+            return keys.size || totalGenerated;
+          })()}
           certPreviewUrl={generatedCertificates[0]?.preview_url ?? null}
           firstRecipientRow={importedData?.rows[0] ?? null}
           certFieldHeaders={importedData?.headers ?? []}
