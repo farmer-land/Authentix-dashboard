@@ -38,7 +38,7 @@ jobs:
 
       # ✅ Initialize CodeQL with better queries
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v4.37.3
         with:
           languages: javascript-typescript
           build-mode: none
@@ -46,4 +46,4 @@ jobs:
 
       # ✅ Run analysis
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v4.37.3
