@@ -15,12 +15,12 @@ project = GARDEN
   AND labels = team-frontend
   AND status NOT IN (Done, "In Review")
   AND labels NOT IN (blocked-heisenberg, awaiting-heisenberg)
-ORDER BY created ASC
+ORDER BY priority DESC, duedate ASC, created ASC
 ```
 
 Swap `GARDEN` → `WALL` and `team-frontend` → `team-backend` for the backend repo.
 
-- **Oldest first.** Age is the tiebreaker, not priority — priority already got set at triage, and letting new High tickets jump the queue forever starves the old ones.
+- **Priority first, then due date, then age.** A Highest-priority security bug due tomorrow outranks an older Low tech-debt item. Age is the final tiebreaker, so nothing starves at the bottom forever.
 - **Skip `In Review`** — a PR is already out for it.
 - **Skip both blocked labels** — a human owes an answer; asking again the next day is noise, not diligence.
 
