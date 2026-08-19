@@ -154,11 +154,13 @@ describe('autoMapForTemplate — multiple fields', () => {
     expect(result[0]!.columnName).toBe('Full Name');
   });
 
-  it('fuzzy fallback picks the first unclaimed header when no exact match exists', () => {
+  it('fuzzy fallback picks the highest-scoring unclaimed header when no exact match exists', () => {
     const fields = [makeField('f1', 'name', 'Recipient Name')];
-    // No exact match for "Recipient Name" — fuzzy finds "User Name" first (contains 'name')
+    // scoreHeaderForField isn't first-match — it's scored. Both headers get +2 for
+    // containing "name", but "student name" is in the curated exact-ish bonus list
+    // (score += 2) while "user name" is not, so "Student Name" wins on points, not order.
     const result = autoMapForTemplate(fields, ['User Name', 'Student Name']);
-    expect(result[0]!.columnName).toBe('User Name');
+    expect(result[0]!.columnName).toBe('Student Name');
   });
 });
 

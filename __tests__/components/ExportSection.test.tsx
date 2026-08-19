@@ -25,7 +25,10 @@ vi.mock('@/lib/api/client', () => ({
     certificates: {
       generate: vi.fn(),
       batchGenerate: vi.fn(),
-      pollJobStatus: vi.fn(),
+      // Default to an in-flight status so the background-job realtime effect's
+      // one-shot check (ExportSection.tsx) doesn't short-circuit into
+      // handlePrimaryJobRow for tests that don't care about job polling.
+      pollJobStatus: vi.fn().mockResolvedValue({ status: 'processing', result: null, error: null, completed_at: null }),
     },
     templates: {
       getEditorData: vi.fn(),
@@ -39,6 +42,28 @@ vi.mock('@/lib/api/client', () => ({
     },
   },
 }));
+
+// createSupabaseBrowserClient() reads NEXT_PUBLIC_SUPABASE_URL/ANON_KEY, which
+// aren't set in the test environment — stub the channel subscription surface
+// this component actually calls (see ExportSection.tsx's background-job
+// realtime effect: channel().on().on().subscribe(), removeChannel()).
+vi.mock('@/lib/supabase/browser', () => {
+  // Plain (non-vi.fn()) chainable stub — the per-test `vi.clearAllMocks()`
+  // calls throughout this file strip mockReturnThis()/mockResolvedValue()
+  // implementations along with call history, so a spy-based chain would
+  // silently start returning undefined after the first test. These aren't
+  // asserted on anywhere, so there's nothing lost by not being spies.
+  const channel = {
+    on() { return channel; },
+    subscribe() { return channel; },
+  };
+  return {
+    createSupabaseBrowserClient: () => ({
+      channel: () => channel,
+      removeChannel: () => {},
+    }),
+  };
+});
 
 vi.mock('@/app/dashboard/org/[slug]/generate-certificate/components/ExpiryDateSelector', () => ({
   ExpiryDateSelector: ({ children }: { children?: React.ReactNode }) => (
@@ -193,6 +218,12 @@ describe('ExportSection — generation overlay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (api.certificates.batchGenerate as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_GENERATE_RESULT);
+    // clearAllMocks() wipes the module-level default too — the background-job
+    // realtime effect's one-shot check calls this and .then()s the result, so
+    // it needs a resolved value in every test that can reach that effect.
+    (api.certificates.pollJobStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      status: 'processing', result: null, error: null, completed_at: null,
+    });
     // Stub the progress interval so it doesn't fire during tests
     vi.spyOn(global, 'setInterval').mockReturnValue(1 as unknown as ReturnType<typeof setInterval>);
     vi.spyOn(global, 'clearInterval').mockReturnValue(undefined);
@@ -306,6 +337,10 @@ describe('ExportSection — import_id passed to generation API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (api.certificates.batchGenerate as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_GENERATE_RESULT);
+    // See the "generation overlay" describe block above for why this default is needed.
+    (api.certificates.pollJobStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      status: 'processing', result: null, error: null, completed_at: null,
+    });
     vi.spyOn(global, 'setInterval').mockReturnValue(1 as unknown as ReturnType<typeof setInterval>);
     vi.spyOn(global, 'clearInterval').mockReturnValue(undefined);
   });
@@ -423,6 +458,10 @@ describe('ExportSection — full payload assembly (import + mappings + options)'
   beforeEach(() => {
     vi.clearAllMocks();
     (api.certificates.batchGenerate as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_GENERATE_RESULT);
+    // See the "generation overlay" describe block above for why this default is needed.
+    (api.certificates.pollJobStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      status: 'processing', result: null, error: null, completed_at: null,
+    });
     vi.spyOn(global, 'setInterval').mockReturnValue(1 as unknown as ReturnType<typeof setInterval>);
     vi.spyOn(global, 'clearInterval').mockReturnValue(undefined);
   });
