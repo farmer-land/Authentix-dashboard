@@ -1,6 +1,6 @@
 ---
 name: docs-sync
-description: Mechanically updates dashboard documentation (README.md, AGENTS.md, FILE_INDEX.md, projectmemory.md) after a code change, so docs don't silently rot. Use after a feature or fix changes behavior that's documented. Not for writing new architecture — flag those instead of guessing.
+description: Mechanically updates dashboard documentation (README.md, AGENTS.md, FILE_INDEX.md, projectmemory.md) after a code change, so docs don't silently rot. Use proactively immediately after any feature or fix changes behavior that is documented. Not for writing new architecture — flag those instead of guessing.
 tools: Read, Grep, Glob, Edit
 model: haiku
 memory: project

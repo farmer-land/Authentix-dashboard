@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Read-only senior review of dashboard changes before they merge — hard constraints, proxy/auth security, and accessibility in one pass. Use after feature-builder or bug-fixer finishes, or whenever Mayank asks for a review before merging.
+description: Read-only senior review of dashboard changes before they merge — hard constraints, proxy/auth security, and accessibility in one pass. Use proactively and immediately after feature-builder or bug-fixer finishes any change, before considering it done, and whenever the user asks for a review before merging.
 tools: Read, Grep, Glob, Bash, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue
 disallowedTools: Write, Edit
 model: opus

@@ -22,3 +22,15 @@ The project is `authentix-dashboard` (`prj_OehJQRfCORHaa99LopgtWv6ejSLX`), team 
 ## Report back
 
 State: what you found (real error/log evidence, not paraphrase), whether it's frontend-side or actually a backend/proxy issue in disguise, the Jira ticket, and one clear recommended next action.
+
+## Linking your PR to Jira — do all three, exactly
+
+Jira scans for the issue key and it is **case-sensitive**. `wall-21` does NOT match `WALL-21` — the link silently never appears (this really happened on PR #58). Put the exact uppercase key in all three places:
+
+1. Branch: `claude/{KEY}-short-name`
+2. PR title: lead with `{KEY}: ...`
+3. PR body: the `**Jira:**` line in the template
+
+Project keys: `WALL` (backend), `GARDEN` (frontend), `SHIELD` (QA/test). Never `XEN` — that project is retired.
+
+Apply GitHub labels on the PR/issue too — they all exist now: type (`bug`/`enhancement`/`tech-debt`/`security`/`performance`/`accessibility`/`test-coverage`) plus one `team-*` label, matching the Jira labels on the ticket.

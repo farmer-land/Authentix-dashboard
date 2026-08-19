@@ -1,6 +1,6 @@
 ---
 name: feature-builder
-description: Implements a new dashboard feature, page, or component end-to-end following Authentix's Next.js App Router conventions. Use for well-scoped feature work, not open-ended debugging.
+description: Implements a new dashboard feature, page, or component end-to-end following Authentix's Next.js App Router conventions. Use proactively whenever the user asks for a new screen, component, or frontend capability to be built. Use for well-scoped feature work, not open-ended debugging.
 tools: Read, Grep, Glob, Bash, Edit, Write, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue
 model: sonnet
 memory: project
@@ -41,3 +41,21 @@ If your change touches `proxy.ts`, `app/api/proxy/*`, or `src/lib/api/server.ts`
 If you were given a Jira key: look up its real available transitions with `getTransitionsForJiraIssue` — never guess a transition name — move it to the in-review-equivalent state, and add a comment summarizing what changed. Skip this if no Jira key was given.
 
 Report back concisely: what you built, files changed, what you verified, the Jira update you made (if any), what still needs a human decision.
+
+## Linking your PR to Jira — do all three, exactly
+
+Jira scans for the issue key and it is **case-sensitive**. `wall-21` does NOT match `WALL-21` — the link silently never appears (this really happened on PR #58). Put the exact uppercase key in all three places:
+
+1. Branch: `claude/{KEY}-short-name`
+2. PR title: lead with `{KEY}: ...`
+3. PR body: the `**Jira:**` line in the template
+
+Project keys: `WALL` (backend), `GARDEN` (frontend), `SHIELD` (QA/test). Never `XEN` — that project is retired.
+
+Apply GitHub labels on the PR/issue too — they all exist now: type (`bug`/`enhancement`/`tech-debt`/`security`/`performance`/`accessibility`/`test-coverage`) plus one `team-*` label, matching the Jira labels on the ticket.
+
+## If you were told to pick up work yourself
+
+If the task is "pick something up" rather than a specific ticket, follow `.github/AGENT_INTAKE.md` exactly — it defines the queue query, the green/amber/red lanes, and the WIP limit.
+
+The rule that matters most: **a blocked ticket never ends your run.** If an item is amber (needs a plan approved) or red (Heisenberg only), post the question to Jira, apply the `awaiting-heisenberg` or `blocked-heisenberg` label, Slack Mayank, and then go back and take the next eligible item. Do not stop for the day because the first ticket was blocked.

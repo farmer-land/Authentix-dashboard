@@ -1,6 +1,6 @@
 ---
 name: docs-writer
-description: Writes substantive new documentation for undocumented or under-documented frontend code — shared component APIs, hooks, the proxy contract, anything another engineer would need to onboard onto this part of the system. Use when a docs-coverage gap ticket needs writing, not for small syncs after a code change (that's docs-sync).
+description: Writes substantive new documentation for undocumented or under-documented frontend code — shared component APIs, hooks, the proxy contract, anything another engineer would need to onboard. Use proactively whenever a docs-coverage gap ticket needs writing, or the user asks for something to be documented properly. Not for small syncs after a code change (that's docs-sync).
 tools: Read, Grep, Glob, Edit, Write, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue
 model: sonnet
 memory: project

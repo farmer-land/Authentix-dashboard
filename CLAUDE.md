@@ -63,6 +63,36 @@ Any request to implement a feature, fix a bug, or otherwise change code is a pip
 
 This applies whether the request comes from an interactive session, a PR comment, or a Routine — the pipeline is the same either way.
 
+**When an agent picks up work on its own** (the daily cloud routine, a scheduled task, or a session told "just pick something up"), the queue query, the green/amber/red lanes, and the WIP limit are defined in [`.github/AGENT_INTAKE.md`](.github/AGENT_INTAKE.md). The rule that protocol exists to enforce: **a blocked ticket never ends the run** — the agent labels it `awaiting-heisenberg` (plan posted, needs a yes/no) or `blocked-heisenberg` (red-lane action, Heisenberg only), asks the question in Jira + Slack, and then takes the next eligible item. Blocked tickets do not count against the WIP limit, so one ambiguous ticket can never cost a whole day.
+
+---
+
+## Definition of done — no change ships without these
+
+Every agent that writes code in this repo meets all of these before claiming done. These are pass/fail, not aspirations. "It works on my branch" is not done.
+
+**Green means green.**
+- `npm run typecheck`, `npm run lint`, and `npm run test:run` all pass. The `verify-before-done.sh` Stop hook enforces this mechanically on `feature-builder`/`bug-fixer`/`github-ops` — don't try to route around it.
+- **Never** weaken a test to get green: no deleting assertions, no `.skip`/`.only`/`it.todo`, no loosening a matcher until it passes. If a test can't pass without a code change, say so and stop — a disabled test is worse than a red one, because it's invisible.
+- If CI is already red before you start, say so explicitly in your report and treat fixing it as in-scope or blocking — never quietly add to a broken pipeline. (As of 2026-08-19 this is live: see GARDEN-26.)
+- Respect `AGENTS.md`'s documented test gotchas rather than rediscovering them: fake timers deadlock the ExportSection overlay tests, `ClipboardItem` needs stubbing, use `fireEvent` not `userEvent` for overlay/async tests, `autoMapForTemplate` must stay exported.
+
+**Tests are part of the change, not a follow-up.** Every behavior change ships with a test that would fail without it. A bug fix ships with a regression test reproducing the original bug. Prioritize real user paths and error states over snapshot padding.
+
+**Types are load-bearing.** Keep TypeScript strict. Avoid `any` — if it's genuinely unavoidable, comment why. No `@ts-ignore`/`@ts-expect-error` without an explanation and a note on what would let it be removed.
+
+**Hard constraints are non-negotiable** (full list in `AGENTS.md`): no direct Supabase client in frontend code, no service-role secrets in browser code, no auth tokens in `localStorage`/`sessionStorage` (`HttpOnly` cookies only), no backend calls bypassing `/api/proxy/*` or `/api/auth/*`, no internal identifiers leaked to the UI. Widening the proxy allowlist is a review-blocking change — flag it, never slip it in.
+
+**Errors are handled, never swallowed.** A bare `catch {}` is a bug. Every failure path a user can hit produces visible, actionable feedback — a silent failure on a data-loss-risk path (autosave, delete, payment) is a Highest-severity bug, not a polish item. No floating promises.
+
+**Accessibility is part of the definition of done, not a later audit.** Interactive elements are real `<button>`/`<a>`, or carry `role` + `tabIndex` + keyboard handlers. Use the existing Radix primitives in `src/components/ui/*` rather than hand-rolling dialogs, dropdowns, or popovers — hand-rolled versions consistently miss focus trapping, escape handling, and ARIA. Every icon-only control has a non-empty accessible name (`aria-label`, not just `title`). Form inputs have real labels. Text meets WCAG AA contrast (4.5:1).
+
+**The diff is the smallest thing that solves the problem.** No opportunistic refactors bundled into a fix. No reformatting untouched lines. No new dependency without justifying why an existing one won't do. Reach for the shared component before writing a new one-off.
+
+**Leave the campsite documented.** If behavior a doc describes changed, the doc changes in the same PR (or `docs-sync` is dispatched). Comments explain *why*, never *what*.
+
+**Ship-readiness.** Anything touching `proxy.ts`, `app/api/proxy/*`, `src/lib/api/server.ts`, or auth is called out explicitly with a recommended review pass. Say plainly what you verified and what you didn't — a confident "done" on unverified work is the single most expensive thing an agent can do here.
+
 ---
 
 ## Team & Identity — Authentix AI Engineering Organization
@@ -80,6 +110,23 @@ Mayank addresses the interactive session itself (Missandei) as **"Madam"** — "
 **Never:** merge automatically, deploy automatically, delete production data, ignore failing tests/lint/type errors, add unnecessary dependencies, do unrelated refactoring, change architecture without justification.
 
 **Handoff format**, every task, every persona: `## Summary` (what changed) · `## Validation` (what was tested) · `## Risks` (what needs attention) · `## Recommendation` (next action).
+
+### Standing automation — cross-repo, covers this repo too
+
+These run on a schedule and **already read and write this repo**, not just the backend. They live in `~/.claude/scheduled-tasks/` (created from a backend session, which is why they're documented at length in the backend's `CLAUDE.md` — but their scope is both repos). Documented here so nobody working in this repo assumes the automation is backend-only:
+
+| What | When | What it does for *this* repo |
+|---|---|---|
+| `tyrion-triage-scan` | 3×/day, weekdays (9am/1pm/5pm) | Reads `FRONTEND_BATTLE_PLAN.md`, writes this repo's `TRIAGE_QUEUE.md`. Report-only — never dispatches a builder. |
+| `luwin-weekly-audit` | Mondays ~7am | Re-audits this repo (hard constraints, proxy security, accessibility) and updates `FRONTEND_BATTLE_PLAN.md` in place. |
+| `missandei-morning-raven` | Weekdays 11am | Folds this repo's `TRIAGE_QUEUE.md` into one combined Slack DM to Mayank. |
+| `missandei-evening-raven` | Weekdays 6pm | Folds this repo's `DAILY_STANDUP.md` into one combined end-of-day Slack DM. |
+| `jon-snow-daily-engineer` (cloud routine) | Daily ~10am IST | Clones **both** repos, picks one eligible Jira issue across `team-backend`+`team-frontend`, implements it in whichever repo owns it, opens a `claude/` PR. One issue per run across both repos combined — never one from each. Runs regardless of whether the laptop is open. |
+| `log-standup.sh` (SubagentStop hook) | On every subagent finish | Appends this repo's agents' handoff messages to its own `DAILY_STANDUP.md`, feeding the evening digest. |
+
+**Known coverage gap, be aware of it:** none of the above check *live infrastructure* — they read markdown files and Jira, not Vercel/Supabase/Railway/GitHub APIs. That's why frontend CI sat red for two days (GARDEN-26) and backend production served stale code for two days (WALL-20) with zero alerting. Use `vercel-ops`/`github-ops` on demand until a scheduled ops-health check exists.
+
+**Jira connection details — use these, don't guess.** The `cloudId` for every Atlassian MCP call is **`beforebinary.atlassian.net`** (UUID `180ec872-0c8d-4ad3-b3ec-fa952187ffdc`). It is *not* `xencus.atlassian.net` — "Xencus" is the name of a Confluence *space* on that site, and agents that infer the cloudId from those Confluence references get 404s. Projects: **`GARDEN`** (frontend, board 35, sprint `GARDEN Sprint 1` = id 69), **`WALL`** (backend, board 36), **`SHIELD`** (QA/test, board 37). Sprint IDs change each sprint — rediscover by fetching `customfield_10020` from any existing ticket in that project rather than trial-and-error on write. Note that these projects enforce required fields on create: Sprint, Assignee, Start date, Due date, Story point estimate, and Labels are all mandatory.
 
 **Jira/GitHub team tags** — every ticket/issue created by any persona gets one team label in addition to its type label: `team-backend`, `team-frontend`, `team-qa`, `team-security`, `team-performance`, `team-architecture`, `team-docs`, `team-product`.
 
