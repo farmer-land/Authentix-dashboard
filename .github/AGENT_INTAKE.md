@@ -8,23 +8,69 @@
 
 ## 1. Pull the queue
 
-Always a **targeted** JQL query. Never an unfiltered project-wide pull — it burns tokens for no reason and returns hundreds of irrelevant rows.
+Always a **targeted** JQL query. Never an unfiltered project-wide pull.
+
+**Take work in this order. Finish what is already started before starting anything new.**
+
+### Tier 1 — already in flight (ALWAYS check this first)
 
 ```
 project = GARDEN
   AND labels = team-frontend
-  AND status NOT IN (Done, "In Review")
+  AND status = "In Progress"
+  AND labels NOT IN (blocked-heisenberg, awaiting-heisenberg)
+ORDER BY priority DESC, updated ASC
+```
+
+A ticket sitting In Progress means a previous run started it and stopped — hit a turn cap, hit an error, or was interrupted. **That work is already paid for.** Abandoning it to start something fresh means paying twice for the same understanding, and on 2026-08-20 that pattern burned roughly 3.9 million tokens across seven runs that died mid-task.
+
+Read the ticket's comments and any `claude/` branch for it before doing anything: the previous run may have committed real work. Continue from there rather than starting over.
+
+Instructed by Heisenberg 2026-08-20: *"They will be picking the Jira ticket which is currently in. First, they will be checking the status, like, which is in resolve and progress or something. First, they will be trying to solve that, and then they will be taking a new ticket."*
+
+### Tier 2 — QA bounce-backs
+
+```
+project = GARDEN AND labels = team-frontend AND status != Done
+  AND labels IN (qa-failed) ORDER BY priority DESC
+```
+
+QA has already diagnosed the failure and quoted it. Cheapest possible fix.
+
+### Tier 3 — cross-repo asks from the other repo's builder
+
+```
+project = GARDEN AND labels = team-frontend AND status != Done
+  AND labels = cross-repo-check ORDER BY priority DESC, created ASC
+```
+
+### Tier 4 — new work
+
+```
+project = GARDEN
+  AND labels = team-frontend
+  AND status NOT IN (Done, "In Review", "In Progress")
   AND labels NOT IN (blocked-heisenberg, awaiting-heisenberg)
 ORDER BY priority DESC, duedate ASC, created ASC
 ```
 
-Swap `GARDEN` → `WALL` and `team-frontend` → `team-backend` for the backend repo.
+Swap `GARDEN` → `WALL` and `team-frontend` → `team-backend` when filing a cross-repo ask.
 
-- **Priority first, then due date, then age.** A Highest-priority security bug due tomorrow outranks an older Low tech-debt item. Age is the final tiebreaker, so nothing starves at the bottom forever.
+- **Priority first, then due date, then age.** Age is the final tiebreaker so nothing starves.
 - **Skip `In Review`** — a PR is already out for it.
-- **Skip both blocked labels** — a human owes an answer; asking again the next day is noise, not diligence.
+- **Skip both blocked labels** — a human owes an answer.
 
-If the query returns nothing: say so, do not invent work, end the run cleanly.
+### Before you start ANY ticket: check it is not already fixed
+
+There is no locking. Two runs can pull the same ticket, and a ticket can describe a defect that has since shipped. Both happened on 2026-08-20 — WALL-50 duplicated WALL-46 after WALL-46 was already merged and deployed.
+
+So, for every ticket you are about to start:
+
+1. `gh pr list --repo farmer-land/<repo> --state merged --limit 30 --search "<KEY>"` — if a merged PR already names this key, the work shipped. Comment saying so and move on; **do not close the ticket** (see §6).
+2. Check for an open `claude/<KEY>-*` branch or PR. If one exists, another run is on it or left it half-done — continue that, never open a second.
+3. Read the ticket's own comments. A duplicate is usually already flagged there.
+
+If the query returns nothing eligible: say so, do not invent work, end the run cleanly.
 
 ---
 
