@@ -53,15 +53,32 @@ vi.mock('@/lib/supabase/browser', () => {
   // implementations along with call history, so a spy-based chain would
   // silently start returning undefined after the first test. These aren't
   // asserted on anywhere, so there's nothing lost by not being spies.
+  //
+  // `on()` records its handlers so a test can simulate a realtime delivery
+  // via `__triggerBroadcast` — this mirrors the actual production recovery
+  // path: ExportSection.tsx's one-shot `pollJobStatus` check has no retry of
+  // its own on error (the catch at that call site is a silent no-op), so a
+  // job's eventual status is only ever delivered through this realtime
+  // channel's 'broadcast'/'postgres_changes' handlers.
+  let handlers: Array<{ type: string; cb: (arg: unknown) => void }> = [];
   const channel = {
-    on() { return channel; },
+    on(type: string, _filter: unknown, cb: (arg: unknown) => void) {
+      handlers.push({ type, cb });
+      return channel;
+    },
     subscribe() { return channel; },
   };
   return {
     createSupabaseBrowserClient: () => ({
-      channel: () => channel,
+      // Reset captured handlers on every new subscription so a stale handler
+      // from a previous render/test can't be triggered by mistake.
+      channel: () => { handlers = []; return channel; },
       removeChannel: () => {},
     }),
+    __triggerBroadcast: (record: unknown) => {
+      const handler = handlers.find(h => h.type === 'broadcast');
+      handler?.cb({ payload: { record } });
+    },
   };
 });
 
@@ -77,7 +94,13 @@ vi.mock('@/app/dashboard/org/[slug]/generate-certificate/components/CertificateT
 
 import { ExportSection } from '@/app/dashboard/org/[slug]/generate-certificate/components/ExportSection';
 import { api } from '@/lib/api/client';
+import * as supabaseBrowserMock from '@/lib/supabase/browser';
 import type { CertificateTemplate, ImportedData, FieldMapping, CertificateField } from '@/lib/types/certificate';
+
+// `__triggerBroadcast` only exists on the mocked module (see vi.mock above) —
+// cast rather than a named import so `tsc` doesn't complain about a member
+// that isn't on the real `@/lib/supabase/browser` module's type.
+const triggerBroadcast = (supabaseBrowserMock as unknown as { __triggerBroadcast: (row: unknown) => void }).__triggerBroadcast;
 
 // ── Factories ──────────────────────────────────────────────────────────────────
 function makeTemplate(overrides: Partial<CertificateTemplate> = {}): CertificateTemplate {
@@ -114,6 +137,25 @@ function makeField(id: string, type: CertificateField['type'] = 'name', label = 
 const MOCK_GENERATE_RESULT = {
   job_id: 'job-123',
 };
+
+// Manually drain the microtask queue a few times, each wrapped in `act()`.
+//
+// Several describe blocks below stub `global.setInterval` to a no-op (per
+// AGENTS.md's test-infra rule, to avoid the progress-timer/userEvent deadlock)
+// — but `@testing-library/react`'s `waitFor` also uses `setInterval` internally
+// for its own re-checks, so once its first (synchronous) check fails, it never
+// gets another chance to re-check and just hangs until it times out, even
+// though the awaited state actually resolves moments later. Draining
+// microtasks directly sidesteps that: it lets the pending `batchGenerate()` →
+// `setGenerationJobId()` → background-job realtime effect → `pollJobStatus()`
+// chain settle before the test (and its `afterEach: vi.restoreAllMocks()`)
+// completes, so that effect's `pollJobStatus(...).then(...)` call doesn't fire
+// on a mock that's already been torn down by the next hook.
+async function flushPendingEffects(rounds = 5) {
+  for (let i = 0; i < rounds; i++) {
+    await act(async () => { await Promise.resolve(); });
+  }
+}
 
 // ── canGenerate logic ──────────────────────────────────────────────────────────
 describe('ExportSection — generate button state', () => {
@@ -256,9 +298,12 @@ describe('ExportSection — generation overlay', () => {
   it('clicking Generate shows the generating overlay', async () => {
     renderExport();
     fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
-    // setOverlayState('generating') and setProgressLabel are synchronous — overlay replaces UI
+    // setOverlayState('generating') is synchronous — overlay replaces UI immediately.
+    // Current overlay shows an animated "N of M / certificates generated" counter
+    // (no textual "Generating N certificates…" label — that state is set but never
+    // rendered, see the write-only `setProgressLabel` in ExportSection.tsx).
     expect(screen.queryByRole('button', { name: /Generate/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Generating.*certificate/i)).toBeInTheDocument();
+    expect(screen.getByText(/certificates generated/i)).toBeInTheDocument();
   });
 
   it('Generate button disappears (overlay replaces UI) once generation starts', () => {
@@ -306,13 +351,21 @@ describe('ExportSection — generation overlay', () => {
     await waitFor(() => {
       expect(api.certificates.batchGenerate).toHaveBeenCalled();
     }, { timeout: 3000 });
+    // Let the rest of the async chain (setGenerationJobId → background-job realtime
+    // effect → pollJobStatus one-shot check) settle *before* this test's afterEach
+    // tears the mocks down. Otherwise that effect's pollJobStatus(...).then(...) call
+    // can fire after vi.restoreAllMocks() has already stripped pollJobStatus's
+    // implementation, throwing an unhandled "Cannot read properties of undefined
+    // (reading 'then')" that bleeds into whichever test runs next.
+    await flushPendingEffects();
+    expect(api.certificates.pollJobStatus).toHaveBeenCalled();
   });
 
   it('shows the generating overlay (progress bar container) during generation', () => {
     renderExport({ neverResolve: true });
     fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
     expect(screen.queryByRole('button', { name: /Generate/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Generating.*certificate/i)).toBeInTheDocument();
+    expect(screen.getByText(/certificates generated/i)).toBeInTheDocument();
   });
 });
 
@@ -366,6 +419,10 @@ describe('ExportSection — import_id passed to generation API', () => {
         expect.objectContaining({ import_id: 'import-abc' }),
       );
     }, { timeout: 3000 });
+    // See the "generation overlay" describe block above — let the trailing
+    // pollJobStatus effect fire before this test's afterEach restores mocks.
+    await flushPendingEffects();
+    expect(api.certificates.pollJobStatus).toHaveBeenCalled();
   });
 
   it('does NOT send data array when import_id is present', async () => {
@@ -391,6 +448,10 @@ describe('ExportSection — import_id passed to generation API', () => {
       expect(call).toMatchObject({ import_id: 'import-abc' });
       expect(call?.data).toBeUndefined();
     }, { timeout: 3000 });
+    // See the "generation overlay" describe block above — let the trailing
+    // pollJobStatus effect fire before this test's afterEach restores mocks.
+    await flushPendingEffects();
+    expect(api.certificates.pollJobStatus).toHaveBeenCalled();
   });
 
   it('sends field mappings in configs array', async () => {
@@ -416,6 +477,10 @@ describe('ExportSection — import_id passed to generation API', () => {
         field_mappings: [{ fieldId: 'f-name', columnName: 'Name' }],
       });
     }, { timeout: 3000 });
+    // See the "generation overlay" describe block above — let the trailing
+    // pollJobStatus effect fire before this test's afterEach restores mocks.
+    await flushPendingEffects();
+    expect(api.certificates.pollJobStatus).toHaveBeenCalled();
   });
 
   it('Generate button disabled when importedData is null even if template is set', () => {
@@ -507,6 +572,10 @@ describe('ExportSection — full payload assembly (import + mappings + options)'
         ],
       });
     }, { timeout: 3000 });
+    // See the "generation overlay" describe block above — let the trailing
+    // pollJobStatus effect fire before this test's afterEach restores mocks.
+    await flushPendingEffects();
+    expect(api.certificates.pollJobStatus).toHaveBeenCalled();
   });
 
   it('passes additional_rows alongside import_id', async () => {
@@ -575,7 +644,7 @@ describe('ExportSection — overlay transitions to success when job completes', 
     fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
     await flushMicrotasks(8);
 
-    expect(screen.getByText(/All done/i)).toBeInTheDocument();
+    expect(screen.getByText(/All set/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /View Results/i })).toBeInTheDocument();
   });
 
@@ -626,17 +695,17 @@ describe('ExportSection — overlay transitions to success when job completes', 
     await flushMicrotasks(8);
 
     expect(screen.getByText(/Generation failed/i)).toBeInTheDocument();
-    expect(screen.queryByText(/All done/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/All set/i)).not.toBeInTheDocument();
   });
 
-  it('retries polling once when first attempt throws a network error', async () => {
-    (api.certificates.pollJobStatus as ReturnType<typeof vi.fn>)
-      .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValue({
-        status: 'completed',
-        result: { total_certificates: 2, last_download_url: null },
-        error: null,
-      });
+  it('recovers via the realtime channel when the initial one-shot poll check errors', async () => {
+    // ExportSection.tsx's one-shot pollJobStatus check has no retry of its own —
+    // its `.catch()` is a silent no-op (see the vi.mock('@/lib/supabase/browser', ...)
+    // comment above). The only way an in-flight job's status still reaches the UI
+    // after that initial check fails is the realtime channel's broadcast handler,
+    // so this test simulates that recovery path instead of a retried poll (there
+    // is no such retry to test).
+    (api.certificates.pollJobStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
     render(
       <ExportSection
@@ -648,9 +717,21 @@ describe('ExportSection — overlay transitions to success when job completes', 
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
-    // Extra rounds: error → retry setTimeout → second poll → success
-    await flushMicrotasks(12);
+    // Let the one-shot poll check run and fail (swallowed by its .catch()).
+    await flushMicrotasks(4);
+    expect(screen.queryByRole('button', { name: /View Results/i })).not.toBeInTheDocument();
 
-    expect(screen.getByText(/All done/i)).toBeInTheDocument();
+    // Realtime delivers the completed job row — the actual recovery path.
+    act(() => {
+      triggerBroadcast({
+        status: 'completed',
+        result: { total_certificates: 2, last_download_url: null },
+        error: null,
+        completed_at: new Date().toISOString(),
+      });
+    });
+    await flushMicrotasks(4);
+
+    expect(screen.getByText(/All set/i)).toBeInTheDocument();
   });
 });
