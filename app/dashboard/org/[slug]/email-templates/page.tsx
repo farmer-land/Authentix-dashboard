@@ -490,8 +490,23 @@ function TemplateCard({
         "hover:shadow-xl hover:-translate-y-0.75",
         isDraft ? "border-dashed border-amber-500/30" : "border-border/60 hover:border-primary/20",
       )}
-      onClick={onEdit}
     >
+      {/*
+        Keyboard-operable primary target (WCAG 2.1.1 / 4.1.2). The card holds nested
+        action buttons, so it can't itself be a <button> (invalid nesting + hydration
+        break). Instead a transparent full-card button is stretched over it: same
+        pointer behaviour as the old div onClick, plus Tab/Enter/Space and a real
+        button role. The action row sits above it (z-20) so its buttons still win.
+        ring-inset (not ring-offset) on the focus ring — the card is overflow-hidden,
+        so an offset ring's box-shadow would be clipped and never paint.
+      */}
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit template: ${template.name}`}
+        className="absolute inset-0 z-10 rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      />
+
       {/* Preview — real rendered email (blank placeholder when no content) */}
       <div className="relative h-52 shrink-0 overflow-hidden border-b border-border/50">
         <TemplatePreview body={template.body} />
@@ -528,11 +543,11 @@ function TemplateCard({
         <div className="flex-1" />
 
         {/* Action row — inline buttons, matching the certificate template (step 1) cards */}
-        <div className="flex items-center gap-1 pt-2.5" onClick={e => e.stopPropagation()}>
+        <div className="relative z-20 flex items-center gap-1 pt-2.5">
           <button
             onClick={onSendCampaign}
             title="Send as campaign"
-            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-muted hover:text-foreground flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100"
+            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-muted hover:text-foreground flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
           >
             <Send className="w-3 h-3" />
           </button>
@@ -540,7 +555,7 @@ function TemplateCard({
             onClick={onDuplicate}
             disabled={duplicating}
             title="Duplicate"
-            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-muted hover:text-foreground flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100"
+            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-muted hover:text-foreground flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
           >
             {duplicating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Copy className="w-3 h-3" />}
           </button>
@@ -548,7 +563,7 @@ function TemplateCard({
             onClick={onDelete}
             disabled={deleting}
             title="Delete"
-            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-destructive/15 hover:text-destructive flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100"
+            className="w-6 h-6 rounded-md bg-muted/40 text-muted-foreground/50 hover:bg-destructive/15 hover:text-destructive flex items-center justify-center transition-all shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
           >
             {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
           </button>
