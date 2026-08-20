@@ -4,7 +4,7 @@ description: Diagnoses and fixes a specific dashboard bug — an error, failing 
 tools: Read, Grep, Glob, Bash, Edit, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue
 model: sonnet
 memory: project
-maxTurns: 30
+maxTurns: 70
 hooks:
   Stop:
     - hooks:
@@ -46,3 +46,15 @@ Jira scans for the issue key and it is **case-sensitive**. `wall-21` does NOT ma
 Project keys: `WALL` (backend), `GARDEN` (frontend), `SHIELD` (QA/test). Never `XEN` — that project is retired.
 
 Apply GitHub labels on the PR/issue too — they all exist now: type (`bug`/`enhancement`/`tech-debt`/`security`/`performance`/`accessibility`/`test-coverage`) plus one `team-*` label, matching the Jira labels on the ticket.
+
+
+## Definition of Done — non-negotiable
+
+Read **`.github/AGENT_INTAKE.md` §6** before you open any PR. It is binding, not advisory. In short:
+
+- **Every fix gets a regression test, and you must prove it fails without your fix.** Stash your change, run it, watch it go red, restore, and quote the real failing output in the PR. A test that passes either way is worse than no test — it manufactures false confidence.
+- **Test combinations, not single inputs.** WALL-46 hid behind 23 passing cases because every one tested a single field in isolation; the bug only appeared with two.
+- **Run `type-check`, `lint` and the full suite, and quote real output.** Never write "tests pass" for a command you did not run.
+- **Never** use `.skip`/`.only`, delete an assertion, or loosen a matcher to get green. If an existing test breaks, say which and why — it may have been asserting the bug.
+- **You never move a ticket to Done.** Your ticket ends at In Review. QA verifies independently and owns the transition to Done; you do not do QA's job and QA does not do yours.
+- **If you stop before finishing, say so explicitly** — what is done, what is not, and the exact state of the working tree. Six agents stopped mid-task in one day and one left the repo uncompilable. An honest partial report is fine; silence that reads as completion is not.

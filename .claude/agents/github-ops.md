@@ -4,7 +4,7 @@ description: The GitHub specialist for this repo. Use whenever the user reports 
 tools: Read, Grep, Glob, Bash, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue
 model: sonnet
 memory: project
-maxTurns: 25
+maxTurns: 40
 hooks:
   Stop:
     - hooks:

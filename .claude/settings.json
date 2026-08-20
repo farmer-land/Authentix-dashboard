@@ -65,7 +65,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "bug-fixer|code-health|docs-sync|docs-writer|feature-builder|github-ops|reviewer|vercel-ops",
+        "matcher": "bug-fixer|code-health|docs-sync|docs-writer|feature-builder|github-ops|reviewer|root-cause|vercel-ops",
         "hooks": [
           {
             "type": "command",
