@@ -201,101 +201,66 @@ Both are excluded from the intake query. Neither is ever applied by an agent to 
 
 ---
 
-## 6. Definition of Done — the gates, and who owns each
+## 6. Definition of Done — what must be PROVEN, not asserted
 
-> ## ⛔ OVERRIDE — 2026-08-20: NO AGENT MOVES ANY TICKET TO DONE
+> ### ⛔ OVERRIDE — 2026-08-20: NO AGENT MOVES ANY TICKET TO DONE
 >
-> Instructed directly by Heisenberg: *"Don't mark the tickets done until my permission for all the Jira tickets as well."*
->
-> **This supersedes Gate 2 below.** QA still reproduces, still verifies, still records the verdict and applies `qa-passed`/`qa-failed` — but **QA no longer transitions anything to Done.** Nobody does except Heisenberg, by explicit permission, per ticket, every time.
->
-> This applies to **every** Jira ticket in **every** project — bug, gate ticket, duplicate, obsolete, or one whose PR already merged. **A merged PR is not permission**; merging and closing are two separate decisions he makes separately. Tidy-up closures count too: comment and ask rather than closing.
->
-> **Why:** on WALL-46 three agents in succession declared a production defect fixed when it was not. Each had a green suite and plausible reasoning; the bug shipped anyway, and 72 certificates went out with wrong dates, 3 to real recipients. A ticket at Done is the signal he reads as "I no longer need to look at this." An agent that is wrong *and* closes the ticket removes the last chance to catch it. He is choosing to be the final check because agent confidence has repeatedly not tracked agent correctness.
->
-> Work stops at **In Review**. Say it is awaiting his sign-off. Never call it done.
+> Heisenberg: *"Don't mark the tickets done until my permission for all the Jira tickets as well."* Applies to every ticket in every project — bug, gate ticket, duplicate, or one whose PR already merged. **A merged PR is not permission.** Work stops at **In Review**. Say it is awaiting his sign-off; never call it done.
 
+### Why this section was rewritten on 2026-08-21
 
+Research (WALL-62, [Confluence 2818061](https://beforebinary.atlassian.net/wiki/spaces/SCRUM/pages/2818061)) established the base rate: **between a fifth and a third of agent patches that pass their test gate are wrong** — 29.6% behaviourally divergent from ground truth ([arXiv:2503.15223](https://arxiv.org/abs/2503.15223), ICSE 2026), 31.08% suspicious under weak tests ([arXiv:2410.06992](https://arxiv.org/html/2410.06992v2)).
 
-Three roles, three gates. **Nobody clears a gate that is not theirs**, and nobody skips one because the change looks small. Every incident this week reached production through a gate somebody waved past.
+At that rate, WALL-46's three consecutive wrong-but-green fixes are **not** an aberration and **not** a model failure. They are ordinary. The gate simply had no power to detect this error class.
 
-### Gate 1 — the DEVELOPER, before opening a PR
+The literature is also clear on what does *not* help: **self-verification has negative evidence** — *"no prior work demonstrates successful self-correction with feedback from prompted LLMs"* ([arXiv:2406.01297](https://arxiv.org/html/2406.01297v3), TACL) — and all three attempts did exactly that. **Debate and majority-voting agent teams cannot exceed their strongest participant** ([arXiv:2508.17536](https://arxiv.org/html/2508.17536v1)); our three agents shared one blind spot, so ensembling would have reproduced it.
 
-`feature-builder`, `bug-fixer`, and any agent writing code. Not one line of this is optional, and a PR opened without it will be sent back.
+What *is* supported: **runtime grounding is the strongest measured lever** — removing runtime-grounded diagnosis drops resolution 56.0% → 48.0% ([SWE-Doctor](https://arxiv.org/html/2607.00990)) — and **diagnosis separated from fixing** ([Agentless](https://arxiv.org/html/2407.01489v1)).
 
-**Tests are part of the change, not a follow-up.**
+So the gate now asks for evidence produced by *running things*, not for confidence.
 
-1. **Write the test.** Every bug fix gets a regression test. Every feature gets tests for its real behaviour.
-2. **Prove it fails without your fix.** Stash or revert your change, run the test, watch it go red, restore. **Quote the real failing output in the PR.** A test that passes with and without your change proves nothing and is worse than no test — it creates false confidence that something is covered.
-3. **Test combinations, not single inputs.** This is the lesson from WALL-46: `field-mapping.test.ts` had 23 cases covering all six resolution strategies, including three for the exact one that was broken. It missed the bug because every case tested **one field in isolation**, and the defect only appeared with *two fields of the same type*. Coverage count is not coverage. Test what actually happens in use — multiple fields, multiple rows, multiple certificates.
-4. **Run everything and quote real output.** `type-check`, `lint`, and the full suite. Never write "tests pass" for a command you did not run. If you did not run it, say you did not run it.
-5. **Existing tests must still pass.** If your change breaks one, that test may have been asserting the buggy behaviour — **say which and why in the PR**. Never quietly edit or delete a test to get green.
+### The gated artefact is the REPRODUCTION, not the fix
 
-**Absolutely forbidden**, and reviewers check for exactly this: `.skip`, `.only`, deleted assertions, matchers loosened until they cannot fail, or a test rewritten to match broken behaviour. Making a suite green by weakening it removes the signal and nobody notices — which is worse than a red suite.
+A fix is accepted on the strength of three pieces of recorded evidence. Missing evidence is a FAIL — not a note, not a caveat.
 
-**The developer does not do QA's job.** Unit and integration tests are yours. Running the product end to end, exercising the real UI, and verifying the deployed behaviour are not — that is Gate 2. Do not claim a ticket is verified because your tests pass.
+**Evidence 1 — recorded fail-to-pass, against the pre-fix commit.**
+Not "I verified red-before-green." The actual output: check out the parent commit, run the new test, paste the real failure text into the PR. A test that has never been observed failing on unfixed code proves nothing.
 
-**The developer never moves a ticket to Done.** Your ticket ends at In Review. That is the whole of your authority over its status.
+**Evidence 2 — which branch production actually takes.**
+State it, with a live query or log line, before claiming a fix works. PR #86 guarded `resolveFieldMapping` correctly and it changed nothing, because 28 of 28 live templates take the other branch. Nobody checked. Backend builders and `root-cause` have read-only Supabase and Railway access precisely so this is answerable — `SELECT` only.
 
-### Gate 2 — QA, before a ticket can be resolved
+**Evidence 3 — verification against the artefact the user receives.**
+For certificates that means a **downloaded** file, not a preview: `previewRender()` runs different code from real generation. Generally: verify the thing the reporter actually saw.
 
-Brienne. QA is independent verification, not a second opinion on the same tests.
+### A declared coverage gap is a FAIL
 
-1. **Actually run it.** Check the branch out, install, and execute — do not read the diff and infer. The reviewer reads code; QA establishes whether it works.
-2. **Run the full suite yourself**, including any suite CI does not run. Report real output.
-3. **Exercise the real flow** the ticket touches, including the failure paths, not just the happy one.
-4. **Audit the tests the developer wrote.** Would they have caught the original bug? Do they test combinations or single inputs? Flag `.skip`/`.only`/weakened assertions as a hard FAIL regardless of how green the run is.
-5. **Never fix anything.** You are read-only on every branch. A failing test *is* your finding — report it, do not repair it. If you fix it, nobody is left checking the fix.
-6. **Only QA moves a ticket toward Done**, and only after the above. A ticket goes to Done because it was verified, never because a PR merged.
+If your "what was NOT tested" note excludes a dimension named in the ticket title or in the reporter's own words, **the gate fails.** Not a caveat — a fail.
 
-### Gate 3 — HEISENBERG
+This is the exact failure mode of SHIELD-8: QA honestly recorded *"did not test the start_date/end_date-specific branch — used generic type: 'date'"*, on a ticket titled *"start date and end date both render the end date"*, and passed the gate anyway. Honesty in the exclusions section is worthless if it does not stop the gate.
 
-He reviews and merges. **Nothing else merges, ever.**
+### Gate 1 — Developer
 
-Work reaching him must already have cleared Gates 1 and 2 and a Varys review with no unresolved blockers. **He is not the first person to look at it.** Sending him unverified work spends the one resource that does not scale.
+Writes the fix and produces Evidence 1, 2 and 3 above. Runs `type-check`/`typecheck`, `lint`, `test:run` for real and reports only what actually ran. **Never weakens a test** — no `.skip`, no `.only`, no deleted assertions, no loosened matchers.
 
-### Why this is written down
+Test **combinations**, not single inputs. WALL-46 had 23 passing single-field cases and missed the bug because nothing tested two fields of the same kind together.
 
-Each of these rules exists because skipping it cost real time:
-
-- A fix shipped on a **wrong diagnosis** because the root cause was never reproduced in isolation — it fixed something real and not the reported bug.
-- **WALL-23** fixed one call site; nobody swept for siblings; the same bug in three more places locked Heisenberg out of his own product twelve hours later.
-- **WALL-46** was invisible to 23 passing tests because every case tested one field at a time.
-- Six separate bugs shipped invisibly because **a failure produced no signal** — that is this codebase's signature defect, and a test that only checks the happy path will never catch it.
-- **Six in-session agents stopped mid-task in one day**, one leaving the repo uncompilable, because "now let me verify…" was treated as an ending.
-
-**If you stop before finishing, say so explicitly** — what is done, what is not, and the exact state of the working tree. An honest partial report is fine. Silence that reads as completion is not.
-
-
----
-
-## 6. Definition of Done — three gates, three different people
-
-A ticket is not Done because the code compiles. It is Done when three separate checks have each independently signed off — and **the same identity never performs two of them.**
-
-### Gate 1 — Developer (feature-builder / bug-fixer / Jon Snow / Margaery)
-
-Writes the fix, writes a regression test, and proves it — stash the fix, run the test, see real red; restore, see green. Quote the red output in the PR, don't just assert it happened. Runs `type-check`/`typecheck`, `lint`, `test:run` for real and reports only what actually ran. **Never weakens a test to pass** — no `.skip`, no `.only`, no deleted assertions, no loosened matchers.
-
-Test **combinations**, not single inputs — WALL-46 had 23 passing single-field cases and missed the bug because nothing tested two fields of the same type together. Two of a thing, an empty set, a duplicate, a boundary: that's where defects live.
-
-**The developer moves the ticket to In Review and stops.** Never to Done. Never approves or merges its own PR.
+**Moves the ticket to In Review and stops.** Never to Done. Never reviews or merges its own PR.
 
 ### Gate 2 — QA (Brienne)
 
-Independently reproduces the *original reported symptom* — not just runs the suite the developer wrote, since that suite is exactly what missed the bug the first time. If the symptom can't be reproduced, that's a FAIL, not a pass by default: it means either the repro conditions or the diagnosis is wrong, and both are worth knowing before merge.
+Independently reproduces the *original reported symptom* — not just the developer's suite, which is exactly what missed the bug. If the symptom cannot be reproduced, that is a FAIL, not a pass by default: either the repro conditions or the diagnosis is wrong, and both matter before merge.
 
-Audits the developer's tests rather than trusting them: verifies the red-before-green claim is real, checks for weakened assertions, confirms combinations were actually tested. **Writes her own edge-case tests** from the diff and runs them against the branch — she does not wait for coverage to be handed to her.
+Audits the developer's evidence rather than trusting it: re-runs the fail-to-pass check herself, confirms the branch claim against live data, and inspects the delivered artefact. Applies `qa-passed` / `qa-failed` GitHub labels.
 
-Applies GitHub PR labels `qa-passed` or `qa-failed` so the state is visible without reading a comment thread. On pass, moves the ticket toward Done (real transition, looked up, never guessed) and comments the evidence. On fail, moves it back and names what specifically broke — never fixes it herself. Fixing what you tested destroys the reason an independent check exists.
+**Does not move anything to Done** — see the override above. Records the verdict and says it is awaiting Heisenberg.
 
-### Gate 3 — Heisenberg (Mayank)
+### Gate 3 — Heisenberg
 
-Merges. Nobody else, under any framing, no matter how green everything looks. This is not a formality — it's the one human checkpoint in an otherwise autonomous pipeline, and it stays a hard line specifically because everything upstream of it is automated.
+Merges, and closes the ticket. Nobody else, under any framing.
 
-### Why this is written down
+### Why three different evaluators
 
-A developer who can mark their own fix Done isn't a second check, it's the same check twice. The three gates only work if they're three different evaluators looking at the same claim from different angles — code compiles, the actual bug is gone, this is safe to ship. Collapsing any two of them into one identity is how a regression reaches production with a green checkmark next to it.
+A developer who can mark its own fix Done is not a second check, it is the same check twice — and the research says that specific arrangement has *negative* evidence behind it. The gates only work as three different evaluators looking at the same claim from different angles: the code compiles, the actual bug is gone, this is safe to ship.
 
 ---
 
