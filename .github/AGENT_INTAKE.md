@@ -106,9 +106,23 @@ If you genuinely lack `createJiraIssue` in your toolset, say so explicitly and p
 
 ## 3. Work-in-progress limit
 
-**WIP = 1 open PR at a time.** Before starting a green item, check whether a previous run already left a `claude/*` PR open. If one is open and unmerged, do not start new build work — report that instead.
+**WIP = 3 open PRs that still need agent work.**
+
+Before starting a green item, count the open `claude/*` PRs that are *waiting on an agent* — failing CI, a reviewer's 🔴 blocker, or a QA failure that has not been fixed yet. If three of those are open, do not start new build work; report that instead.
+
+**A PR that is green and waiting on Heisenberg does NOT count against WIP.** Neither does one that has passed QA and review. Those are waiting on a human, exactly like a blocked ticket, and the same reasoning applies.
 
 **Blocked tickets do not count against WIP.** That is the entire point. You can leave five amber tickets awaiting an answer and still be building on a sixth green one.
+
+### Why this rule was changed on 2026-08-20
+
+It used to read **WIP = 1 open PR**, counting every open PR regardless of what it was waiting for. That deadlocked the entire engineering org.
+
+On 2026-08-20 Jon Snow's daily run started, read this file, found one open PR (#58) that had been merged-blocked for days, and stopped after 202 seconds having written no code. It reported the outcome correctly and honestly — the rule as written gave it no other option. Meanwhile eighteen eligible tickets sat in the backlog. The same thing would have happened the next morning, and every morning after, because the only person who can merge is Heisenberg and he is not always at a keyboard.
+
+**A WIP limit exists to stop an agent starting a fourth thing while three of its own are half-finished.** It was never meant to make a human's merge queue into a global stop signal. One unmerged PR must never be able to halt all automated work — that converts a throughput control into a single point of failure.
+
+If you find yourself blocked by this rule, say in your report **which** PRs you counted and **what each is waiting on**. If all of them are waiting on a human, that is not a WIP problem, it is a merge-queue problem, and it belongs in the Slack DM as a direct ask.
 
 ---
 
@@ -138,3 +152,110 @@ Only after step 1 returns nothing eligible. In this order:
 | `blocked-heisenberg` | Red-lane action required; agent cannot proceed at all | Mayank, by doing it or re-scoping |
 
 Both are excluded from the intake query. Neither is ever applied by an agent to avoid work it simply finds hard — that's a false block, and it will be obvious in review.
+
+---
+
+## 6. Definition of Done — the gates, and who owns each
+
+Three roles, three gates. **Nobody clears a gate that is not theirs**, and nobody skips one because the change looks small. Every incident this week reached production through a gate somebody waved past.
+
+### Gate 1 — the DEVELOPER, before opening a PR
+
+`feature-builder`, `bug-fixer`, and any agent writing code. Not one line of this is optional, and a PR opened without it will be sent back.
+
+**Tests are part of the change, not a follow-up.**
+
+1. **Write the test.** Every bug fix gets a regression test. Every feature gets tests for its real behaviour.
+2. **Prove it fails without your fix.** Stash or revert your change, run the test, watch it go red, restore. **Quote the real failing output in the PR.** A test that passes with and without your change proves nothing and is worse than no test — it creates false confidence that something is covered.
+3. **Test combinations, not single inputs.** This is the lesson from WALL-46: `field-mapping.test.ts` had 23 cases covering all six resolution strategies, including three for the exact one that was broken. It missed the bug because every case tested **one field in isolation**, and the defect only appeared with *two fields of the same type*. Coverage count is not coverage. Test what actually happens in use — multiple fields, multiple rows, multiple certificates.
+4. **Run everything and quote real output.** `type-check`, `lint`, and the full suite. Never write "tests pass" for a command you did not run. If you did not run it, say you did not run it.
+5. **Existing tests must still pass.** If your change breaks one, that test may have been asserting the buggy behaviour — **say which and why in the PR**. Never quietly edit or delete a test to get green.
+
+**Absolutely forbidden**, and reviewers check for exactly this: `.skip`, `.only`, deleted assertions, matchers loosened until they cannot fail, or a test rewritten to match broken behaviour. Making a suite green by weakening it removes the signal and nobody notices — which is worse than a red suite.
+
+**The developer does not do QA's job.** Unit and integration tests are yours. Running the product end to end, exercising the real UI, and verifying the deployed behaviour are not — that is Gate 2. Do not claim a ticket is verified because your tests pass.
+
+**The developer never moves a ticket to Done.** Your ticket ends at In Review. That is the whole of your authority over its status.
+
+### Gate 2 — QA, before a ticket can be resolved
+
+Brienne. QA is independent verification, not a second opinion on the same tests.
+
+1. **Actually run it.** Check the branch out, install, and execute — do not read the diff and infer. The reviewer reads code; QA establishes whether it works.
+2. **Run the full suite yourself**, including any suite CI does not run. Report real output.
+3. **Exercise the real flow** the ticket touches, including the failure paths, not just the happy one.
+4. **Audit the tests the developer wrote.** Would they have caught the original bug? Do they test combinations or single inputs? Flag `.skip`/`.only`/weakened assertions as a hard FAIL regardless of how green the run is.
+5. **Never fix anything.** You are read-only on every branch. A failing test *is* your finding — report it, do not repair it. If you fix it, nobody is left checking the fix.
+6. **Only QA moves a ticket toward Done**, and only after the above. A ticket goes to Done because it was verified, never because a PR merged.
+
+### Gate 3 — HEISENBERG
+
+He reviews and merges. **Nothing else merges, ever.**
+
+Work reaching him must already have cleared Gates 1 and 2 and a Varys review with no unresolved blockers. **He is not the first person to look at it.** Sending him unverified work spends the one resource that does not scale.
+
+### Why this is written down
+
+Each of these rules exists because skipping it cost real time:
+
+- A fix shipped on a **wrong diagnosis** because the root cause was never reproduced in isolation — it fixed something real and not the reported bug.
+- **WALL-23** fixed one call site; nobody swept for siblings; the same bug in three more places locked Heisenberg out of his own product twelve hours later.
+- **WALL-46** was invisible to 23 passing tests because every case tested one field at a time.
+- Six separate bugs shipped invisibly because **a failure produced no signal** — that is this codebase's signature defect, and a test that only checks the happy path will never catch it.
+- **Six in-session agents stopped mid-task in one day**, one leaving the repo uncompilable, because "now let me verify…" was treated as an ending.
+
+**If you stop before finishing, say so explicitly** — what is done, what is not, and the exact state of the working tree. An honest partial report is fine. Silence that reads as completion is not.
+
+
+---
+
+## 6. Definition of Done — three gates, three different people
+
+A ticket is not Done because the code compiles. It is Done when three separate checks have each independently signed off — and **the same identity never performs two of them.**
+
+### Gate 1 — Developer (feature-builder / bug-fixer / Jon Snow / Margaery)
+
+Writes the fix, writes a regression test, and proves it — stash the fix, run the test, see real red; restore, see green. Quote the red output in the PR, don't just assert it happened. Runs `type-check`/`typecheck`, `lint`, `test:run` for real and reports only what actually ran. **Never weakens a test to pass** — no `.skip`, no `.only`, no deleted assertions, no loosened matchers.
+
+Test **combinations**, not single inputs — WALL-46 had 23 passing single-field cases and missed the bug because nothing tested two fields of the same type together. Two of a thing, an empty set, a duplicate, a boundary: that's where defects live.
+
+**The developer moves the ticket to In Review and stops.** Never to Done. Never approves or merges its own PR.
+
+### Gate 2 — QA (Brienne)
+
+Independently reproduces the *original reported symptom* — not just runs the suite the developer wrote, since that suite is exactly what missed the bug the first time. If the symptom can't be reproduced, that's a FAIL, not a pass by default: it means either the repro conditions or the diagnosis is wrong, and both are worth knowing before merge.
+
+Audits the developer's tests rather than trusting them: verifies the red-before-green claim is real, checks for weakened assertions, confirms combinations were actually tested. **Writes her own edge-case tests** from the diff and runs them against the branch — she does not wait for coverage to be handed to her.
+
+Applies GitHub PR labels `qa-passed` or `qa-failed` so the state is visible without reading a comment thread. On pass, moves the ticket toward Done (real transition, looked up, never guessed) and comments the evidence. On fail, moves it back and names what specifically broke — never fixes it herself. Fixing what you tested destroys the reason an independent check exists.
+
+### Gate 3 — Heisenberg (Mayank)
+
+Merges. Nobody else, under any framing, no matter how green everything looks. This is not a formality — it's the one human checkpoint in an otherwise autonomous pipeline, and it stays a hard line specifically because everything upstream of it is automated.
+
+### Why this is written down
+
+A developer who can mark their own fix Done isn't a second check, it's the same check twice. The three gates only work if they're three different evaluators looking at the same claim from different angles — code compiles, the actual bug is gone, this is safe to ship. Collapsing any two of them into one identity is how a regression reaches production with a green checkmark next to it.
+
+---
+
+## 7. Cross-repo checks — asking the other repo something
+
+Routines cannot call each other. There is no live channel between a backend run and a frontend run — each starts cold, reads real state, and ends. **Jira is the channel.** This is not a workaround, it's the mechanism, and it already works because both projects are read by whichever routine runs next.
+
+### Filing a cross-repo ask
+
+When you need the other side to confirm or check something you can't verify yourself — "does this endpoint actually return X", "will the UI handle a null here", "what does the proxy expect on this field" — file it as a ticket **in the other project**, not your own:
+
+- Backend asking frontend → file in **GARDEN**, label `cross-repo-check` + `team-frontend`.
+- Frontend asking backend → file in **WALL**, label `cross-repo-check` + `team-backend`.
+
+State the exact question, the file/line or endpoint it concerns, and what you already tried to check yourself before asking. A vague ask costs the other routine a full investigation; a precise one costs a comment.
+
+If it's urgent — blocking a fix, not just a nice-to-know — also send one Slack line naming the ticket key, since the other routine may not run again for up to 24 hours.
+
+### Answering a cross-repo ask
+
+Both Jon Snow's and Margaery's queues check `labels = cross-repo-check` in the *other* project as a priority tier, above self-found work. Answer with a Jira comment stating the actual finding — not "looks fine," the actual return shape, the actual behavior, quoted or reproduced. If answering requires a code change on your side, that's now your own work item: file it properly in your own project, linked back with `Relates`, and follow the same green/amber/red classification as anything else.
+
+A cross-repo-check ticket closes when the asking side confirms the answer resolved it — the asker closes it, not the answerer, same logic as any other verification.
