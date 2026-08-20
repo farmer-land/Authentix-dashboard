@@ -206,6 +206,11 @@ describe('DraggableField — drag delta calculation', () => {
 });
 
 describe('DraggableField — resize', () => {
+  // Handles are selected by `data-resize-handle`, not by a Tailwind cursor
+  // className: cursor is an inline style now, and 'nw'/'se' share the same
+  // 'nwse-resize' value so it can't identify a corner anyway. The attribute is
+  // also the real contract — InfiniteCanvas's pan guard already does
+  // `target.closest('[data-resize-handle]')`.
   it('calls onResize with new width/height during resize', () => {
     const { el, onResize } = renderField({}, { isSelected: true });
     const resizeHandle = el.querySelector('[data-resize-handle="se"]') as HTMLElement;
@@ -213,13 +218,13 @@ describe('DraggableField — resize', () => {
 
     // Field is 200×30, scale=1, so scaled dims = 200×30
     // Start resize at (0,0), move to (50, 20)
-    fireEvent.mouseDown(resizeHandle, { clientX: 0, clientY: 0, bubbles: true });
+    fireEvent.mouseDown(resizeHandle as HTMLElement, { clientX: 0, clientY: 0, bubbles: true });
     mousemove(50, 20);
     mouseup();
 
-    // Expected: (newWidth, newHeight, initialCanvasWidth, initialFontSize,
-    //            newCanvasX, newCanvasY) — the 'se' handle never shifts x/y,
-    // = (200 + 50, 30 + 20, 200, 16, undefined, undefined)
+    // Expected: (newWidth, newHeight, initialCanvasWidth, initialFontSize, newCanvasX, newCanvasY)
+    // = (200 + 50, 30 + 20, 200, 16) = (250, 50, 200, 16); the 'se' handle never
+    // repositions the field (only nw/ne/sw do), so the trailing two args are undefined.
     expect(onResize).toHaveBeenCalledWith(250, 50, 200, 16, undefined, undefined);
   });
 
@@ -227,7 +232,7 @@ describe('DraggableField — resize', () => {
     const { el, onResize } = renderField({}, { isSelected: true });
     const resizeHandle = el.querySelector('[data-resize-handle="se"]') as HTMLElement;
 
-    fireEvent.mouseDown(resizeHandle, { clientX: 0, clientY: 0, bubbles: true });
+    fireEvent.mouseDown(resizeHandle as HTMLElement, { clientX: 0, clientY: 0, bubbles: true });
     // Move so far left that new width would be negative
     mousemove(-999, -999);
     mouseup();
@@ -605,7 +610,9 @@ describe('DraggableField — font default', () => {
         onSelect={vi.fn()}
       />,
     );
-    // fontFamily lives on the inner content layer, not the outer transform wrapper
+    // The outer div (container.firstChild) only carries positioning styles;
+    // text-layout styles (incl. fontFamily) live on the inner "content layer" div,
+    // tagged `data-field-content`.
     const content = (container.firstChild as HTMLElement)
       .querySelector('[data-field-content]') as HTMLElement;
     expect(content.style.fontFamily).toContain('DM Sans');
