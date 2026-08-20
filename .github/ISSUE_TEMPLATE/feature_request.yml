@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a new feature or improvement
+labels: [enhancement, team-frontend]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What pain point does this solve? Who is affected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should be built? Include page/component shape and any new backend proxy routes needed.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Certificate generation UI
+        - Dashboard pages / org views
+        - Auth flows
+        - Templates UI
+        - Billing UI
+        - Export / download flows
+        - Backend (Authentix-backend)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: input
+    id: jira
+    attributes:
+      label: Jira ticket key (if known)
+      description: e.g. XEN-123 — leave blank if this issue was filed first and Jira not yet created.
