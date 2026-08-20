@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import type { ImportJob } from '@/lib/api/imports';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -116,10 +116,22 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** Trigger a file drop through the captured useDropzone onDrop callback. */
+/**
+ * Trigger a file drop through the captured useDropzone onDrop callback, then
+ * confirm the "name this import" step that now gates the actual upload.
+ *
+ * Dropping a file no longer uploads immediately — DataSelector.tsx's `onDrop`
+ * just stashes the file(s) into `pendingFiles`/`pendingName` (pre-filled with
+ * the file's own name, minus extension) and shows a naming prompt; the real
+ * `api.imports.create()` call only happens once the user confirms via the
+ * "Upload" button (or Enter), from `handleStartUpload`.
+ */
 async function dropFile(file: File) {
   await act(async () => {
     capturedOnDrop([file], []);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
   });
 }
 
@@ -149,7 +161,10 @@ describe('DataSelector — upload flow', () => {
     const file = makeCsvFile();
     await dropFile(file);
 
-    expect(api.imports.create).toHaveBeenCalledWith(file, { file_name: file.name });
+    // DataSelector.tsx's "name this import" step sends the (editable) import
+    // name — defaulted to the filename minus extension via `stripExt()` — as
+    // `file_name`, not the raw `file.name` with its extension.
+    expect(api.imports.create).toHaveBeenCalledWith(file, { file_name: 'data' });
   });
 
   it('calls onDataImport with correct data after successful upload', async () => {
@@ -162,9 +177,11 @@ describe('DataSelector — upload flow', () => {
     render(<DataSelector {...defaultProps({ onDataImport })} />);
     await dropFile(makeCsvFile());
 
+    // fileName reflects the (editable, extension-stripped) import name too —
+    // see the api.imports.create assertion above.
     expect(onDataImport).toHaveBeenCalledWith(
       expect.objectContaining({
-        fileName: 'data.csv',
+        fileName: 'data',
         headers: ['Name'],
         importId: 'import-1',
         rowCount: 2,
@@ -183,10 +200,18 @@ describe('DataSelector — upload flow', () => {
 
     render(<DataSelector {...defaultProps({ onDataImport })} />);
 
-    // Start the drop, then advance fake timers to drive the polling loop forward.
-    // Each poll iteration awaits a 2-second setTimeout; advancing by 5 s covers 2 polls.
+    // Drop stashes the file behind the "name this import" prompt — confirm it
+    // to actually kick off the upload (see the `dropFile` helper's comment above).
     await act(async () => {
       capturedOnDrop([makeCsvFile()], []);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    });
+
+    // Advance fake timers to drive the polling loop forward.
+    // Each poll iteration awaits a 2-second setTimeout; advancing by 5 s covers 2 polls.
+    await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
 
@@ -268,9 +293,17 @@ describe('DataSelector — error handling', () => {
 
     render(<DataSelector {...defaultProps()} />);
 
-    // Advance past the 120-second deadline
+    // Drop stashes the file behind the "name this import" prompt — confirm it
+    // to actually kick off the upload (see the `dropFile` helper's comment above).
     await act(async () => {
       capturedOnDrop([makeCsvFile()], []);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    });
+
+    // Advance past the 120-second deadline
+    await act(async () => {
       await vi.advanceTimersByTimeAsync(121_000);
     });
 
@@ -299,8 +332,12 @@ describe('DataSelector — saved imports', () => {
 
     render(<DataSelector {...defaultProps({ savedImports })} />);
 
-    expect(screen.getByText('batch1.csv')).toBeInTheDocument();
-    expect(screen.getByText('batch2.xlsx')).toBeInTheDocument();
+    // DataSelector.tsx renders saved-import names via `stripExt()` — the file
+    // extension is stripped for display (both the "top" card and the "older
+    // uploads" list use `stripExt(importJob.file_name)`), so "batch1.csv" and
+    // "batch2.xlsx" appear as "batch1" and "batch2" in the DOM.
+    expect(screen.getByText('batch1')).toBeInTheDocument();
+    expect(screen.getByText('batch2')).toBeInTheDocument();
   });
 
   it('calls onLoadImport with the correct import ID when a saved import card is clicked', async () => {
@@ -309,10 +346,11 @@ describe('DataSelector — saved imports', () => {
 
     render(<DataSelector {...defaultProps({ savedImports, onLoadImport })} />);
 
+    // A single saved import renders as the "top" card, which is not itself
+    // clickable — it exposes an explicit "Use this" button that triggers
+    // onLoadImport (there's no `cursor-pointer` wrapper to click on anymore).
     await act(async () => {
-      screen.getByText('batch.csv').closest('[class*="cursor-pointer"]')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      );
+      fireEvent.click(screen.getByRole('button', { name: 'Use this' }));
     });
 
     expect(onLoadImport).toHaveBeenCalledWith('saved-import-1');
