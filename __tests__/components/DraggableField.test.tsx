@@ -16,9 +16,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render, fireEvent } from '@testing-library/react';
 import { DraggableField } from '@/app/dashboard/org/[slug]/generate-certificate/components/DraggableField';
 import type { CertificateField } from '@/lib/types/certificate';
+
+// A bare vi.fn() is typed as the widest possible mock, which is not assignable
+// to a specific handler prop. Give each mock the component's own prop signature
+// so it satisfies the prop type and stays in sync if the signature changes.
+type FieldProps = ComponentProps<typeof DraggableField>;
 
 // QRCodeLib tries to generate a QR preview on mount — mock it so tests don't
 // make real calls and the module imports cleanly.
@@ -70,16 +77,16 @@ function renderField(
   props: {
     scale?: number;
     isSelected?: boolean;
-    onDrag?: ReturnType<typeof vi.fn>;
-    onResize?: ReturnType<typeof vi.fn>;
-    onSelect?: ReturnType<typeof vi.fn>;
-    onDragStart?: ReturnType<typeof vi.fn>;
+    onDrag?: Mock<FieldProps['onDrag']>;
+    onResize?: Mock<FieldProps['onResize']>;
+    onSelect?: Mock<FieldProps['onSelect']>;
+    onDragStart?: Mock<NonNullable<FieldProps['onDragStart']>>;
   } = {},
 ) {
-  const onDrag = props.onDrag ?? vi.fn();
-  const onResize = props.onResize ?? vi.fn();
-  const onSelect = props.onSelect ?? vi.fn();
-  const onDragStart = props.onDragStart ?? vi.fn();
+  const onDrag = props.onDrag ?? vi.fn<FieldProps['onDrag']>();
+  const onResize = props.onResize ?? vi.fn<FieldProps['onResize']>();
+  const onSelect = props.onSelect ?? vi.fn<FieldProps['onSelect']>();
+  const onDragStart = props.onDragStart ?? vi.fn<NonNullable<FieldProps['onDragStart']>>();
 
   const field = makeField(overrides);
   const scale = props.scale ?? 1;

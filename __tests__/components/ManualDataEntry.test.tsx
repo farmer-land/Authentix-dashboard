@@ -9,10 +9,17 @@
  * and only reaches for "Add Recipient" for clicks made once a row already exists.
  */
 import { describe, it, expect, vi } from 'vitest';
+import type { Mock } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ManualDataEntry } from '@/app/dashboard/org/[slug]/generate-certificate/components/ManualDataEntry';
 import type { CertificateField, ImportedData } from '@/lib/types/certificate';
+
+// A bare vi.fn() is typed as the widest possible mock, which is not assignable
+// to a specific handler prop. Give each mock the component's own prop signature
+// so it satisfies the prop type and stays in sync if the signature changes.
+type EntryProps = ComponentProps<typeof ManualDataEntry>;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function makeField(overrides: Partial<CertificateField> = {}): CertificateField {
@@ -35,10 +42,14 @@ const IMG_FIELD = makeField({ id: 'img-1', type: 'image', label: 'Signature Imag
 
 function setup(
   fields: CertificateField[] = [NAME_FIELD],
-  props: Partial<{ onDataSubmit: ReturnType<typeof vi.fn>; onDataChange: ReturnType<typeof vi.fn>; initialData: ImportedData }> = {},
+  props: Partial<{
+    onDataSubmit: Mock<EntryProps['onDataSubmit']>;
+    onDataChange: Mock<NonNullable<EntryProps['onDataChange']>>;
+    initialData: ImportedData;
+  }> = {},
 ) {
-  const onDataSubmit = props.onDataSubmit ?? vi.fn();
-  const onDataChange = props.onDataChange ?? vi.fn();
+  const onDataSubmit = props.onDataSubmit ?? vi.fn<EntryProps['onDataSubmit']>();
+  const onDataChange = props.onDataChange ?? vi.fn<NonNullable<EntryProps['onDataChange']>>();
   const utils = render(
     <ManualDataEntry
       fields={fields}
@@ -252,7 +263,7 @@ describe('ManualDataEntry — validation', () => {
 // ── Submit / confirm ───────────────────────────────────────────────────────────
 describe('ManualDataEntry — submit behaviour', () => {
   it('calls onDataSubmit with correct shape when Confirm Data is clicked', async () => {
-    const onDataSubmit = vi.fn();
+    const onDataSubmit = vi.fn<EntryProps['onDataSubmit']>();
     const { user } = setup([NAME_FIELD], { onDataSubmit });
     await user.click(screen.getByRole('button', { name: /Add First Recipient/i }));
     await user.type(screen.getByPlaceholderText(/Email/i), 'submit@test.com');
@@ -266,7 +277,7 @@ describe('ManualDataEntry — submit behaviour', () => {
   });
 
   it('auto-commits an open editing row when Confirm Data is clicked', async () => {
-    const onDataSubmit = vi.fn();
+    const onDataSubmit = vi.fn<EntryProps['onDataSubmit']>();
     const { user } = setup([NAME_FIELD], { onDataSubmit });
     await user.click(screen.getByRole('button', { name: /Add First Recipient/i }));
     // Type email but do NOT click the save checkmark
@@ -279,7 +290,7 @@ describe('ManualDataEntry — submit behaviour', () => {
   });
 
   it('does NOT call onDataSubmit when Confirm Data is disabled (missing email)', async () => {
-    const onDataSubmit = vi.fn();
+    const onDataSubmit = vi.fn<EntryProps['onDataSubmit']>();
     const { user } = setup([NAME_FIELD], { onDataSubmit });
     await user.click(screen.getByRole('button', { name: /Add First Recipient/i }));
     await user.type(screen.getByPlaceholderText(/Recipient Name/i), 'No Email Person');
@@ -293,7 +304,7 @@ describe('ManualDataEntry — submit behaviour', () => {
 // ── onDataChange (live sync) ───────────────────────────────────────────────────
 describe('ManualDataEntry — onDataChange live sync', () => {
   it('calls onDataChange when a row is committed (not while in edit mode)', async () => {
-    const onDataChange = vi.fn();
+    const onDataChange = vi.fn<NonNullable<EntryProps['onDataChange']>>();
     const { user } = setup([NAME_FIELD], { onDataChange });
     await user.click(screen.getByRole('button', { name: /Add First Recipient/i }));
     await user.type(screen.getByPlaceholderText(/Email/i), 'sync@test.com');
@@ -305,7 +316,7 @@ describe('ManualDataEntry — onDataChange live sync', () => {
   });
 
   it('onDataChange receives the committed row data', async () => {
-    const onDataChange = vi.fn();
+    const onDataChange = vi.fn<NonNullable<EntryProps['onDataChange']>>();
     const { user } = setup([NAME_FIELD], { onDataChange });
     await user.click(screen.getByRole('button', { name: /Add First Recipient/i }));
     await user.type(screen.getByPlaceholderText(/Email/i), 'live@test.com');
