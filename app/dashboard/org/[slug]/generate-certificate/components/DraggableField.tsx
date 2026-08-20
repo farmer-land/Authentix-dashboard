@@ -239,6 +239,11 @@ export function DraggableField({
   const [resizeHandle, setResizeHandle] = useState<ResizeHandle | null>(null);
   const [isRotating, setIsRotating] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  // Tracks whether the *current* focus came from the keyboard (Tab) rather than a
+  // pointer (mousedown/click). Mouse clicks also focus the element since it's
+  // tabIndex=0, but the mode badge/announcement is only useful for keyboard users —
+  // showing it on every click would be noise for mouse-only users.
+  const [isKeyboardFocus, setIsKeyboardFocus] = useState(false);
   const [keyboardMode, setKeyboardMode] = useState<KeyboardMode>('move');
 
   // Refs for coordinates — synchronous updates prevent stale reads between mousemove events.
@@ -363,14 +368,17 @@ export function DraggableField({
     setIsFocused(true);
     if (pointerFocusRef.current) {
       pointerFocusRef.current = false;
+      setIsKeyboardFocus(false);
       return;
     }
+    setIsKeyboardFocus(true);
     // Keyboard (Tab) focus selects the field the same way a click does.
     onSelect(e);
   };
 
   const handleBlur = () => {
     setIsFocused(false);
+    setIsKeyboardFocus(false);
     pointerFocusRef.current = false;
     setKeyboardMode('move');
   };
@@ -403,6 +411,11 @@ export function DraggableField({
       return;
     }
     if (e.key === 'r' || e.key === 'R') {
+      // Don't enter (or announce) rotate mode when no onRotate handler is wired —
+      // e.g. CertificateCanvas's legacy consumer. Otherwise arrow keys would
+      // silently no-op after the mode badge/announcement told a screen-reader
+      // user rotation was available.
+      if (!onRotate) return;
       e.preventDefault();
       e.stopPropagation();
       setKeyboardMode(m => (m === 'rotate' ? 'move' : 'rotate'));
@@ -551,7 +564,7 @@ export function DraggableField({
       aria-label={ariaLabel}
       aria-describedby={keyboardHelpId}
       data-keyboard-mode={keyboardMode}
-      className={`absolute pointer-events-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? 'z-50' : 'z-10'}`}
+      className={`absolute pointer-events-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background ${isSelected ? 'z-50' : 'z-10'}`}
       style={{
         left: scaledX,
         top: scaledY,
@@ -578,11 +591,13 @@ export function DraggableField({
           : 'Arrow keys move the field. Press S for resize mode, R for rotate mode, M or Escape to return to move mode. Hold Shift for larger steps.'}
       </span>
       <span className="sr-only" aria-live="polite">
-        {isFocused && !field.locked ? KEYBOARD_MODE_LABELS[keyboardMode] : ''}
+        {isFocused && isKeyboardFocus && !field.locked ? KEYBOARD_MODE_LABELS[keyboardMode] : ''}
       </span>
 
-      {/* Visible keyboard hint — only while the field actually has focus. */}
-      {isFocused && !field.locked && (
+      {/* Visible keyboard hint — only while the field has focus *from the keyboard*.
+          A plain mouse click also focuses this element (tabIndex=0), but mouse-only
+          users never asked for the mode badge — gate on isKeyboardFocus, not just isFocused. */}
+      {isFocused && isKeyboardFocus && !field.locked && (
         <div
           className="absolute left-1/2 pointer-events-none whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-primary-foreground shadow-sm"
           style={{ top: '100%', transform: 'translate(-50%, 6px)', fontSize: 10, lineHeight: 1.4, zIndex: 60 }}

@@ -507,6 +507,55 @@ describe('DraggableField — keyboard rotate mode (R)', () => {
   });
 });
 
+describe('DraggableField — rotate mode requires an onRotate handler', () => {
+  it('does not enter (or announce) rotate mode when onRotate is not wired, and arrows still nudge', () => {
+    // Mirrors CertificateCanvas's legacy consumer, which doesn't pass onRotate.
+    const onDrag = vi.fn();
+    const { container } = render(
+      <DraggableField
+        field={makeField()}
+        scale={1}
+        isSelected={false}
+        onDrag={onDrag}
+        onResize={vi.fn()}
+        onSelect={vi.fn()}
+        // onRotate intentionally omitted
+      />,
+    );
+    const el = container.firstChild as HTMLElement;
+    focusField(el);
+    press(el, 'r');
+
+    expect(el.getAttribute('data-keyboard-mode')).toBe('move');
+    const live = el.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(live.textContent).not.toContain('Rotate mode');
+
+    // Arrows should still nudge (move mode), not silently no-op.
+    press(el, 'ArrowRight');
+    expect(onDrag).toHaveBeenCalledWith(1, 0);
+  });
+});
+
+describe('DraggableField — mode badge only shows for keyboard-driven focus', () => {
+  it('does not announce/show the mode badge when focus follows a mousedown', () => {
+    const { el } = renderField();
+    mousedown(el, 0, 0);
+    // The browser focuses the tabbable element right after mousedown.
+    focusField(el);
+    const live = el.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(live.textContent).toBe('');
+    expect(el.textContent).not.toContain('Move mode');
+  });
+
+  it('announces/shows the mode badge when focus arrives via keyboard (Tab)', () => {
+    const { el } = renderField();
+    focusField(el);
+    const live = el.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(live.textContent).toContain('Move mode');
+    expect(el.textContent).toContain('Move mode');
+  });
+});
+
 describe('DraggableField — locked field keyboard gating', () => {
   it('is still focusable and selectable when locked', () => {
     const { el, onSelect } = renderField({ locked: true });
