@@ -1,5 +1,11 @@
 # FRONTEND_BATTLE_PLAN.md — Authentix Dashboard Audit Findings
 
+> **Jira keys below are stale.** The `XEN` project was split on 2026-08-19 and has since been
+> **deleted** — an `XEN-###` key resolves to nothing. Keys verified against each GARDEN ticket's own
+> *Migrated from* line have been converted. Ones still shown as `XEN-##` could not be verified without
+> guessing: the old numbering had gaps (`GARDEN-23` came from `XEN-92`, not `XEN-87`), so it does not
+> convert by arithmetic. Find those by summary in `GARDEN` rather than trusting a computed key.
+
 Generated 2026-08-19, consolidating the real `team-frontend` Jira backlog (20 issues, filed by the Frontend Experience Audit and Engineering Compliance Verification routines on 2026-08-18) with a fresh doc-currency audit run the same day. **This is a findings catalog, not a changelog** — nothing here has been fixed. Every item already has (or now has) a Jira ticket; work it from there via `bug-fixer`/`feature-builder`, not by editing this file directly.
 
 Mirrors [`Authentix-backend/BATTLE_PLAN.md`](../Authentix-backend/BATTLE_PLAN.md)'s format for direct comparison across the two repos.
@@ -12,9 +18,9 @@ Mirrors [`Authentix-backend/BATTLE_PLAN.md`](../Authentix-backend/BATTLE_PLAN.md
 |---|---|---|---|
 | 1 | Misfiled security audit — `SECURITY_AUDIT.md` in this repo is actually Authentix-**backend's** audit (Fastify paths, `src/domains`, `src/api/v1/internal.ts` — none of which exist here). Anyone reading it here audits nonexistent code. | `SECURITY_AUDIT.md` | new ticket (see below) |
 | 2 | Billing account-deletion and email-template autosave failures are silently swallowed — no user-visible error. A user can believe a deletion request or an edit was saved when it wasn't. | `billing/page.tsx:1078-1083,634-637`, `email-templates/[id]/page.tsx:223-238` | XEN-75 |
-| 3 | Hand-rolled modals skip Radix Dialog — no focus trap, no ARIA dialog semantics. Worst instance is in the **shared dashboard shell** (`NotificationPanel.tsx`, rendered on every page) — the pattern other engineers are most likely to copy. | `billing/page.tsx:1092-1206,164-172`, `src/components/dashboard/NotificationPanel.tsx:47-53` | XEN-70 |
-| 4 | Primary click targets (template cards, picker cards, contact-selection rows) are non-keyboard-operable `<div onClick>` — no `role`, `tabIndex`, or `onKeyDown`. WCAG 2.1.1 Level A failure on frequently-used controls. | `email-templates/page.tsx:487-494`, `broadcasts/page.tsx:739-786,1209-1229` | XEN-69 |
-| 5 | Certificate design canvas is 100% pointer-only — fields can't be selected, moved, resized, or rotated via keyboard at all. Blocks the entire generate-certificate workflow for keyboard-only users. | `generate-certificate/components/DraggableField.tsx:383-400`, `InfiniteCanvas.tsx:302,314,445-555` | XEN-68 |
+| 3 | Hand-rolled modals skip Radix Dialog — no focus trap, no ARIA dialog semantics. Worst instance is in the **shared dashboard shell** (`NotificationPanel.tsx`, rendered on every page) — the pattern other engineers are most likely to copy. | `billing/page.tsx:1092-1206,164-172`, `src/components/dashboard/NotificationPanel.tsx:47-53` | GARDEN-6 |
+| 4 | Primary click targets (template cards, picker cards, contact-selection rows) are non-keyboard-operable `<div onClick>` — no `role`, `tabIndex`, or `onKeyDown`. WCAG 2.1.1 Level A failure on frequently-used controls. | `email-templates/page.tsx:487-494`, `broadcasts/page.tsx:739-786,1209-1229` | GARDEN-5 |
+| 5 | Certificate design canvas is 100% pointer-only — fields can't be selected, moved, resized, or rotated via keyboard at all. Blocks the entire generate-certificate workflow for keyboard-only users. | `generate-certificate/components/DraggableField.tsx:383-400`, `InfiniteCanvas.tsx:302,314,445-555` | GARDEN-4 |
 
 ## MEDIUM
 
@@ -34,7 +40,7 @@ Mirrors [`Authentix-backend/BATTLE_PLAN.md`](../Authentix-backend/BATTLE_PLAN.md
 | 17 | Destructive delivery-settings actions (cancel scheduled send, remove sender) fire immediately with no confirmation dialog, inconsistent with the `AlertDialog` pattern used elsewhere in the app. | `UsageCard.tsx:317-326`, `SendersCard.tsx:81-92` | XEN-74 |
 | 18 | Data tables missing `th scope`/`caption`; zero automated accessibility regression testing exists (`jest-axe`/`@axe-core/react` not even a dependency). | `CertificateTable.tsx`, `broadcasts/page.tsx`, `contacts/page.tsx` | XEN-73 |
 | 19 | Icon-only buttons and search inputs missing accessible names across the dashboard; custom tab bar has no `role="tablist"` semantics despite a proper Radix `ui/tabs.tsx` already existing. | `CertificateTable.tsx`, `DomainManager.tsx`, `broadcasts/page.tsx` | XEN-72 |
-| 20 | Low-contrast text fails WCAG 1.4.3 AA in `EmailBlockBuilder`/`EmailEditor` dark panels (≈2.6:1) and billing light cards (≈2.5:1) — informational text, not decorative. | `EmailBlockBuilder.tsx`, `EmailEditor.tsx`, `billing-overview.tsx:99,130` | XEN-71 |
+| 20 | Low-contrast text fails WCAG 1.4.3 AA in `EmailBlockBuilder`/`EmailEditor` dark panels (≈2.6:1) and billing light cards (≈2.5:1) — informational text, not decorative. | `EmailBlockBuilder.tsx`, `EmailEditor.tsx`, `billing-overview.tsx:99,130` | GARDEN-7 |
 
 ## LOW / Docs hygiene
 
@@ -50,6 +56,6 @@ Mirrors [`Authentix-backend/BATTLE_PLAN.md`](../Authentix-backend/BATTLE_PLAN.md
 
 ## Recommended next action
 
-Triage items 1-5 (HIGH) first — item 1 (misfiled security audit) is a documentation-only fix but has real consequence (misleads anyone auditing this repo); items 2-5 are accessibility/reliability issues on shared or high-traffic surfaces (`NotificationPanel` renders on every page; the certificate canvas is the core product workflow). Items 6, 24 are doc-hygiene, addressed directly in this pass (banners + `docs-writer` catch-up). The remaining 15 medium items are real but not urgent — good `bug-fixer`/`feature-builder` tickets, prioritized by the "shared infra first" pattern already visible in the audit (e.g., XEN-70's `NotificationPanel` fix before the two billing-page-local modals).
+Triage items 1-5 (HIGH) first — item 1 (misfiled security audit) is a documentation-only fix but has real consequence (misleads anyone auditing this repo); items 2-5 are accessibility/reliability issues on shared or high-traffic surfaces (`NotificationPanel` renders on every page; the certificate canvas is the core product workflow). Items 6, 24 are doc-hygiene, addressed directly in this pass (banners + `docs-writer` catch-up). The remaining 15 medium items are real but not urgent — good `bug-fixer`/`feature-builder` tickets, prioritized by the "shared infra first" pattern already visible in the audit (e.g., GARDEN-6's `NotificationPanel` fix before the two billing-page-local modals).
 
 Per `.github/TICKET_STANDARDS.md`, each new ticket filed from this catalog gets a `team-frontend` label plus its type label (`security`/`docs`/`accessibility` as applicable) before handoff.

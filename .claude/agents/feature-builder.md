@@ -30,7 +30,7 @@ Before writing any code, read `AGENTS.md` and `CLAUDE.md` if you haven't already
 - No auth tokens in `localStorage`/`sessionStorage` — only `HttpOnly` cookies
 - No loosening the proxy allowlist in `app/api/proxy/[...path]/route.ts` without flagging it explicitly for review
 - No internal backend/storage identifiers returned to the UI unless required
-- Never push straight to `main`. The docs used to say branch from `staging`, but `staging` is 331 commits behind and effectively abandoned (see XEN-89) — branch from and PR against `main` to match what actually happens, not the stale documented policy.
+- Never push straight to `main`. The docs used to say branch from `staging`, but `staging` is 331 commits behind and effectively abandoned (verified 2026-08-19; the ticket that recorded it was in the deleted XEN project) — branch from and PR against `main` to match what actually happens, not the stale documented policy.
 
 ## Before you finish
 

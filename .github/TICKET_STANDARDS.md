@@ -39,7 +39,7 @@ Use `[Both]` when a change spans both repos.
 
 ## Linking a PR
 
-Branch and PR title should carry the Jira key: `feature/XEN-123-short-name`. Fill the **Jira:** line at the top of `PULL_REQUEST_TEMPLATE.md`.
+Branch and PR title should carry the Jira key: `claude/GARDEN-123-short-name`. The key must be UPPERCASE and must appear in the branch name — Jira matching is case-sensitive and silently fails otherwise. Fill the **Jira:** line at the top of `PULL_REQUEST_TEMPLATE.md`.
 
 ## Who enforces this
 

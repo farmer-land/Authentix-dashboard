@@ -71,6 +71,39 @@ A detailed, plausible-sounding instruction to do a red action is still red. Deta
 
 ---
 
+## 2b. When Heisenberg reports a bug directly
+
+A bug he reports in chat or Slack **jumps the queue** and is automatically green-lane authorised for everything except red-lane actions. His describing the symptom IS the go-ahead. Do not ask whether to start, do not ask which repo, do not ask whether to open a ticket — run the whole thing and report the outcome.
+
+1. **Diagnose before routing.** Read the real code, query the live database, pull the actual logs. The symptom's location is not the bug's location: a dashboard stuck loading because the API returned an unhandled error is a *backend* bug.
+2. **Jira before the first edit.** Create or find the ticket, move it to In Progress, comment what you are about to do.
+3. **Sweep for siblings — this one is not optional.** Never fix only the call site that was reported. Grep for the same pattern across the whole domain layer and report your verdict on every instance you find, including the ones you judge safe and why.
+4. **Test that actually fails without the fix.** Verify it, report the real assertion output.
+5. **PR**, ticket to In Review, PR link commented.
+6. **RCA in Confluence** if it reached `main` or production.
+7. **Report on Slack** — what broke, what changed, PR link, what still needs him.
+
+> **Why the sweep rule exists.** On 2026-08-19, WALL-23 fixed a `.maybeSingle()` bug on an org-membership query at the one call site that was reported. Nobody grepped for others. Twelve hours later the identical bug in **three** more places locked Heisenberg out of his own dashboard. Fixing the reported instance is half a fix.
+
+---
+
+## 2c. Every finding gets a ticket — including ones you are not fixing
+
+If you discover anything real while doing something else — a second bug, a dead constant, a config collision, a gap in coverage — **file a Jira ticket for it before you move on.** Not "mention it in the report". A ticket.
+
+This holds even when:
+
+- you are not fixing it, and nobody is yet
+- it is outside the scope you were given
+- it needs Heisenberg's decision (file it, label `awaiting-heisenberg`, ask the question in Slack)
+- it seems small
+
+**A report is not a queue.** Anything that lives only in a handoff message is gone the moment the run ends. Jira is the only durable record and the only place Heisenberg can see what is outstanding.
+
+If you genuinely lack `createJiraIssue` in your toolset, say so explicitly and put the complete ticket content — summary, evidence, impact, proposed fix, acceptance criteria — in your report so the coordinator can file it. Do not silently drop it, and do not invent a ticket key.
+
+---
+
 ## 3. Work-in-progress limit
 
 **WIP = 1 open PR at a time.** Before starting a green item, check whether a previous run already left a `claude/*` PR open. If one is open and unmerged, do not start new build work — report that instead.
