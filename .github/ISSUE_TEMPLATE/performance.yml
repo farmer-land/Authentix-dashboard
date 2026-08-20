@@ -1,0 +1,61 @@
+name: Performance
+description: Something is slower than it should be — page load, render, or bundle size
+labels: [performance, team-performance]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Page load / navigation
+        - Component render performance
+        - Bundle size
+        - Proxy / API response time
+        - Export / download flows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What's slow
+      description: Page/component and the observed timing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Lighthouse score, Vercel analytics, React DevTools profiler, bundle analyzer output.
+      render: text
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Low — noticeable but not user-blocking
+        - Medium — degrades UX under normal load
+        - High — blocks users or fails Core Web Vitals
+    validations:
+      required: true
+
+  - type: textarea
+    id: suspected-cause
+    attributes:
+      label: Suspected cause
+      description: Unnecessary re-renders, missing memoization, oversized dependency, waterfall fetches, etc. — if known.
+
+  - type: input
+    id: source
+    attributes:
+      label: Found by
+      description: Which routine or person flagged this (e.g. "Bronn — performance scan", "manual")
+
+  - type: input
+    id: jira
+    attributes:
+      label: Jira ticket key (if known)
+      description: e.g. XEN-123 — leave blank if this issue was filed first and Jira not yet created.

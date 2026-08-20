@@ -116,6 +116,27 @@ function mouseup() {
   fireEvent.mouseUp(document);
 }
 
+// Resize handles no longer carry a Tailwind cursor className (e.g.
+// "cursor-nwse-resize") — cursor is set inline per-handle, and both 'nw' and
+// 'se' share the 'nwse-resize' cursor, so cursor value alone doesn't uniquely
+// identify a corner. Disambiguate by each handle's position style instead
+// (see RESIZE_HANDLES in DraggableField.tsx: 'se' is style.right/bottom = 0).
+function getResizeHandle(container: HTMLElement, corner: 'nw' | 'ne' | 'sw' | 'se'): HTMLElement | null {
+  const positions: Record<typeof corner, { top?: string; bottom?: string; left?: string; right?: string }> = {
+    nw: { top: '0px', left: '0px' },
+    ne: { top: '0px', right: '0px' },
+    sw: { bottom: '0px', left: '0px' },
+    se: { bottom: '0px', right: '0px' },
+  };
+  const want = positions[corner];
+  const handles = Array.from(container.querySelectorAll('[class*="group/handle"]')) as HTMLElement[];
+  return (
+    handles.find((h) =>
+      Object.entries(want).every(([prop, value]) => h.style[prop as 'top' | 'bottom' | 'left' | 'right'] === value)
+    ) ?? null
+  );
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('DraggableField — selection', () => {
@@ -190,25 +211,26 @@ describe('DraggableField — drag delta calculation', () => {
 describe('DraggableField — resize', () => {
   it('calls onResize with new width/height during resize', () => {
     const { el, onResize } = renderField({}, { isSelected: true });
-    const resizeHandle = el.querySelector('[class*="cursor-nwse-resize"]') as HTMLElement;
+    const resizeHandle = getResizeHandle(el, 'se');
     expect(resizeHandle).not.toBeNull();
 
     // Field is 200×30, scale=1, so scaled dims = 200×30
     // Start resize at (0,0), move to (50, 20)
-    fireEvent.mouseDown(resizeHandle, { clientX: 0, clientY: 0, bubbles: true });
+    fireEvent.mouseDown(resizeHandle as HTMLElement, { clientX: 0, clientY: 0, bubbles: true });
     mousemove(50, 20);
     mouseup();
 
-    // Expected: (newWidth, newHeight, initialCanvasWidth, initialFontSize)
-    // = (200 + 50, 30 + 20, 200, 16) = (250, 50, 200, 16)
-    expect(onResize).toHaveBeenCalledWith(250, 50, 200, 16);
+    // Expected: (newWidth, newHeight, initialCanvasWidth, initialFontSize, newCanvasX, newCanvasY)
+    // = (200 + 50, 30 + 20, 200, 16) = (250, 50, 200, 16); the 'se' handle never
+    // repositions the field (only nw/ne/sw do), so the trailing two args are undefined.
+    expect(onResize).toHaveBeenCalledWith(250, 50, 200, 16, undefined, undefined);
   });
 
   it('does not resize below minimum dimensions', () => {
     const { el, onResize } = renderField({}, { isSelected: true });
-    const resizeHandle = el.querySelector('[class*="cursor-nwse-resize"]') as HTMLElement;
+    const resizeHandle = getResizeHandle(el, 'se');
 
-    fireEvent.mouseDown(resizeHandle, { clientX: 0, clientY: 0, bubbles: true });
+    fireEvent.mouseDown(resizeHandle as HTMLElement, { clientX: 0, clientY: 0, bubbles: true });
     // Move so far left that new width would be negative
     mousemove(-999, -999);
     mouseup();
@@ -276,10 +298,10 @@ describe('DraggableField — rendering', () => {
 
   it('shows resize handle only when selected', () => {
     const { el: unselected } = renderField({}, { isSelected: false });
-    expect(unselected.querySelector('[class*="cursor-nwse-resize"]')).toBeNull();
+    expect(getResizeHandle(unselected, 'se')).toBeNull();
 
     const { el: selected } = renderField({}, { isSelected: true });
-    expect(selected.querySelector('[class*="cursor-nwse-resize"]')).not.toBeNull();
+    expect(getResizeHandle(selected, 'se')).not.toBeNull();
   });
 });
 
@@ -297,7 +319,9 @@ describe('DraggableField — font default', () => {
         onSelect={vi.fn()}
       />,
     );
-    const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.style.fontFamily).toContain('DM Sans');
+    // The outer div (container.firstChild) only carries positioning styles;
+    // text-layout styles (incl. fontFamily) live on the inner "content layer" div.
+    const contentLayer = (container.firstChild as HTMLElement).firstChild as HTMLElement;
+    expect(contentLayer.style.fontFamily).toContain('DM Sans');
   });
 });
