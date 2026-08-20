@@ -3,8 +3,10 @@
 
 
 
-**Jira:** XEN-___ &nbsp;·&nbsp; **GitHub Issue:** Closes #___
-<!-- Fill in whichever apply. Branch name should also contain the Jira key, e.g. feature/XEN-123-short-name -->
+**Jira:** GARDEN-___ &nbsp;·&nbsp; **GitHub Issue:** Closes #___
+<!-- REQUIRED for Jira to link this PR to the ticket. Use the EXACT UPPERCASE key (GARDEN-123, SHIELD-4).
+     The key must ALSO appear in the branch name — e.g. claude/GARDEN-123-short-name — or Jira
+     will not create the link. Lowercase (wall-21) does NOT match and silently fails. -->
 
 ## Type of change
 - [ ] Bug fix

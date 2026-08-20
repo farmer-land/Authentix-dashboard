@@ -11,7 +11,8 @@
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(gh pr merge:*)"
     ],
     "additionalDirectories": [
       "/Users/mayankpriy/Documents/GitHub/Authentix-dashboard",
@@ -64,7 +65,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "feature-builder|bug-fixer|reviewer|docs-sync|docs-writer",
+        "matcher": "bug-fixer|code-health|docs-sync|docs-writer|feature-builder|github-ops|reviewer|vercel-ops",
         "hooks": [
           {
             "type": "command",
