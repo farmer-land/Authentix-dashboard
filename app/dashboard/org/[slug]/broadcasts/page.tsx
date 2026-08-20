@@ -736,8 +736,10 @@ function CampaignWizard({
                   const isSelected = selectedTemplateId === t.id;
                   const [from, to] = tplGradient(t.id);
                   return (
-                    <div
+                    <button
                       key={t.id}
+                      type="button"
+                      aria-pressed={isSelected}
                       onClick={() => {
                         setSelectedTemplateId(t.id);
                         setW(prev => ({
@@ -747,7 +749,8 @@ function CampaignWizard({
                         }));
                       }}
                       className={cn(
-                        "rounded-xl border-2 cursor-pointer transition-all overflow-hidden select-none group",
+                        "w-full text-left rounded-xl border-2 cursor-pointer transition-all overflow-hidden select-none group",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                         isSelected
                           ? "border-[#3ECF8E] shadow-md shadow-[#3ECF8E]/15"
                           : "border-border hover:border-[#3ECF8E]/50 hover:shadow-sm",
@@ -767,14 +770,16 @@ function CampaignWizard({
                       <div className="px-2.5 py-2 border-t bg-card">
                         <p className="text-[10px] font-semibold truncate leading-tight">{t.name}</p>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
 
                 {/* Design from scratch */}
-                <div
+                <button
+                  type="button"
+                  aria-label="Design from scratch"
                   onClick={() => { setSelectedTemplateId(null); set("html_body", ""); setShowEditor(true); }}
-                  className="rounded-xl border-2 border-dashed border-border hover:border-[#3ECF8E]/50 hover:bg-muted/20 cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5 select-none"
+                  className="w-full rounded-xl border-2 border-dashed border-border hover:border-[#3ECF8E]/50 hover:bg-muted/20 cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   style={{ minHeight: 96 }}
                 >
                   <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
@@ -783,7 +788,7 @@ function CampaignWizard({
                   <p className="text-[10px] font-medium text-muted-foreground text-center leading-tight">
                     Design<br />from scratch
                   </p>
-                </div>
+                </button>
               </div>
 
               {filteredTemplates.length === 0 && savedTemplates.length > 0 && (
@@ -1206,10 +1211,14 @@ function CampaignWizard({
                     const isSelected = selectedContactIds.has(c.id);
                     const customKeys = Object.keys(c.custom_properties ?? {});
                     return (
-                      <div
+                      <button
                         key={c.id}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={isSelected}
                         className={cn(
-                          "flex items-center gap-3 px-3 py-2.5 border-b last:border-0 cursor-pointer transition-colors",
+                          "w-full text-left flex items-center gap-3 px-3 py-2.5 border-b last:border-0 cursor-pointer transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                           isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30",
                         )}
                         onClick={() => {
@@ -1221,7 +1230,7 @@ function CampaignWizard({
                           });
                         }}
                       >
-                        <div className={cn(
+                        <div aria-hidden="true" className={cn(
                           "w-4 h-4 rounded border-2 shrink-0",
                           isSelected ? "border-primary bg-primary" : "border-muted-foreground/40",
                         )}>
@@ -1237,7 +1246,7 @@ function CampaignWizard({
                             </p>
                           )}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

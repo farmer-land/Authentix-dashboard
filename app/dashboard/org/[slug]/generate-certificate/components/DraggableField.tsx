@@ -731,9 +731,10 @@ export function DraggableField({
             <div
               key={id}
               className="absolute group/handle"
-              // data-resize-handle is what InfiniteCanvas's pan guard already looks
-              // for (`target.closest('[data-resize-handle]')`) — the attribute was
-              // missing, so the guard never matched.
+              // Stable selector for tests and for InfiniteCanvas's pan guard.
+              // Additive, not a bugfix: the guard already skipped these handles
+              // via `closest('[data-field]')`, since InfiniteCanvas wraps every
+              // DraggableField in a [data-field] div.
               data-resize-handle={id}
               style={{
                 width: 24,
