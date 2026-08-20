@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { DraggableField } from '@/app/dashboard/org/[slug]/generate-certificate/components/DraggableField';
 import type { CertificateField } from '@/lib/types/certificate';
 
@@ -74,12 +74,14 @@ function renderField(
     onResize?: ReturnType<typeof vi.fn>;
     onSelect?: ReturnType<typeof vi.fn>;
     onDragStart?: ReturnType<typeof vi.fn>;
+    onRotate?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
   const onDrag = props.onDrag ?? vi.fn();
   const onResize = props.onResize ?? vi.fn();
   const onSelect = props.onSelect ?? vi.fn();
   const onDragStart = props.onDragStart ?? vi.fn();
+  const onRotate = props.onRotate ?? vi.fn();
 
   const field = makeField(overrides);
   const scale = props.scale ?? 1;
@@ -93,13 +95,14 @@ function renderField(
       onDrag={onDrag}
       onDragStart={onDragStart}
       onResize={onResize}
+      onRotate={onRotate}
       onSelect={onSelect}
     />,
   );
 
   // The root div is the draggable element
   const el = container.firstChild as HTMLElement;
-  return { el, onDrag, onResize, onSelect, onDragStart, field };
+  return { el, onDrag, onResize, onSelect, onDragStart, onRotate, field };
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -114,6 +117,21 @@ function mousemove(x: number, y: number) {
 
 function mouseup() {
   fireEvent.mouseUp(document);
+}
+
+/** Presses a key on the field wrapper (React onKeyDown). */
+function press(el: HTMLElement, key: string, init: Partial<KeyboardEventInit> = {}) {
+  fireEvent.keyDown(el, { key, bubbles: true, ...init });
+}
+
+// focus()/blur() are real DOM calls (not fireEvent), so React state updates they
+// trigger need an explicit act() wrapper to flush before the next assertion.
+function focusField(el: HTMLElement) {
+  act(() => { el.focus(); });
+}
+
+function blurField(el: HTMLElement) {
+  act(() => { el.blur(); });
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -190,7 +208,7 @@ describe('DraggableField — drag delta calculation', () => {
 describe('DraggableField — resize', () => {
   it('calls onResize with new width/height during resize', () => {
     const { el, onResize } = renderField({}, { isSelected: true });
-    const resizeHandle = el.querySelector('[class*="cursor-nwse-resize"]') as HTMLElement;
+    const resizeHandle = el.querySelector('[data-resize-handle="se"]') as HTMLElement;
     expect(resizeHandle).not.toBeNull();
 
     // Field is 200×30, scale=1, so scaled dims = 200×30
@@ -199,14 +217,15 @@ describe('DraggableField — resize', () => {
     mousemove(50, 20);
     mouseup();
 
-    // Expected: (newWidth, newHeight, initialCanvasWidth, initialFontSize)
-    // = (200 + 50, 30 + 20, 200, 16) = (250, 50, 200, 16)
-    expect(onResize).toHaveBeenCalledWith(250, 50, 200, 16);
+    // Expected: (newWidth, newHeight, initialCanvasWidth, initialFontSize,
+    //            newCanvasX, newCanvasY) — the 'se' handle never shifts x/y,
+    // = (200 + 50, 30 + 20, 200, 16, undefined, undefined)
+    expect(onResize).toHaveBeenCalledWith(250, 50, 200, 16, undefined, undefined);
   });
 
   it('does not resize below minimum dimensions', () => {
     const { el, onResize } = renderField({}, { isSelected: true });
-    const resizeHandle = el.querySelector('[class*="cursor-nwse-resize"]') as HTMLElement;
+    const resizeHandle = el.querySelector('[data-resize-handle="se"]') as HTMLElement;
 
     fireEvent.mouseDown(resizeHandle, { clientX: 0, clientY: 0, bubbles: true });
     // Move so far left that new width would be negative
@@ -276,10 +295,250 @@ describe('DraggableField — rendering', () => {
 
   it('shows resize handle only when selected', () => {
     const { el: unselected } = renderField({}, { isSelected: false });
-    expect(unselected.querySelector('[class*="cursor-nwse-resize"]')).toBeNull();
+    expect(unselected.querySelector('[data-resize-handle]')).toBeNull();
 
     const { el: selected } = renderField({}, { isSelected: true });
-    expect(selected.querySelector('[class*="cursor-nwse-resize"]')).not.toBeNull();
+    expect(selected.querySelector('[data-resize-handle]')).not.toBeNull();
+  });
+});
+
+// ── Keyboard operability (GARDEN-4 / WCAG 2.1.1) ──────────────────────────────
+
+describe('DraggableField — keyboard focus and selection', () => {
+  it('exposes the field box as a focusable group with an accessible name', () => {
+    const { el } = renderField({ label: 'Full Name', type: 'name' });
+    expect(el.getAttribute('tabindex')).toBe('0');
+    expect(el.getAttribute('role')).toBe('group');
+    expect(el.getAttribute('aria-label')).toContain('Full Name');
+    expect(el.getAttribute('aria-label')).toContain('recipient name');
+  });
+
+  it('marks a locked field as locked in its accessible name', () => {
+    const { el } = renderField({ locked: true });
+    expect(el.getAttribute('aria-label')).toContain('locked');
+  });
+
+  it('selects the field when it receives keyboard focus', () => {
+    const { el, onSelect } = renderField();
+    focusField(el);
+    expect(el).toHaveFocus();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not double-select when focus follows a mousedown', () => {
+    // The browser focuses a tabbable element right after mousedown; without the
+    // pointer guard this would fire onSelect twice and clobber shift+click
+    // multi-select with a modifier-less selection.
+    const { el, onSelect } = renderField();
+    mousedown(el, 0, 0);
+    focusField(el);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces the active keyboard mode in a live region while focused', () => {
+    const { el } = renderField();
+    const live = el.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(live.textContent).toBe('');
+    focusField(el);
+    expect(live.textContent).toContain('Move mode');
+    press(el, 's');
+    expect(live.textContent).toContain('Resize mode');
+  });
+});
+
+describe('DraggableField — keyboard nudge (move mode)', () => {
+  it('moves 1px per arrow press', () => {
+    const { el, onDrag } = renderField();
+    focusField(el);
+    press(el, 'ArrowRight');
+    expect(onDrag).toHaveBeenCalledWith(1, 0);
+    press(el, 'ArrowLeft');
+    expect(onDrag).toHaveBeenLastCalledWith(-1, 0);
+    press(el, 'ArrowDown');
+    expect(onDrag).toHaveBeenLastCalledWith(0, 1);
+    press(el, 'ArrowUp');
+    expect(onDrag).toHaveBeenLastCalledWith(0, -1);
+  });
+
+  it('moves 10px per arrow press with Shift', () => {
+    const { el, onDrag } = renderField();
+    focusField(el);
+    press(el, 'ArrowRight', { shiftKey: true });
+    expect(onDrag).toHaveBeenCalledWith(10, 0);
+  });
+
+  it('scales the nudge delta to screen pixels (onDrag contract)', () => {
+    // onDrag deltas are screen px; InfiniteCanvas divides by scale to get
+    // canvas units, so a 1-unit nudge at scale 2 must send 2 screen px.
+    const { el, onDrag } = renderField({}, { scale: 2 });
+    focusField(el);
+    press(el, 'ArrowRight');
+    expect(onDrag).toHaveBeenCalledWith(2, 0);
+  });
+
+  it('ignores arrow keys held with Cmd/Ctrl/Alt so global shortcuts still work', () => {
+    const { el, onDrag } = renderField();
+    focusField(el);
+    press(el, 'ArrowRight', { metaKey: true });
+    press(el, 'ArrowRight', { ctrlKey: true });
+    press(el, 'ArrowRight', { altKey: true });
+    expect(onDrag).not.toHaveBeenCalled();
+  });
+
+  it('does not resize or rotate while in the default move mode', () => {
+    const { el, onResize, onRotate } = renderField();
+    focusField(el);
+    press(el, 'ArrowRight');
+    expect(onResize).not.toHaveBeenCalled();
+    expect(onRotate).not.toHaveBeenCalled();
+  });
+});
+
+describe('DraggableField — keyboard resize mode (S)', () => {
+  it('resizes by 1 unit per arrow press after pressing S', () => {
+    const { el, onResize, onDrag } = renderField();
+    focusField(el);
+    press(el, 's');
+    press(el, 'ArrowRight');
+    // (newWidth, newHeight, initialCanvasWidth, initialFontSize) in screen px
+    expect(onResize).toHaveBeenCalledWith(201, 30, 200, 16);
+    expect(onDrag).not.toHaveBeenCalled();
+  });
+
+  it('resizes height with up/down arrows and 10 units with Shift', () => {
+    const { el, onResize } = renderField();
+    focusField(el);
+    press(el, 's');
+    press(el, 'ArrowDown', { shiftKey: true });
+    expect(onResize).toHaveBeenCalledWith(200, 40, 200, 16);
+  });
+
+  it('converts to screen pixels using the current scale', () => {
+    const { el, onResize } = renderField({}, { scale: 2 });
+    focusField(el);
+    press(el, 's');
+    press(el, 'ArrowRight');
+    expect(onResize).toHaveBeenCalledWith(402, 60, 200, 16);
+  });
+
+  it('refuses to shrink a field below the minimum size', () => {
+    const { el, onResize } = renderField({ width: 8, height: 8 });
+    focusField(el);
+    press(el, 's');
+    press(el, 'ArrowLeft');
+    press(el, 'ArrowUp');
+    expect(onResize).not.toHaveBeenCalled();
+  });
+
+  it('S toggles back to move mode', () => {
+    const { el, onResize, onDrag } = renderField();
+    focusField(el);
+    press(el, 's');
+    press(el, 's');
+    press(el, 'ArrowRight');
+    expect(onResize).not.toHaveBeenCalled();
+    expect(onDrag).toHaveBeenCalledWith(1, 0);
+  });
+
+  it('Escape returns to move mode', () => {
+    const { el, onResize, onDrag } = renderField();
+    focusField(el);
+    press(el, 's');
+    press(el, 'Escape');
+    press(el, 'ArrowRight');
+    expect(onResize).not.toHaveBeenCalled();
+    expect(onDrag).toHaveBeenCalledWith(1, 0);
+  });
+
+  it('blurring the field resets the mode back to move', () => {
+    const { el, onResize, onDrag } = renderField();
+    focusField(el);
+    press(el, 's');
+    blurField(el);
+    focusField(el);
+    press(el, 'ArrowRight');
+    expect(onResize).not.toHaveBeenCalled();
+    expect(onDrag).toHaveBeenCalledWith(1, 0);
+  });
+});
+
+describe('DraggableField — keyboard rotate mode (R)', () => {
+  it('rotates 1 degree per arrow press after pressing R', () => {
+    const { el, onRotate, onDrag } = renderField({ rotation: 0 });
+    focusField(el);
+    press(el, 'r');
+    press(el, 'ArrowRight');
+    expect(onRotate).toHaveBeenCalledWith(1);
+    expect(onDrag).not.toHaveBeenCalled();
+  });
+
+  it('rotates 15 degrees with Shift', () => {
+    const { el, onRotate } = renderField({ rotation: 30 });
+    focusField(el);
+    press(el, 'r');
+    press(el, 'ArrowRight', { shiftKey: true });
+    expect(onRotate).toHaveBeenCalledWith(45);
+  });
+
+  it('wraps below zero into the 0–359 range', () => {
+    const { el, onRotate } = renderField({ rotation: 0 });
+    focusField(el);
+    press(el, 'r');
+    press(el, 'ArrowLeft');
+    expect(onRotate).toHaveBeenCalledWith(359);
+  });
+
+  it('wraps past 360 back into range', () => {
+    const { el, onRotate } = renderField({ rotation: 359 });
+    focusField(el);
+    press(el, 'r');
+    press(el, 'ArrowRight', { shiftKey: true });
+    expect(onRotate).toHaveBeenCalledWith(14);
+  });
+
+  it('R toggles back to move mode', () => {
+    const { el, onRotate, onDrag } = renderField();
+    focusField(el);
+    press(el, 'r');
+    press(el, 'r');
+    press(el, 'ArrowRight');
+    expect(onRotate).not.toHaveBeenCalled();
+    expect(onDrag).toHaveBeenCalledWith(1, 0);
+  });
+});
+
+describe('DraggableField — locked field keyboard gating', () => {
+  it('is still focusable and selectable when locked', () => {
+    const { el, onSelect } = renderField({ locked: true });
+    focusField(el);
+    expect(el).toHaveFocus();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot be nudged with the arrow keys', () => {
+    const { el, onDrag } = renderField({ locked: true });
+    focusField(el);
+    press(el, 'ArrowRight');
+    press(el, 'ArrowDown', { shiftKey: true });
+    expect(onDrag).not.toHaveBeenCalled();
+  });
+
+  it('cannot enter resize mode or be resized', () => {
+    const { el, onResize } = renderField({ locked: true });
+    focusField(el);
+    press(el, 's');
+    press(el, 'ArrowRight');
+    expect(onResize).not.toHaveBeenCalled();
+    expect(el.getAttribute('data-keyboard-mode')).toBe('move');
+  });
+
+  it('cannot enter rotate mode or be rotated', () => {
+    const { el, onRotate } = renderField({ locked: true });
+    focusField(el);
+    press(el, 'r');
+    press(el, 'ArrowRight');
+    expect(onRotate).not.toHaveBeenCalled();
+    expect(el.getAttribute('data-keyboard-mode')).toBe('move');
   });
 });
 
@@ -297,7 +556,9 @@ describe('DraggableField — font default', () => {
         onSelect={vi.fn()}
       />,
     );
-    const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.style.fontFamily).toContain('DM Sans');
+    // fontFamily lives on the inner content layer, not the outer transform wrapper
+    const content = (container.firstChild as HTMLElement)
+      .querySelector('[data-field-content]') as HTMLElement;
+    expect(content.style.fontFamily).toContain('DM Sans');
   });
 });

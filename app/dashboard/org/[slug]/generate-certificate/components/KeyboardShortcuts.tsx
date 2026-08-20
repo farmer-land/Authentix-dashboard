@@ -21,6 +21,20 @@ const SECTIONS = [
     ],
   },
   {
+    // GARDEN-4: keyboard-only path for select / move / resize / rotate.
+    // Arrow keys change meaning with the active mode (S / R / M or Esc).
+    title: 'Field — keyboard',
+    shortcuts: [
+      { keys: ['Tab'], label: 'Focus next field (selects it)' },
+      { keys: ['⇧', 'Tab'], label: 'Focus previous field' },
+      { keys: ['↑', '↓', '←', '→'], label: 'Move field by 1px' },
+      { keys: ['⇧', '↑↓←→'], label: 'Move field by 10px' },
+      { keys: ['S'], label: 'Resize mode (arrows resize)' },
+      { keys: ['R'], label: 'Rotate mode (arrows rotate 1° / ⇧ 15°)' },
+      { keys: ['M', 'Esc'], label: 'Back to move mode' },
+    ],
+  },
+  {
     title: 'Canvas',
     shortcuts: [
       { keys: ['Space', '+ drag'], label: 'Pan canvas' },
