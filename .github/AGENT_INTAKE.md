@@ -157,6 +157,20 @@ Both are excluded from the intake query. Neither is ever applied by an agent to 
 
 ## 6. Definition of Done — the gates, and who owns each
 
+> ## ⛔ OVERRIDE — 2026-08-20: NO AGENT MOVES ANY TICKET TO DONE
+>
+> Instructed directly by Heisenberg: *"Don't mark the tickets done until my permission for all the Jira tickets as well."*
+>
+> **This supersedes Gate 2 below.** QA still reproduces, still verifies, still records the verdict and applies `qa-passed`/`qa-failed` — but **QA no longer transitions anything to Done.** Nobody does except Heisenberg, by explicit permission, per ticket, every time.
+>
+> This applies to **every** Jira ticket in **every** project — bug, gate ticket, duplicate, obsolete, or one whose PR already merged. **A merged PR is not permission**; merging and closing are two separate decisions he makes separately. Tidy-up closures count too: comment and ask rather than closing.
+>
+> **Why:** on WALL-46 three agents in succession declared a production defect fixed when it was not. Each had a green suite and plausible reasoning; the bug shipped anyway, and 72 certificates went out with wrong dates, 3 to real recipients. A ticket at Done is the signal he reads as "I no longer need to look at this." An agent that is wrong *and* closes the ticket removes the last chance to catch it. He is choosing to be the final check because agent confidence has repeatedly not tracked agent correctness.
+>
+> Work stops at **In Review**. Say it is awaiting his sign-off. Never call it done.
+
+
+
 Three roles, three gates. **Nobody clears a gate that is not theirs**, and nobody skips one because the change looks small. Every incident this week reached production through a gate somebody waved past.
 
 ### Gate 1 — the DEVELOPER, before opening a PR
