@@ -490,8 +490,21 @@ function TemplateCard({
         "hover:shadow-xl hover:-translate-y-0.75",
         isDraft ? "border-dashed border-amber-500/30" : "border-border/60 hover:border-primary/20",
       )}
-      onClick={onEdit}
     >
+      {/*
+        Keyboard-operable primary target (WCAG 2.1.1 / 4.1.2). The card holds nested
+        action buttons, so it can't itself be a <button> (invalid nesting + hydration
+        break). Instead a transparent full-card button is stretched over it: same
+        pointer behaviour as the old div onClick, plus Tab/Enter/Space and a real
+        button role. The action row sits above it (z-20) so its buttons still win.
+      */}
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit template: ${template.name}`}
+        className="absolute inset-0 z-10 rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      />
+
       {/* Preview — real rendered email (blank placeholder when no content) */}
       <div className="relative h-52 shrink-0 overflow-hidden border-b border-border/50">
         <TemplatePreview body={template.body} />
@@ -528,7 +541,7 @@ function TemplateCard({
         <div className="flex-1" />
 
         {/* Action row — inline buttons, matching the certificate template (step 1) cards */}
-        <div className="flex items-center gap-1 pt-2.5" onClick={e => e.stopPropagation()}>
+        <div className="relative z-20 flex items-center gap-1 pt-2.5" onClick={e => e.stopPropagation()}>
           <button
             onClick={onSendCampaign}
             title="Send as campaign"
