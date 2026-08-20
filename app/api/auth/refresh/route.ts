@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/server";
 import { RefreshResponseSchema } from "@/lib/api/schemas/auth";
 
-import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isConnectionRefused } from "@/lib/config/env";
+import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isPreSendConnectionError } from "@/lib/config/env";
 
 export async function POST() {
   try {
@@ -32,8 +32,12 @@ export async function POST() {
     try {
       response = await fetch(`${BACKEND_PRIMARY_URL}/auth/refresh`, fetchOpts);
     } catch (fetchError) {
-      if (isConnectionRefused(fetchError) && BACKEND_FALLBACK_URL) {
-        console.info("[Refresh] Local backend unavailable, switching to Vercel backend");
+      // Pre-send gate: never re-send a refresh that may already have been received
+      // and rotated the token.
+      if (isPreSendConnectionError(fetchError) && BACKEND_FALLBACK_URL) {
+        console.warn(
+          `[Refresh] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}/auth/refresh`
+        );
         response = await fetch(`${BACKEND_FALLBACK_URL}/auth/refresh`, fetchOpts);
       } else {
         throw fetchError;

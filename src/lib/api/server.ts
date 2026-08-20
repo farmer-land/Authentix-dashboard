@@ -11,7 +11,7 @@ import { cookies, headers } from "next/headers";
  * Backend API URL - Server-only, never exposed to client
  * BACKEND_API_URL must be set in environment variables for production
  */
-import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isConnectionRefused } from "@/lib/config/env";
+import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isPreSendConnectionError } from "@/lib/config/env";
 
 const BACKEND_URL = BACKEND_PRIMARY_URL;
 
@@ -204,8 +204,13 @@ export async function serverApiRequest<T>(
       cache: skipAuth ? "default" : "no-store",
     });
   } catch (error) {
-    // If local backend is not running, automatically fall back to Vercel
-    if (isConnectionRefused(error) && BACKEND_FALLBACK_URL) {
+    // Local backend not running — fall back to the deployed backend (dev only).
+    // Gated on a pre-send error so a request that may already have been received
+    // is never re-sent; see isPreSendConnectionError.
+    if (isPreSendConnectionError(error) && BACKEND_FALLBACK_URL) {
+      console.warn(
+        `[ServerApi] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}${endpoint}`
+      );
       try {
         response = await fetch(`${BACKEND_FALLBACK_URL}${endpoint}`, {
           ...fetchOptions,
@@ -285,8 +290,12 @@ export async function backendAuthRequest<T>(
   try {
     response = await fetch(primaryUrl, { ...options, headers: fetchHeaders });
   } catch (error) {
-    // If local backend is not running, automatically fall back to Vercel
-    if (isConnectionRefused(error) && BACKEND_FALLBACK_URL) {
+    // Local backend not running — fall back to the deployed backend (dev only).
+    // Pre-send gate: never re-send a request that may already have been received.
+    if (isPreSendConnectionError(error) && BACKEND_FALLBACK_URL) {
+      console.warn(
+        `[BackendAuth] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}${endpoint}`
+      );
       try {
         response = await fetch(`${BACKEND_FALLBACK_URL}${endpoint}`, { ...options, headers: fetchHeaders });
       } catch (fallbackError) {
