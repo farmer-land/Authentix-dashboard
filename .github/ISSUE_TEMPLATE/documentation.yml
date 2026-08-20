@@ -1,0 +1,52 @@
+name: Documentation
+description: Docs are missing, stale, or wrong
+labels: [documentation, team-docs]
+body:
+  - type: dropdown
+    id: doc
+    attributes:
+      label: Which doc
+      options:
+        - architecture-design/FRONTEND_DOCUMENTATION.md
+        - FILE_INDEX.md
+        - AGENTS.md
+        - SYSTEM_OVERVIEW.md
+        - CODING_STANDARDS.md
+        - README.md
+        - Confluence page
+        - New doc needed
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of gap
+      options:
+        - Missing entirely
+        - Stale — contradicts current code
+        - Incomplete — missing edge cases or params
+        - Unclear / hard to follow
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What's wrong or missing, and where in the source the correct behaviour actually lives.
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Found by
+      description: Which routine or person flagged this (e.g. "Samwell — daily docs", "manual")
+
+  - type: input
+    id: jira
+    attributes:
+      label: Jira ticket key (if known)
+      description: e.g. XEN-123 — leave blank if this issue was filed first and Jira not yet created.
