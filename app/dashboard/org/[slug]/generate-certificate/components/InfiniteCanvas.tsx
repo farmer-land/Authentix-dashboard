@@ -554,11 +554,19 @@ export function InfiniteCanvas({
     };
   }, [scale, onScaleChange, fitToScreen, selectedFieldId, fields, onFieldDelete, onFieldDuplicate, onUndo, onRedo, multiSelectedIds, onFieldsDelete, onSaveNow]);
 
-  // Clear alignment guides when any drag ends
+  // Clear alignment guides when any drag ends. Keyup covers keyboard nudges
+  // (arrow keys go through the same handleFieldDrag path, which sets guides) —
+  // without it the guides from the last nudge would linger indefinitely.
   useEffect(() => {
-    const clear = () => setGuides([]);
+    // Functional update returns the same reference when already empty so React
+    // bails out — this listener fires on every keystroke anywhere in the document.
+    const clear = () => setGuides(g => (g.length === 0 ? g : []));
     document.addEventListener('mouseup', clear);
-    return () => document.removeEventListener('mouseup', clear);
+    document.addEventListener('keyup', clear);
+    return () => {
+      document.removeEventListener('mouseup', clear);
+      document.removeEventListener('keyup', clear);
+    };
   }, []);
 
   // ── Mouse panning ─────────────────────────────────────────────────────────
@@ -1036,7 +1044,9 @@ export function InfiniteCanvas({
                   previewValue={livePreviewValues?.[field.id]}
                   onSelect={e => {
                     e.stopPropagation();
-                    if (e.shiftKey) {
+                    // Keyboard (Tab) selection arrives as a FocusEvent, which has no
+                    // modifier state — feature-check before reading shiftKey.
+                    if ('shiftKey' in e && e.shiftKey) {
                       setMultiSelectedIds(prev => {
                         const next = new Set(prev);
                         if (next.has(field.id)) next.delete(field.id);

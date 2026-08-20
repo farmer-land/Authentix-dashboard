@@ -123,6 +123,7 @@ Primary flow:
 - Never bypass `/api/proxy/*` and call backend from browser using private URLs.
 - Never loosen proxy path validation or allowlist without explicit review.
 - Never return internal backend/raw storage identifiers to UI unless required.
+- Never make a canvas/editor interaction pointer-only. Certificate design fields must stay keyboard-operable (WCAG 2.1.1): focusable box, Tab selection, arrow nudge, `S` resize mode, `R` rotate mode, `M`/`Esc` back to move. Keep `field.locked` gating identical for pointer and keyboard, and always pass Cmd/Ctrl/Alt combos through to `InfiniteCanvas`'s global shortcut handler.
 
 ## Anti-Patterns To Avoid
 
@@ -138,6 +139,8 @@ Primary flow:
 - Do NOT use `vi.useFakeTimers()` in ExportSection overlay tests — progress `setInterval` + fake timers deadlock `userEvent.click()`. Use `vi.spyOn(global, 'setInterval')` instead.
 - Do NOT call `vi.spyOn(document.body, 'appendChild')` before `render()` — breaks React's DOM root creation.
 - `autoMapForTemplate` must remain exported from `ExportSection.tsx` (needed by `__tests__/lib/automap.test.ts`).
+- Wrap real `el.focus()` / `el.blur()` calls in `act()` — unlike `fireEvent`, they are not act-wrapped, so React state they trigger won't have flushed by the next assertion (see `focusField`/`blurField` in `__tests__/components/DraggableField.test.tsx`).
+- Select canvas field handles by `[data-resize-handle]` / `[data-rotate-handle]`, not by cursor class names (handle cursors are inline styles).
 - E2E tests require `npx playwright install` before first run.
 
 ## Documentation Synchronization Rules

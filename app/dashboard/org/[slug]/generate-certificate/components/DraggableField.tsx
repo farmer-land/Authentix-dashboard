@@ -152,6 +152,58 @@ function QRCodePreview({
 
 type ResizeHandle = 'se' | 'sw' | 'ne' | 'nw' | 'n' | 's' | 'e' | 'w';
 
+/**
+ * Selection can now originate from a pointer (mousedown/click) *or* from the
+ * keyboard (Tab focus). Callers that care about modifier keys must feature-check
+ * (`'shiftKey' in e`) because FocusEvent carries no modifier state.
+ */
+export type FieldSelectEvent = React.MouseEvent | React.KeyboardEvent | React.FocusEvent;
+
+/**
+ * Keyboard interaction mode for the focused field.
+ *
+ * ── Keybinding decision (GARDEN-4 / WCAG 2.1.1) ────────────────────────────
+ * The canvas already owns a large set of global shortcuts in InfiniteCanvas
+ * (Delete/Backspace, Cmd-C/V/D/Z/Y/S, Cmd +/-/0, Space-to-pan, `?`). Arrow keys
+ * were the only unclaimed keys, and one arrow-key meaning cannot cover move +
+ * resize + rotate at once. Rather than stack modifiers onto arrows — Alt+Arrow
+ * and Cmd+Arrow are reserved by browsers/OSes and are unreliable — we use an
+ * explicit, announced *mode* toggle (the same "keyboard mode" idea the
+ * EmailBlockBuilder uses for dnd-kit keyboard dragging):
+ *
+ *   Arrow            → move (nudge) 1 unit          Shift+Arrow → 10 units
+ *   S                → toggle Size (resize) mode; arrows then resize from the
+ *                      top-left anchor, 1 unit / Shift 10 units
+ *   R                → toggle Rotate mode; arrows then rotate 1° / Shift 15°
+ *   M or Escape      → back to Move mode
+ *
+ * Bare `s`/`r`/`m` are unused by the canvas (its `s` binding requires Cmd/Ctrl),
+ * and every modifier combo is deliberately passed through untouched so the
+ * existing global shortcuts keep working while a field has focus.
+ */
+export type KeyboardMode = 'move' | 'resize' | 'rotate';
+
+/** Nudge/resize steps in canvas units; rotate steps in degrees. */
+const STEP_SMALL = 1;
+const STEP_LARGE = 10;
+const ROTATE_STEP_SMALL = 1;
+const ROTATE_STEP_LARGE = 15;
+/** Matches InfiniteCanvas's SNAP_SIZE floor in handleFieldResize. */
+const MIN_KEYBOARD_SIZE = 8;
+
+const ARROW_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+
+/** Human-readable field type used in the accessible name. */
+const FIELD_TYPE_ARIA_LABELS: Record<string, string> = {
+  name: 'recipient name',
+  course: 'course',
+  start_date: 'start date',
+  end_date: 'end date',
+  custom_text: 'custom text',
+  qr_code: 'QR code',
+  image: 'image',
+};
+
 interface DraggableFieldProps {
   field: CertificateField;
   scale: number;
@@ -165,7 +217,7 @@ interface DraggableFieldProps {
    */
   onResize: (width: number, height: number, initialCanvasWidth: number, initialFontSize: number, newCanvasX?: number, newCanvasY?: number) => void;
   onRotate?: (rotation: number) => void;
-  onSelect: (e: React.MouseEvent) => void;
+  onSelect: (e: FieldSelectEvent) => void;
   /** Live value from row 1 of imported data — overrides sampleValue when present */
   previewValue?: string;
 }
@@ -186,6 +238,13 @@ export function DraggableField({
   const [isDragging, setIsDragging] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<ResizeHandle | null>(null);
   const [isRotating, setIsRotating] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  // Tracks whether the *current* focus came from the keyboard (Tab) rather than a
+  // pointer (mousedown/click). Mouse clicks also focus the element since it's
+  // tabIndex=0, but the mode badge/announcement is only useful for keyboard users —
+  // showing it on every click would be noise for mouse-only users.
+  const [isKeyboardFocus, setIsKeyboardFocus] = useState(false);
+  const [keyboardMode, setKeyboardMode] = useState<KeyboardMode>('move');
 
   // Refs for coordinates — synchronous updates prevent stale reads between mousemove events.
   const dragStartRef = useRef({ x: 0, y: 0 });
@@ -290,13 +349,119 @@ export function DraggableField({
   // Intentionally omits onDrag/onResize/onRotate — latest versions are accessed via refs above.
   }, [isDragging, resizeHandle, isRotating, scale]);
 
+  // Set on mousedown so the focus event that the browser fires immediately after
+  // doesn't re-run onSelect. Without this, shift+click multi-select would be
+  // undone by the focus-driven (modifier-less) selection that follows it.
+  const pointerFocusRef = useRef(false);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    pointerFocusRef.current = true;
     onSelect(e);
     if (field.locked) return;
     onDragStart?.();
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     setIsDragging(true);
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLDivElement>) => {
+    setIsFocused(true);
+    if (pointerFocusRef.current) {
+      pointerFocusRef.current = false;
+      setIsKeyboardFocus(false);
+      return;
+    }
+    setIsKeyboardFocus(true);
+    // Keyboard (Tab) focus selects the field the same way a click does.
+    onSelect(e);
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    setIsKeyboardFocus(false);
+    pointerFocusRef.current = false;
+    setKeyboardMode('move');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Pass every modifier combo straight through to InfiniteCanvas's global
+    // shortcut handler (undo/redo/copy/paste/duplicate/zoom/save) — and to the
+    // browser/OS, which reserves Alt+Arrow and Cmd+Arrow.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    // Escape leaves resize/rotate mode. When already in move mode it is left
+    // alone so other Escape handlers (overlays, menus) still receive it.
+    if (e.key === 'Escape') {
+      if (keyboardMode !== 'move') {
+        e.preventDefault();
+        e.stopPropagation();
+        setKeyboardMode('move');
+      }
+      return;
+    }
+
+    // Locked fields mirror the mouse behaviour: still selectable/focusable, but
+    // not movable, resizable or rotatable — so no mode switching either.
+    if (field.locked) return;
+
+    if (e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      e.stopPropagation();
+      setKeyboardMode(m => (m === 'resize' ? 'move' : 'resize'));
+      return;
+    }
+    if (e.key === 'r' || e.key === 'R') {
+      // Don't enter (or announce) rotate mode when no onRotate handler is wired —
+      // e.g. CertificateCanvas's legacy consumer. Otherwise arrow keys would
+      // silently no-op after the mode badge/announcement told a screen-reader
+      // user rotation was available.
+      if (!onRotate) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setKeyboardMode(m => (m === 'rotate' ? 'move' : 'rotate'));
+      return;
+    }
+    if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      e.stopPropagation();
+      setKeyboardMode('move');
+      return;
+    }
+
+    if (!ARROW_KEYS.has(e.key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (keyboardMode === 'rotate') {
+      if (!onRotate) return;
+      const step = e.shiftKey ? ROTATE_STEP_LARGE : ROTATE_STEP_SMALL;
+      const direction = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : -1;
+      let next = ((field.rotation ?? 0) + direction * step) % 360;
+      if (next < 0) next += 360;
+      onRotate(next);
+      return;
+    }
+
+    const step = e.shiftKey ? STEP_LARGE : STEP_SMALL;
+
+    if (keyboardMode === 'resize') {
+      // Resize from the top-left anchor (same geometry as the 'se' mouse handle),
+      // so x/y stay put and no newCanvasX/newCanvasY is sent.
+      const dw = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0;
+      const dh = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0;
+      const nextWidth = field.width + dw;
+      const nextHeight = field.height + dh;
+      if (nextWidth < MIN_KEYBOARD_SIZE || nextHeight < MIN_KEYBOARD_SIZE) return;
+      // onResize takes screen pixels; InfiniteCanvas divides by scale again.
+      onResize(nextWidth * scale, nextHeight * scale, field.width, field.fontSize);
+      return;
+    }
+
+    // Move mode — onDrag deltas are screen pixels, same as the mouse path.
+    const delta = step * scale;
+    const dx = e.key === 'ArrowRight' ? delta : e.key === 'ArrowLeft' ? -delta : 0;
+    const dy = e.key === 'ArrowDown' ? delta : e.key === 'ArrowUp' ? -delta : 0;
+    onDrag(dx, dy);
   };
 
   const handleResizeStart = (e: React.MouseEvent, handle: ResizeHandle) => {
@@ -374,6 +539,15 @@ export function DraggableField({
     ] : []),
   ];
 
+  const typeAriaLabel = FIELD_TYPE_ARIA_LABELS[field.type] ?? field.type;
+  const ariaLabel = `${field.label} — ${typeAriaLabel} field${field.locked ? ', locked' : ''}`;
+  const keyboardHelpId = `field-kbd-help-${field.id}`;
+  const KEYBOARD_MODE_LABELS: Record<KeyboardMode, string> = {
+    move: 'Move mode — arrows nudge, S resize, R rotate',
+    resize: 'Resize mode — arrows resize, Esc to exit',
+    rotate: 'Rotate mode — arrows rotate, Esc to exit',
+  };
+
   const isTextField = field.type !== 'image' && field.type !== 'qr_code';
   const borderRadius = field.type === 'image'
     ? (field.cornerRadius ? `${field.cornerRadius}px` : '2px')
@@ -382,7 +556,15 @@ export function DraggableField({
   return (
     <div
       ref={fieldRef}
-      className={`absolute pointer-events-auto ${isSelected ? 'z-50' : 'z-10'}`}
+      // Keyboard operability (WCAG 2.1.1): the field box is a focus stop, so it can
+      // be selected, moved, resized and rotated without a pointer. Focus ring uses
+      // the design-system convention from src/components/ui/button.tsx.
+      tabIndex={0}
+      role="group"
+      aria-label={ariaLabel}
+      aria-describedby={keyboardHelpId}
+      data-keyboard-mode={keyboardMode}
+      className={`absolute pointer-events-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background ${isSelected ? 'z-50' : 'z-10'}`}
       style={{
         left: scaledX,
         top: scaledY,
@@ -398,9 +580,36 @@ export function DraggableField({
       }}
       onMouseDown={handleMouseDown}
       onClick={(e) => { e.stopPropagation(); onSelect(e); }}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
     >
+      {/* Screen-reader-only instructions + live mode announcements. */}
+      <span id={keyboardHelpId} className="sr-only">
+        {field.locked
+          ? 'This field is locked. Unlock it to move, resize or rotate it.'
+          : 'Arrow keys move the field. Press S for resize mode, R for rotate mode, M or Escape to return to move mode. Hold Shift for larger steps.'}
+      </span>
+      <span className="sr-only" aria-live="polite">
+        {isFocused && isKeyboardFocus && !field.locked ? KEYBOARD_MODE_LABELS[keyboardMode] : ''}
+      </span>
+
+      {/* Visible keyboard hint — only while the field has focus *from the keyboard*.
+          A plain mouse click also focuses this element (tabIndex=0), but mouse-only
+          users never asked for the mode badge — gate on isKeyboardFocus, not just isFocused. */}
+      {isFocused && isKeyboardFocus && !field.locked && (
+        <div
+          className="absolute left-1/2 pointer-events-none whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-primary-foreground shadow-sm"
+          style={{ top: '100%', transform: 'translate(-50%, 6px)', fontSize: 10, lineHeight: 1.4, zIndex: 60 }}
+          aria-hidden
+        >
+          {KEYBOARD_MODE_LABELS[keyboardMode]}
+        </div>
+      )}
+
       {/* ── Content layer (position:absolute inset-0, same size as outer) ── */}
       <div
+        data-field-content="true"
         style={{
           position: 'absolute',
           inset: 0,
@@ -508,7 +717,8 @@ export function DraggableField({
                   flexShrink: 0,
                 }}
                 onMouseDown={handleRotationStart}
-                title="Drag to rotate"
+                data-rotate-handle="true"
+                title="Drag to rotate (or press R for keyboard rotate mode)"
               />
               <div style={{ width: 1, height: Math.max(8, Math.round(22 * scale)), backgroundColor: 'var(--primary)', opacity: 0.4 }} />
             </div>
@@ -521,6 +731,11 @@ export function DraggableField({
             <div
               key={id}
               className="absolute group/handle"
+              // Stable selector for tests and for InfiniteCanvas's pan guard.
+              // Additive, not a bugfix: the guard already skipped these handles
+              // via `closest('[data-field]')`, since InfiniteCanvas wraps every
+              // DraggableField in a [data-field] div.
+              data-resize-handle={id}
               style={{
                 width: 24,
                 height: 24,
