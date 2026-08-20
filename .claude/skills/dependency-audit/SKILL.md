@@ -1,7 +1,17 @@
 ---
 name: dependency-audit
 description: Check for vulnerable or outdated npm dependencies in the dashboard and summarize what's safe to bump vs. what needs care. Use periodically or before a release, not on every change.
+context: fork
+agent: github-ops
+effort: medium
+disallowed-tools: Edit Write NotebookEdit
 ---
+<!-- Runs as a forked subagent (context: fork), which inherits this conversation
+     and SHARES the parent's prompt cache - so its first request reads what we
+     already paid for, instead of a fresh subagent's ~55,000-token cold start.
+     Edit/Write are removed while it runs: a review that can edit is not a
+     review. -->
+
 
 # Dependency Audit — Authentix Dashboard
 

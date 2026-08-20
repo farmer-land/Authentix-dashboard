@@ -1,7 +1,18 @@
 ---
 name: proxy-security-review
 description: Deep security check specifically for changes to the BFF proxy and auth layer (proxy.ts, app/api/proxy, app/api/auth). Use whenever a diff touches these paths.
+context: fork
+agent: reviewer
+effort: high
+disallowed-tools: Edit Write NotebookEdit
+argument-hint: [branch-or-PR]
 ---
+<!-- Runs as a forked subagent (context: fork), which inherits this conversation
+     and SHARES the parent's prompt cache - so its first request reads what we
+     already paid for, instead of a fresh subagent's ~55,000-token cold start.
+     Edit/Write are removed while it runs: a review that can edit is not a
+     review. -->
+
 
 # Proxy & Auth Security Review — Authentix Dashboard
 
