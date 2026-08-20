@@ -15,6 +15,15 @@ import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isPreSendConnectionError } f
 
 const BACKEND_URL = BACKEND_PRIMARY_URL;
 
+/**
+ * Strip line terminators and other control characters before a caller-supplied
+ * value reaches a log line, so a crafted endpoint cannot forge log entries.
+ */
+function sanitizeForLog(value: string): string {
+  // eslint-disable-next-line no-control-regex -- stripping control chars is the point
+  return value.replace(/[\r\n]/g, "").replace(/[\u0000-\u001F\u007F]/g, "");
+}
+
 /** Cookie names for auth tokens */
 export const AUTH_COOKIES = {
   ACCESS_TOKEN: "auth_access_token",
@@ -209,7 +218,7 @@ export async function serverApiRequest<T>(
     // is never re-sent; see isPreSendConnectionError.
     if (isPreSendConnectionError(error) && BACKEND_FALLBACK_URL) {
       console.warn(
-        `[ServerApi] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}${endpoint}`
+        `[ServerApi] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}${sanitizeForLog(endpoint)}`
       );
       try {
         response = await fetch(`${BACKEND_FALLBACK_URL}${endpoint}`, {
@@ -294,7 +303,7 @@ export async function backendAuthRequest<T>(
     // Pre-send gate: never re-send a request that may already have been received.
     if (isPreSendConnectionError(error) && BACKEND_FALLBACK_URL) {
       console.warn(
-        `[BackendAuth] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}${endpoint}`
+        `[BackendAuth] Local backend unreachable, using Railway fallback: ${BACKEND_FALLBACK_URL}${sanitizeForLog(endpoint)}`
       );
       try {
         response = await fetch(`${BACKEND_FALLBACK_URL}${endpoint}`, { ...options, headers: fetchHeaders });
