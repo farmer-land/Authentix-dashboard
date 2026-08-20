@@ -223,6 +223,118 @@ describe("Proxy route — POST requests", () => {
   });
 });
 
+// ── GARDEN-39: forwarded Content-Length aborts the request before any I/O ──────
+
+describe("Proxy route — body framing headers (GARDEN-39)", () => {
+  /**
+   * Stands in for undici's own pre-flight check. Undici compares a caller-supplied
+   * Content-Length against the byte length it computes from the attached body and
+   * throws *before opening a socket* if they disagree — which is why the failure
+   * never reached the Railway logs and surfaced only as `TypeError: fetch failed`.
+   *
+   * Without this simulation the test is worthless: a naive fetch mock resolves
+   * happily no matter what headers it is handed, so it would pass pre-fix too.
+   */
+  function mockUndiciFetch(status = 201, body: unknown = { success: true, data: { id: "e1" } }) {
+    return vi.fn().mockImplementation((_url: string, options: RequestInit) => {
+      const headers = options.headers as Headers;
+      const declared = headers.get("content-length");
+      const actual =
+        options.body instanceof ArrayBuffer ? options.body.byteLength : 0;
+
+      if (declared !== null && Number(declared) !== actual) {
+        const err = new TypeError("fetch failed");
+        (err as Error & { cause?: unknown }).cause = {
+          code: "UND_ERR_REQ_CONTENT_LENGTH_MISMATCH",
+          message: "Request body length does not match content-length header",
+        };
+        return Promise.reject(err);
+      }
+
+      return Promise.resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers({ "Content-Type": "application/json" }),
+        json: vi.fn().mockResolvedValue(body),
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
+      });
+    });
+  }
+
+  /**
+   * A browser POST as it actually arrives: a Content-Length describing the original
+   * (here, encoded) body, which no longer matches once the handler re-reads it.
+   */
+  function makeEncodedPost(path: string, payload: unknown): NextRequest {
+    return new NextRequest(`http://localhost/api/proxy${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Deliberately disagrees with the re-read body, as a compressed body would.
+        "Content-Length": "7",
+        "Content-Encoding": "gzip",
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  it("reaches the backend instead of throwing before I/O — the reported 502", async () => {
+    const fetchMock = mockUndiciFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await POST(
+      makeEncodedPost("/dashboard/editor-events", { event: "editor_opened" })
+    );
+
+    // Pre-fix this is 502 PROXY_ERROR: undici rejects, the retry rejects identically,
+    // and the catch-all turns it into a 502 with nothing in the backend logs.
+    expect(res.status).toBe(201);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("sends the body with no forwarded framing headers, letting fetch derive them", async () => {
+    const fetchMock = mockUndiciFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await POST(makeEncodedPost("/dashboard/editor-events", { event: "editor_opened" }));
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = options.headers as Headers;
+
+    expect(headers.get("content-length")).toBeNull();
+    expect(headers.get("content-encoding")).toBeNull();
+
+    // The body itself must still be forwarded intact — stripping the headers must not
+    // become "stripping the body".
+    const sent = options.body as ArrayBuffer;
+    expect(sent.byteLength).toBeGreaterThan(0);
+    expect(JSON.parse(new TextDecoder().decode(sent))).toEqual({ event: "editor_opened" });
+  });
+
+  it("still forwards the multipart boundary — the upload path must not regress", async () => {
+    const fetchMock = mockUndiciFetch(200, { success: true, data: { jobId: "imp_1" } });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const boundary = "----WebKitFormBoundaryGARDEN39";
+    const req = new NextRequest("http://localhost/api/proxy/import-jobs", {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": "999999",
+      },
+      body: `--${boundary}\r\nContent-Disposition: form-data; name="file"\r\n\r\nx\r\n--${boundary}--\r\n`,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = options.headers as Headers;
+    expect(headers.get("content-type")).toBe(`multipart/form-data; boundary=${boundary}`);
+    expect(headers.get("content-length")).toBeNull();
+  });
+});
+
 // ── GARDEN-38: connection-failure retry ───────────────────────────────────────
 
 describe("Proxy route — connection-failure retry (GARDEN-38)", () => {

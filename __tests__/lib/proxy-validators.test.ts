@@ -210,6 +210,46 @@ describe("createSafeHeaders", () => {
     const result = createSafeHeaders(headers, null);
     expect(result.get("content-type")).toBe(`multipart/form-data; boundary=${boundary}`);
   });
+
+  // GARDEN-39: the route handler re-reads the body with `request.arrayBuffer()`, so the
+  // browser's own framing headers describe a body that is no longer the one being sent.
+  // Forwarding either makes undici throw UND_ERR_REQ_CONTENT_LENGTH_MISMATCH before any
+  // network I/O. fetch recomputes both from the attached body.
+  it("strips content-length so fetch recomputes it from the re-read body", () => {
+    const headers = makeHeaders({
+      "Content-Length": "1234",
+      "Content-Type": "application/json",
+    });
+    const result = createSafeHeaders(headers, null);
+    expect(result.get("content-length")).toBeNull();
+    // The rest of the request must survive — this strips one header, not the body metadata.
+    expect(result.get("content-type")).toBe("application/json");
+  });
+
+  it("strips content-encoding, whose presence makes the forwarded length disagree", () => {
+    const headers = makeHeaders({
+      "Content-Encoding": "gzip",
+      "Content-Type": "application/json",
+    });
+    const result = createSafeHeaders(headers, null);
+    expect(result.get("content-encoding")).toBeNull();
+    expect(result.get("content-type")).toBe("application/json");
+  });
+
+  it("keeps the multipart boundary intact while still stripping the framing headers", () => {
+    const boundary = "----WebKitFormBoundaryAbC123";
+    const headers = makeHeaders({
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      "Content-Length": "98765",
+      "Content-Encoding": "gzip",
+    });
+    const result = createSafeHeaders(headers, null);
+    // The boundary is load-bearing: file imports fail without it.
+    expect(result.get("content-type")).toBe(`multipart/form-data; boundary=${boundary}`);
+    expect(result.get("content-type")).toContain(`boundary=${boundary}`);
+    expect(result.get("content-length")).toBeNull();
+    expect(result.get("content-encoding")).toBeNull();
+  });
 });
 
 // ── ALLOWED_METHODS ───────────────────────────────────────────────────────────
