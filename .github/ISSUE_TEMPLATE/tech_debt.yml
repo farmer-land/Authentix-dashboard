@@ -1,0 +1,56 @@
+name: Tech debt
+description: Something works but should be refactored, deduplicated, or brought up to current standards
+labels: [tech-debt, team-architecture]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Component structure / duplication
+        - Proxy / API layer
+        - State management / data fetching
+        - Accessibility patterns
+        - Type safety
+        - Test coverage
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current state
+      description: What exists today and why it's a problem (duplicated component, prop drilling, missing types, untested critical path, etc.)
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-fix
+    attributes:
+      label: Proposed fix
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk if left alone
+      options:
+        - Low — cosmetic / style only
+        - Medium — will slow future work in this area
+        - High — actively causing bugs or blocking scale
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Found by
+      description: Which routine or person flagged this (e.g. "Maester Luwin — frontend audit", "manual")
+
+  - type: input
+    id: jira
+    attributes:
+      label: Jira ticket key (if known)
+      description: e.g. XEN-123 — leave blank if this issue was filed first and Jira not yet created.
