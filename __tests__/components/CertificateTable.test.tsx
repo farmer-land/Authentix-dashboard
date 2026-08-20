@@ -195,7 +195,7 @@ describe('CertificateTable — download', () => {
 
     await user.click(screen.getByTitle(/Download certificate/i));
     expect(fetch).toHaveBeenCalledWith('https://storage.example.com/cert.pdf');
-    expect(mockAnchor.download).toBe('CERT-001.png');
+    expect(mockAnchor.download).toBe('Jane_Doe-CERT-001.png');
     expect(mockAnchor.click).toHaveBeenCalled();
   });
 
@@ -218,7 +218,7 @@ describe('CertificateTable — download', () => {
     vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockAnchor as unknown as ChildNode);
 
     await user.click(screen.getByTitle(/Download certificate/i));
-    expect(mockAnchor.download).toBe('CERT-IMG.png');
+    expect(mockAnchor.download).toBe('Jane_Doe-CERT-IMG.png');
   });
 });
 

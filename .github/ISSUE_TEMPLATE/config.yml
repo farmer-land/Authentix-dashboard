@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Engineering charter & routines
+    url: https://beforebinary.atlassian.net/wiki/spaces/SCRUM/pages/753670
+    about: Authentix AI Engineering Organization — roles, workflow, and automation reference before filing.
