@@ -31,9 +31,18 @@ export async function POST() {
         const retryResult = await serverApiRequest<ResolveDashboardResponse>("/auth/resolve-dashboard", {
           method: "POST",
         });
+        // Still needs_bootstrap after a successful bootstrap means the backend created an org
+        // it then failed to resolve — never silently retry that, it is how a user ends up with
+        // one junk org per page load. Log loudly and let the error screen render.
+        if (retryResult.data?.setup_state === "needs_bootstrap") {
+          console.error(
+            "[API] resolve-dashboard still reports needs_bootstrap after a successful bootstrap — not retrying",
+          );
+        }
         return NextResponse.json({ success: true, data: retryResult.data });
-      } catch {
-        // Bootstrap failed — let the frontend show the error
+      } catch (bootstrapError) {
+        // Bootstrap failed — surface it in logs, then let the frontend show the error screen.
+        console.error("[API] resolve-dashboard auto-bootstrap failed:", bootstrapError);
       }
     }
 
