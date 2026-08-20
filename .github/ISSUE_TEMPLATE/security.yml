@@ -1,0 +1,57 @@
+name: Security
+description: A security weakness, not an active exploit in production (see note below)
+labels: [security, team-security]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ If this is an active exploit or a leaked secret in **production right now**, do not file a public issue — message Heisenberg directly first.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Auth tokens / session storage
+        - Proxy allowlist / path validation
+        - CSRF handling
+        - Internal identifiers leaked to UI
+        - Accessibility (security-adjacent, e.g. focus trapping)
+        - Dependency vulnerability
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What's the weakness
+      description: What could go wrong, and what conditions would trigger it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact if exploited
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested fix
+    validations:
+      required: false
+
+  - type: input
+    id: source
+    attributes:
+      label: Found by
+      description: Which routine or person flagged this (e.g. "Arya — security scan", "manual")
+
+  - type: input
+    id: jira
+    attributes:
+      label: Jira ticket key (if known)
+      description: e.g. XEN-123 — leave blank if this issue was filed first and Jira not yet created.
