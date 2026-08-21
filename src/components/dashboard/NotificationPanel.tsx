@@ -23,6 +23,7 @@ import {
 import { useJobNotifications, type BackgroundJob } from '@/lib/notifications/job-notifications';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 // ── Detail Modal ───────────────────────────────────────────────────────────────
 
@@ -45,12 +46,15 @@ function JobDetailModal({
   const otherJobs = allJobs.filter(j => j.id !== job.id);
 
   return (
-    <div className="fixed inset-0 z-200 flex items-center justify-center">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Modal */}
-      <div className="relative bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl"
+      >
+        {/* Radix requires an accessible title for aria-labelledby; the job
+            label is already shown visibly in the header below, so this is
+            visually hidden to avoid a duplicate heading. */}
+        <DialogTitle className="sr-only">{job.label}</DialogTitle>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
           <div className="flex items-center gap-3">
@@ -71,12 +75,14 @@ function JobDetailModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <DialogClose asChild>
+            <button
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Close job details"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </DialogClose>
         </div>
 
         {/* Body */}
@@ -163,8 +169,8 @@ function JobDetailModal({
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
