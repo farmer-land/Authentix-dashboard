@@ -67,6 +67,41 @@ This applies whether the request comes from an interactive session, a PR comment
 
 ---
 
+## Querying Jira and GitHub — read before your first query
+
+These two patterns are the largest avoidable token cost in the system. A single sloppy
+query costs more than this section does across a whole day of agent spawns.
+
+**Jira: `searchJiraIssuesUsingJql` silently ignores its `fields` parameter.**
+Confirmed 2026-08-21 — an open-ended query returned **368,422 characters (~25k tokens)**
+despite an explicit six-field list. Passing `fields` does not protect you.
+
+- Always bound the JQL: `updated >= -90m`, an explicit key list, or a single status.
+- Always set `maxResults` (20 is usually plenty). Never omit it.
+- Never query `project in (WALL, GARDEN, SHIELD)` with no time or status bound.
+- If a result does spill to a file for being oversized, **parse that file** with
+  `python3`/`jq`. Never re-run the query to "get a smaller answer" — you will pay twice.
+- `getJiraIssue` for one ticket is cheap and *does* honour `fields`. Prefer several
+  targeted reads over one broad search.
+
+**GitHub: never run a bare `gh pr list` or `gh issue list`.**
+Always `--json` with an explicit field list, always `--limit`:
+
+```bash
+gh pr list --repo farmer-land/Authentix-dashboard --state open --limit 20 \
+  --json number,title,headRefName,isDraft,reviewDecision,mergeable,statusCheckRollup,updatedAt
+```
+
+`gh pr view <n> --json body` beats `gh pr view <n>`; `gh pr diff <n> --name-only` beats
+the full diff when you only need the file list. `gh api` accepts `--jq` — use it to
+filter server-side rather than pulling a payload down and reading past it.
+
+**The general rule:** decide what you need *before* you query, and ask for exactly that.
+An unbounded read is not thoroughness, it is waste — and it crowds out the context you
+actually needed for the work.
+
+---
+
 ## Definition of done — no change ships without these
 
 Every agent that writes code in this repo meets all of these before claiming done. These are pass/fail, not aspirations. "It works on my branch" is not done.
