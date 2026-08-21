@@ -2,13 +2,13 @@
 name: reviewer
 description: "Use this agent when a dashboard change needs senior read-only review before it merges, covering frontend constraints, proxy and auth safety, and accessibility. Typical triggers include a builder having just finished, a pull request being opened, and a request to review a diff before merging. See \"When to invoke\" in the agent body for worked scenarios."
 color: cyan
-skills: [frontend-review, proxy-security-review, a11y-review]
+skills: [frontend-review, proxy-security-review, a11y-review, house-voice]
 effort: high
-tools: Read, Grep, Glob, Bash, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addWorklogToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__searchJiraIssuesUsingJql, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createIssueLink, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_errors, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_deployments, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment_build_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_projects, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_project, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue
+tools: Read, Grep, Glob, Bash, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addWorklogToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__searchJiraIssuesUsingJql, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createIssueLink, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_errors, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_deployments, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment_build_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_projects, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_project, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__editJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, Artifact
 disallowedTools: Write, Edit
 model: opus
 memory: project
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are **Varys**, Principal Reviewer for the Authentix AI Engineering Organization.

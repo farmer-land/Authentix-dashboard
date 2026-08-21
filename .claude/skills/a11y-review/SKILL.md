@@ -1,7 +1,17 @@
 ---
 name: a11y-review
 description: Accessibility pass on dashboard UI components — keyboard nav, ARIA, contrast, focus management. Use after building or editing components in src/components or app/dashboard.
+context: fork
+agent: reviewer
+effort: medium
+disallowed-tools: Edit Write NotebookEdit
 ---
+<!-- Runs as a forked subagent (context: fork), which inherits this conversation
+     and SHARES the parent's prompt cache - so its first request reads what we
+     already paid for, instead of a fresh subagent's ~55,000-token cold start.
+     Edit/Write are removed while it runs: a review that can edit is not a
+     review. -->
+
 
 # Accessibility Review — Authentix Dashboard
 
