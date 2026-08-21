@@ -1,0 +1,48 @@
+name: Security Review
+
+# Anthropic's automated security review. Runs on every PR and comments inline.
+# Docs: https://support.claude.com/en/articles/11932705-automated-security-reviews-in-claude-code
+# Action: https://github.com/anthropics/claude-code-security-review
+#
+# SECURITY NOTE from the action's own README: it is NOT hardened against prompt
+# injection and should only review TRUSTED PRs. This repo must keep
+# Settings -> Actions -> "Require approval for all external contributors" ON.
+
+permissions:
+  pull-requests: write   # to leave the review comments
+  contents: read
+
+on:
+  pull_request:
+
+concurrency:
+  group: security-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    name: Claude security review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+
+      - uses: anthropics/claude-code-security-review@main
+        with:
+          # The action documents the secret as CLAUDE_API_KEY. This repo already
+          # holds ANTHROPIC_API_KEY, so accept either rather than requiring a
+          # duplicate secret. The key must be entitled for Claude Code, not the
+          # bare API alone.
+          claude-api-key: ${{ secrets.CLAUDE_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          comment-pr: true
+          upload-results: true
+          # The action's default model is claude-opus-4-1-20250805, roughly a
+          # year old. Pinned forward deliberately.
+          claude-model: claude-opus-5
+          claudecode-timeout: 25
+          exclude-directories: node_modules,.next,coverage,playwright-report,test-results
+          custom-security-scan-instructions: .github/security-scan-instructions.txt
+          false-positive-filtering-instructions: .github/security-false-positives.txt

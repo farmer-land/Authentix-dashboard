@@ -1,0 +1,29 @@
+Authentix dashboard — false-positive filtering adjustments.
+
+Apply the action's default exclusions EXCEPT the carve-outs below.
+
+DO NOT EXCLUDE — reinstated deliberately:
+
+1. OPEN REDIRECTS on authentication paths.
+   The default filter drops open redirects. For this product the entire auth
+   flow is email-code based, and the post-login return path is exactly where a
+   redirect becomes a credential-theft primitive. REPORT open redirects
+   reachable from /login, /signup, OTP verification, or invite acceptance.
+   Ordinary in-app navigation redirects may still be excluded.
+
+2. Cost-amplification via unbounded server-side state, matching the backend
+   policy. On 2026-08-21 an unbounded metric label in the backend let any
+   unauthenticated stranger accumulate $100.76 of egress over 72 days. If a
+   route handler here grows unbounded state keyed on attacker-controlled input,
+   report it with an estimated cost impact.
+
+STILL EXCLUDE, as per the defaults:
+  - Generic input validation with no demonstrated impact
+  - Missing rate limiting on ordinary endpoints, absent an amplification path
+  - Theoretical CPU or memory exhaustion with no attacker-controlled amplification
+  - React's built-in escaping described as insufficient without a concrete
+    dangerouslySetInnerHTML or equivalent sink
+
+Do not report as new: GARDEN-27 (signup OTP delivered as a link rather than a
+code) and GARDEN-53 (swallowed auto-bootstrap failures). Both are known,
+ticketed and have open PRs. Flag them only if a change makes them WORSE.

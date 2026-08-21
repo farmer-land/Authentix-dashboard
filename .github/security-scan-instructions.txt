@@ -1,0 +1,61 @@
+Authentix dashboard — organisation-specific security scan instructions.
+
+Next.js App Router frontend on Vercel for a B2B multi-tenant certificate platform.
+It talks to a separate Fastify backend through a BFF proxy. Auth is Supabase OTP
+only — there is NO password anywhere in this product; signup and login both issue
+an 8-digit emailed code.
+
+Weight these real, product-specific shapes heavily.
+
+1. THE BFF PROXY IS THE TRUST BOUNDARY.
+   app/api/proxy/[...path]/route.ts forwards browser requests to the backend.
+   Look hard for:
+   - Any path or header the client controls being forwarded without validation
+     (path traversal into an unintended backend route, header injection,
+     smuggling an organization id or role the user should not have).
+   - Server-only credentials or service keys reaching the client bundle.
+   - The proxy attaching auth on behalf of a request it has not authorised.
+
+2. SECRETS IN THE CLIENT BUNDLE.
+   Anything named NEXT_PUBLIC_* is shipped to the browser. A Supabase SERVICE or
+   SECRET key, a backend worker secret, or a payment secret behind that prefix is
+   a critical finding. Check for server-only values imported into a Client
+   Component, or leaking through props from a Server Component.
+
+3. THE SSR AUTHORISATION GATE.
+   app/dashboard/org/[slug]/layout.tsx gates every dashboard route with an
+   HttpOnly-cookie check plus a server-to-server call to /auth/access-context.
+   This runs during SSR, before any browser JavaScript. Report anything that
+   weakens it: a route rendered outside the gated segment, a client-side-only
+   check standing in for it, or a cached/stale authorisation decision.
+   Note: the org slug is in the URL and is user-controlled. Membership must be
+   verified server-side on every request, never inferred from the slug.
+
+4. OTP AND SESSION HANDLING.
+   - Auth tokens must stay in HttpOnly cookies, never localStorage or
+     sessionStorage, and never in a URL query parameter.
+   - Sign-in codes must not be logged, echoed in a response, or exposed in a
+     redirect. We shipped a defect where the signup OTP went out as a magic link
+     instead of a code (GARDEN-27) — treat anything that turns a one-time code
+     into a clickable URL as security-relevant.
+   - Open redirects on the post-login return path.
+
+5. XSS AND UNTRUSTED RENDERING.
+   dangerouslySetInnerHTML, any HTML built from certificate data, template field
+   values, recipient names, or organisation names. Recipient data is customer-
+   supplied and reaches template rendering — treat every field as untrusted.
+
+6. SILENT FAILURE ON AN AUTH PATH.
+   A swallowed error during bootstrap, session refresh or the access-context call
+   can leave a user in a wrong-tenant or partially-authorised state with nothing
+   surfaced. We shipped exactly that (GARDEN-53): auto-bootstrap failures were
+   swallowed entirely. Treat a silently-caught failure on an auth or org
+   resolution path as a security finding, not a code-quality nit.
+
+CROSS-REPO NOTE: the backend enforces tenant isolation with an organization_id
+filter taken from the verified JWT. This frontend must never be the only thing
+enforcing that, and must never pass an organization id up from user input as
+though it were authoritative.
+
+Report authentication bypass, cross-tenant data exposure and client-side secret
+leakage at the highest severity you have.
