@@ -112,14 +112,18 @@ export async function signupAction(
     }
 
     const supabase = await createSupabaseServerClient();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+    // GARDEN-27: no `emailRedirectTo` here on purpose. Setting it makes Supabase
+    // send a magic LINK (email template renders `{{ .ConfirmationURL }}`), but
+    // this UI's next step ("otp") shows a 6-digit CODE entry screen and verifies
+    // via `verifyOtp` below — a link the user can't type in has nothing to do
+    // with the screen they're looking at. Omitting it makes Supabase send a
+    // token instead (email template must render `{{ .Token }}` — see PR notes).
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
         data: { full_name: fullName, company_name: companyName, use_case: useCase, website_url: websiteUrl || undefined },
-        emailRedirectTo: `${appUrl}/auth/callback`,
       },
     });
 
