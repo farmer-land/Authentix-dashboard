@@ -4,7 +4,7 @@
 
 import type { EmailBlock } from "../EmailBlockBuilder";
 
-export type AutoSaveStatus = "idle" | "pending" | "saving" | "saved";
+export type AutoSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 export type PreviewMode = "desktop" | "mobile";
 
 // ── Editor state ──────────────────────────────────────────────────────────────

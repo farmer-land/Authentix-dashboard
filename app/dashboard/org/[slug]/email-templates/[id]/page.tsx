@@ -233,8 +233,17 @@ export default function EmailTemplateEditorPage() {
         });
         setAutoSaveStatus("saved");
         setTimeout(() => setAutoSaveStatus("idle"), 3000);
-      } catch {
-        setAutoSaveStatus("idle");
+      } catch (err) {
+        // Distinct from "idle" — "idle" means nothing pending, "error" means
+        // the last edit failed to persist. Left as "error" (not auto-reset)
+        // so the user notices instead of assuming the edit auto-saved; the
+        // next edit naturally re-arms the debounce back to "pending".
+        setAutoSaveStatus("error");
+        toast.error(
+          err instanceof Error
+            ? `Autosave failed: ${err.message}`
+            : 'Autosave failed — your latest changes may not be saved.',
+        );
       }
     }, 4000);
 
@@ -640,6 +649,15 @@ export default function EmailTemplateEditorPage() {
                 )}
                 {autoSaveStatus === "saved" && (
                   <span className="text-[9px] text-[#3ECF8E]/80 shrink-0 font-medium">Saved</span>
+                )}
+                {autoSaveStatus === "error" && (
+                  <span
+                    title="Autosave failed — your latest changes may not be saved"
+                    className="flex items-center gap-0.5 text-[9px] text-destructive shrink-0 font-medium"
+                  >
+                    <AlertCircle className="w-3 h-3" />
+                    Not saved
+                  </span>
                 )}
                 {error && (
                   <span title={error}><AlertCircle className="w-3 h-3 text-destructive shrink-0" /></span>

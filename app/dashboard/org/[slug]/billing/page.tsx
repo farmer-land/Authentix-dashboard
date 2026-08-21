@@ -14,6 +14,7 @@ import {
   Building2, X, Check, Minus, ChevronRight, Moon, Sliders,
   Trash2, ShieldAlert,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/lib/api/client';
 import { useUserProfile } from '@/lib/hooks/queries/users';
 import type { CurrentUsage, BillingProfile, OrgBilling, BillingCaps, InvoiceEntity } from '@/lib/billing-ui/types';
@@ -632,8 +633,13 @@ export default function BillingPage() {
           totalOutstanding={total_outstanding}
           onCancel={() => setDeleteOpen(false)}
           onConfirm={async () => {
-            await api.billing.requestAccountDeletion();
-            setDeleteOpen(false);
+            try {
+              await api.billing.requestAccountDeletion();
+              setDeleteOpen(false);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Failed to request account deletion. Please try again.');
+              throw err;
+            }
           }}
         />
       )}
@@ -1078,8 +1084,16 @@ function DeleteAccountDialog({
   const handleConfirm = async () => {
     if (!confirmed) return;
     setConfirming(true);
-    try { await onConfirm(); }
-    finally { setConfirming(false); }
+    try {
+      await onConfirm();
+    } catch {
+      // onConfirm already surfaced a toast with the specific failure reason.
+      // Swallow here so the rejection doesn't escape as an unhandled promise
+      // rejection — the dialog stays open (onConfirm never called
+      // setDeleteOpen(false) on the failing path) so the user can retry.
+    } finally {
+      setConfirming(false);
+    }
   };
 
   useEffect(() => {
