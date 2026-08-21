@@ -2,7 +2,7 @@
 name: root-cause
 description: "Use this agent when a dashboard symptom is reported and the responsible layer is not yet clear. Typical triggers include a browser console error, a proxy call returning 4xx or 5xx, and a fix that has already failed once. It reports and never fixes, and files a cross-repo check when the backend is at fault. See \"When to invoke\" in the agent body for worked scenarios."
 color: yellow
-skills: [frontend-review, proxy-security-review]
+skills: [frontend-review, proxy-security-review, house-voice]
 effort: high
 tools: Read, Grep, Glob, Bash, WebFetch, mcp__a998724f-89bc-4be3-9f2b-9c5c65356c65__get-logs, mcp__a998724f-89bc-4be3-9f2b-9c5c65356c65__list-deployments, mcp__a998724f-89bc-4be3-9f2b-9c5c65356c65__get-status, mcp__60cb30bc-8e2d-4112-8f1a-8caa13a089ba__execute_sql, mcp__60cb30bc-8e2d-4112-8f1a-8caa13a089ba__query_logs, mcp__60cb30bc-8e2d-4112-8f1a-8caa13a089ba__list_migrations, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_errors, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment_build_logs, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__searchJiraIssuesUsingJql
 disallowedTools: Write, Edit

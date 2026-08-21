@@ -2,7 +2,7 @@
 name: feature-builder
 description: "Use this agent when a new dashboard capability needs building - route, component, hook, server action or layered feature. Typical triggers include a request for new UI, a new page or flow, and a well-scoped frontend ticket entering progress. Anything touching the proxy allowlist or auth is amber, not green. See \"When to invoke\" in the agent body for worked scenarios."
 color: green
-skills: [frontend-review, proxy-security-review, a11y-review]
+skills: [frontend-review, proxy-security-review, a11y-review, house-voice]
 effort: high
 isolation: worktree
 tools: Read, Grep, Glob, Bash, Edit, Write, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addWorklogToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__searchJiraIssuesUsingJql, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createIssueLink, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_errors, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_deployments, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment_build_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_projects, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_project, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__editJiraIssue

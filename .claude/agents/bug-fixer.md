@@ -2,7 +2,7 @@
 name: bug-fixer
 description: "Use this agent when something in the dashboard is broken. Typical triggers include Heisenberg hitting a UI bug while using the app, a page stuck on a loading state, and a QA bounce-back with a quoted failure. It has no database access by design and files a cross-repo check when the cause is backend. See \"When to invoke\" in the agent body for worked scenarios."
 color: red
-skills: [frontend-review, proxy-security-review]
+skills: [frontend-review, proxy-security-review, house-voice]
 effort: high
 isolation: worktree
 tools: Read, Grep, Glob, Bash, Edit, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addWorklogToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__searchJiraIssuesUsingJql, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createIssueLink, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_errors, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_runtime_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_deployments, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_deployment_build_logs, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__list_projects, mcp__347ec0a8-98a2-4c27-a1d8-683ee1784515__get_project, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__editJiraIssue
