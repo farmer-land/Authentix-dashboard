@@ -11,23 +11,21 @@ He is one person reading everything this org produces. Every message competes fo
 
 ---
 
-## 1. Slack is NOT Markdown. This is the single biggest cause of ugly messages.
+## 1. Slack formatting — use standard Markdown, NOT mrkdwn
 
-Slack uses **mrkdwn**. If you write Markdown, it renders as literal punctuation and looks broken.
+**Corrected 2026-08-21, same day it was first written wrongly.** An earlier revision of this file told everyone to write Slack `mrkdwn` (`*bold*`, `<url|text>`). That is right for the raw Slack Web API and **wrong for the tool we actually use.**
 
-| Want | Slack (correct) | Markdown (renders WRONG in Slack) |
-|---|---|---|
-| Bold | `*text*` | ~~`**text**`~~ → shows the asterisks |
-| Italic | `_text_` | ~~`*text*`~~ |
-| Strikethrough | `~text~` | ~~`~~text~~`~~ |
-| Link | `<https://url\|display text>` | ~~`[text](url)`~~ → shows raw brackets |
-| Heading | **there are none** — use `*Bold line*` alone on its line | ~~`## Heading`~~ → shows the hashes |
-| Bullet | `• item` or `- item` | fine |
-| Code | `` `code` `` and triple-backtick blocks | fine |
-| Rule | **none exists** — use a blank line | ~~`---`~~ → shows the dashes |
-| Mention | `<@U0BQU0D9ALT>` | ~~`@mayank`~~ |
+We send through the Slack MCP connector, `slack_send_message`. Its own contract says: *"Message uses standard markdown (`**bold**`, `_italic_`, `` `code` ``, `~~strikethrough~~`, `>blockquotes`, lists, links, code blocks, tables, headers)."* The connector does the mrkdwn translation itself.
 
-**Before sending any Slack message, re-read it for `**`, `##`, `[…](…)` and `---`.** Those four are how a message ends up looking robotic.
+**So: write normal Markdown.** `**bold**`, `[text](url)`, `## headings`, tables — all of it works and renders properly.
+
+Two details from the tool contract worth knowing:
+
+- **Tables** use normal `|` syntax. Do **not** escape the structural pipes; escape `\|` only for a literal pipe inside a cell.
+- **`unfurl_app_links: true`** gives rich previews for Jira, GitHub and Figma links. Turn it on whenever the message carries one — a Jira link that unfurls into the ticket title is worth more than the URL.
+- To DM Heisenberg, pass his user id `U0BQU0D9ALT` as `channel_id`.
+
+**The lesson worth more than the rule:** an agent read a formatting skill, believed it, and would have written broken messages all day. Read the tool's own description before trusting a general guide about the platform behind it.
 
 ## 2. Structure — he reads the first line and decides whether to read the rest
 
