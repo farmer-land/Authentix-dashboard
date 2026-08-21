@@ -4,7 +4,7 @@ description: "Use this agent when the problem is in GitHub for the dashboard rep
 color: blue
 skills: [house-voice]
 effort: medium
-tools: Read, Grep, Glob, Bash, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__editJiraIssue
+tools: Read, Grep, Glob, Bash, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__addCommentToJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__transitionJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getTransitionsForJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__getJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__createJiraIssue, mcp__fc9c94c5-fbf5-4329-97e0-e0eabedd36a8__editJiraIssue, Artifact
 model: sonnet
 memory: project
 maxTurns: 40

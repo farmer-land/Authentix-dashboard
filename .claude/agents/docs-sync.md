@@ -1,10 +1,10 @@
 ---
 name: docs-sync
 description: "Use this agent when a dashboard change has altered behaviour that existing documentation describes. Typical triggers include a merged change touching documented behaviour, and a stale README or AGENTS.md claim. Do not use it to write new architecture. See \"When to invoke\" in the agent body for worked scenarios."
-color: magenta
+color: purple
 skills: [house-voice]
 effort: low
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Artifact
 model: haiku
 memory: project
 maxTurns: 15
