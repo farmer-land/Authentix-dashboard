@@ -54,4 +54,4 @@ body:
     id: jira
     attributes:
       label: Jira ticket key (if known)
-      description: e.g. XEN-123 — leave blank if this issue was filed first and Jira not yet created.
+      description: e.g. GARDEN-123 — leave blank if this issue was filed first and Jira not yet created.

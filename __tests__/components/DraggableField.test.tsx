@@ -216,7 +216,8 @@ describe('DraggableField — resize', () => {
   // Handles are selected by `data-resize-handle`, not by a Tailwind cursor
   // className: cursor is an inline style now, and 'nw'/'se' share the same
   // 'nwse-resize' value so it can't identify a corner anyway. The attribute is
-  // also the real contract — InfiniteCanvas's pan guard already does
+  // also the stable selector this component exposes for the purpose, and the
+  // real contract — InfiniteCanvas's pan guard already does
   // `target.closest('[data-resize-handle]')`.
   it('calls onResize with new width/height during resize', () => {
     const { el, onResize } = renderField({}, { isSelected: true });

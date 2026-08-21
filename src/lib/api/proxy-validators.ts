@@ -108,6 +108,16 @@ export function createSafeHeaders(
     if (lowerKey === "origin") return;
     // Strip cookie (auth cookies forwarded separately as Authorization + Cookie)
     if (lowerKey === "cookie") return;
+    // Strip content-length and content-encoding — DO NOT restore these.
+    // The route handler re-reads the body with `request.arrayBuffer()` and attaches
+    // the decoded bytes to the outbound fetch. The browser's Content-Length describes
+    // the *original* (possibly compressed) body, so forwarding it hands undici a length
+    // that disagrees with what it computes from the attached body. Undici then throws
+    // UND_ERR_REQ_CONTENT_LENGTH_MISMATCH *before any network I/O* — which surfaces as
+    // a bare `TypeError: fetch failed` and a 502, with nothing in the backend logs.
+    // fetch derives both headers correctly from the body; a proxy that re-reads the
+    // body must never forward them. (GARDEN-39)
+    if (lowerKey === "content-length" || lowerKey === "content-encoding") return;
     // Preserve multipart Content-Type with boundary intact
     if (lowerKey === "content-type" && value.includes("multipart/form-data")) {
       safeHeaders.set(key, value);

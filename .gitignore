@@ -43,3 +43,6 @@ scripts/*.ts
 
 
 .claude/settings.local.json
+
+# Claude Code worktrees
+.claude/worktrees/

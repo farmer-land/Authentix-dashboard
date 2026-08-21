@@ -1,0 +1,5 @@
+# Gitignored files copied into every worktree Claude Code creates.
+# A worktree is a fresh checkout, so .env would otherwise be missing
+# and every agent in one would fail on config validation.
+.env
+.env.local

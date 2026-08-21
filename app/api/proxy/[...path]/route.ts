@@ -31,7 +31,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 // Configuration (Server-only)
 // ============================================================================
 
-import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isConnectionRefused as checkConnectionRefused } from "@/lib/config/env";
+import { BACKEND_PRIMARY_URL, BACKEND_FALLBACK_URL, isPreSendConnectionError } from "@/lib/config/env";
 
 const BACKEND_API_URL = BACKEND_PRIMARY_URL;
 
@@ -188,17 +188,20 @@ async function proxyRequest(
     try {
       response = await fetch(backendUrl, fetchOptions);
     } catch (fetchError) {
-      if (checkConnectionRefused(fetchError) && fallbackUrl) {
-        reqLog.info("Proxy: primary backend unavailable, trying fallback URL");
+      // Whether a re-send is safe depends on how far the request got, not on the
+      // HTTP method. A connection that was never established means the bytes never
+      // left this process, so there is no write to duplicate — safe for any method.
+      // Anything ambiguous (a bare ECONNRESET may have been received and acted on)
+      // stays restricted to idempotent methods.
+      const neverReachedBackend = isPreSendConnectionError(fetchError);
+      const isIdempotent = method === "GET" || method === "HEAD";
+      const isTransient = fetchError instanceof Error && fetchError.name === "TypeError";
+
+      if (neverReachedBackend && fallbackUrl) {
+        reqLog.warn("Proxy: local backend unreachable, using Railway fallback", { fallbackUrl });
         response = await fetch(fallbackUrl, fetchOptions);
-      } else if (
-        // Transient connection drop (common when the backend is cold-starting):
-        // "fetch failed" / ECONNRESET / socket hang up. Safe to retry ONCE for
-        // idempotent methods only — never POST/PATCH (would risk duplicate writes).
-        (method === "GET" || method === "HEAD") &&
-        fetchError instanceof Error && fetchError.name === "TypeError"
-      ) {
-        reqLog.info("Proxy: transient connection error on idempotent request — retrying once");
+      } else if (isTransient && (neverReachedBackend || isIdempotent)) {
+        reqLog.info("Proxy: connection error — retrying once", { neverReachedBackend });
         await new Promise((r) => setTimeout(r, 400));
         response = await fetch(backendUrl, fetchOptions);
       } else {
