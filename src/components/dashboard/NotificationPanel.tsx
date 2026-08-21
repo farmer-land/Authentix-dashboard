@@ -33,12 +33,21 @@ function JobDetailModal({
   onClose,
   onClear,
   onSelect,
+  triggerRef,
 }: {
   job: BackgroundJob;
   allJobs: BackgroundJob[];
   onClose: () => void;
   onClear: (id: string) => void;
   onSelect: (job: BackgroundJob) => void;
+  /**
+   * The bell button — restores focus there on close. This modal is opened
+   * from a row inside the notification dropdown, which unmounts in the same
+   * render as the modal mounts, so there's no still-present `<DialogTrigger>`
+   * for Radix's own automatic restore-to-trigger behavior to target; the
+   * bell is the closest persistent, meaningful anchor for this flow.
+   */
+  triggerRef?: React.RefObject<HTMLElement | null>;
 }) {
   const isPending = job.status === 'queued' || job.status === 'running';
   const isCompleted = job.status === 'completed';
@@ -50,6 +59,10 @@ function JobDetailModal({
       <DialogContent
         showCloseButton={false}
         className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef?.current?.focus();
+        }}
       >
         {/* Radix requires an accessible title for aria-labelledby; the job
             label is already shown visibly in the header below, so this is
@@ -272,6 +285,7 @@ export function NotificationPanel({
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const bellButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close dropdown when clicking outside both the button and the dropdown
   useEffect(() => {
@@ -321,6 +335,7 @@ export function NotificationPanel({
       <div className="relative" ref={panelRef}>
         {/* Bell button */}
         <button
+          ref={bellButtonRef}
           onClick={handleToggle}
           className={cn(
             'relative flex items-center gap-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors',
@@ -443,6 +458,7 @@ export function NotificationPanel({
           onClose={() => setSelectedJob(null)}
           onClear={(id) => { clearJob(id); setSelectedJob(null); }}
           onSelect={(j) => setSelectedJob(j)}
+          triggerRef={bellButtonRef}
         />
       )}
     </>

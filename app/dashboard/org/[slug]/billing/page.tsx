@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useBillingOverview } from '@/lib/hooks/queries/billing';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
@@ -156,7 +156,21 @@ function CellValue({ val, planKey, activePlan }: { val: string | boolean; planKe
   );
 }
 
-function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClose: () => void; activePlan: string }) {
+// Exported (not just used internally) so __tests__/components/BillingModals.test.tsx
+// can mount it directly without dragging in the whole BillingPage's data-fetching
+// hooks — same rationale as autoMapForTemplate staying exported for its tests.
+export function PlanFeaturesModal({ open, onClose, activePlan, triggerRef }: {
+  open: boolean;
+  onClose: () => void;
+  activePlan: string;
+  /**
+   * The "What's included" trigger button — restores focus there on close.
+   * This dialog is opened via external state (`open`/`onClose`) rather than
+   * a `<DialogTrigger>`, so Radix's own automatic restore-to-trigger has
+   * nothing to target unless we do it explicitly via onCloseAutoFocus below.
+   */
+  triggerRef?: React.RefObject<HTMLElement | null>;
+}) {
   const categories = [...new Set(PLAN_FEATURES.map(f => f.category))];
 
   return (
@@ -164,6 +178,10 @@ function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClo
       <DialogContent
         showCloseButton={false}
         className="max-w-4xl max-h-[88vh] p-0 gap-0 flex flex-col rounded-3xl bg-card overflow-hidden"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef?.current?.focus();
+        }}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-5 border-b border-border/60 shrink-0">
@@ -277,6 +295,8 @@ export default function BillingPage() {
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const planTriggerRef = useRef<HTMLButtonElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => { if (RAZORPAY_ENABLED) preloadRazorpay(); }, []);
 
@@ -401,7 +421,7 @@ export default function BillingPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-16">
-      <PlanFeaturesModal open={planModalOpen} onClose={() => setPlanModalOpen(false)} activePlan={planName} />
+      <PlanFeaturesModal open={planModalOpen} onClose={() => setPlanModalOpen(false)} activePlan={planName} triggerRef={planTriggerRef} />
 
       {/* ── Plan hero card ────────────────────────────────────────────────── */}
       <div className={`relative overflow-hidden rounded-3xl border bg-card bg-linear-to-br ${planConfig.gradient} p-7`}>
@@ -431,6 +451,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <p className="text-xs text-muted-foreground">{planConfig.tagline}</p>
                 <button
+                  ref={planTriggerRef}
                   onClick={() => setPlanModalOpen(true)}
                   className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground/70 hover:text-foreground transition-colors group"
                 >
@@ -611,6 +632,7 @@ export default function BillingPage() {
             </p>
           </div>
           <button
+            ref={deleteTriggerRef}
             onClick={() => setDeleteOpen(true)}
             className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors"
           >
@@ -629,6 +651,7 @@ export default function BillingPage() {
             await api.billing.requestAccountDeletion();
             setDeleteOpen(false);
           }}
+          triggerRef={deleteTriggerRef}
         />
       )}
 
@@ -1055,13 +1078,20 @@ function BillingCapsPanel({
 }
 
 // ── DeleteAccountDialog ──────────────────────────────────────────────────────
-function DeleteAccountDialog({
-  orgName, totalOutstanding, onCancel, onConfirm,
+// Exported for the same testability reason as PlanFeaturesModal above.
+export function DeleteAccountDialog({
+  orgName, totalOutstanding, onCancel, onConfirm, triggerRef,
 }: {
   orgName: string;
   totalOutstanding: number;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
+  /**
+   * The "Request deletion" trigger button — restores focus there on close.
+   * Same rationale as PlanFeaturesModal's triggerRef: this AlertDialog is
+   * opened via external state, not a `<AlertDialogTrigger>`.
+   */
+  triggerRef?: React.RefObject<HTMLElement | null>;
 }) {
   const [typed, setTyped] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -1078,7 +1108,13 @@ function DeleteAccountDialog({
 
   return (
     <AlertDialog open onOpenChange={(next) => { if (!next) onCancel(); }}>
-      <AlertDialogContent className="max-w-md p-0 gap-0 rounded-3xl shadow-2xl overflow-hidden">
+      <AlertDialogContent
+        className="max-w-md p-0 gap-0 rounded-3xl shadow-2xl overflow-hidden"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef?.current?.focus();
+        }}
+      >
 
         {/* Header */}
         <div className="px-6 pt-6 pb-4 flex items-start gap-3 border-b border-border/40">
