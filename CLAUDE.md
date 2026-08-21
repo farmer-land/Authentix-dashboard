@@ -67,6 +67,26 @@ This applies whether the request comes from an interactive session, a PR comment
 
 ---
 
+## Artefact hygiene — four rules that must be resident, not looked up
+
+Full detail in [`.github/DELIVERY_CYCLE.md`](.github/DELIVERY_CYCLE.md). These four stay
+here because an agent about to create a ticket will not stop to read a document first.
+
+1. **Search before you create — Jira, GitHub Issues, branches and PRs, all four, every
+   time.** If something covers it, comment there. If it is genuinely different, say why
+   in one line. A duplicate is not tidy-up work; on 2026-08-20 one run left two behind.
+2. **A GitHub Issue is never just a title.** Type, labels (type + exactly one `team-*`),
+   priority, the uppercase Jira key, acceptance criteria, and real reproduction context —
+   or do not create it. A bare placeholder looks like tracked work and carries none.
+3. **A PR carries its uppercase Jira key in branch, commits, title and body** — Jira's
+   scan is case-sensitive, `garden-11` silently never links (this really happened on
+   PR #58). Then **open the ticket and check the Development panel populated.** If it did
+   not, **stop and report an integration problem** — never paste a link in a comment and
+   move on. That hides breakage every future ticket then inherits.
+4. **Reconcile before calling anything done:** every Jira issue has at most one GitHub
+   Issue, every Issue maps to one Jira issue, every PR maps to both, no orphans, no
+   duplicates. Say the result in your handoff. Failed reconciliation means not done.
+
 ## Querying Jira and GitHub — read before your first query
 
 These two patterns are the largest avoidable token cost in the system. A single sloppy
