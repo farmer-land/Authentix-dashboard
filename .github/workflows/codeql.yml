@@ -1,12 +1,22 @@
 name: CodeQL
 
+# DISABLED 2026-08-22 — CodeQL code scanning requires GitHub Advanced Security,
+# which is not available on this account for a PRIVATE repository. Both repos went
+# private on 2026-08-22; this is the cost of that decision.
+#
+# Every run since fails with:
+#   Advanced Security must be enabled for this repository to use code scanning.
+#
+# A permanently-red check trains everyone to ignore red. So the automatic triggers
+# are removed rather than left failing.
+#
+# Coverage is NOT lost: Dependabot is unaffected, and Semgrep is available (see the
+# backend repo's .github/workflows/semgrep.yml — mirror it here if wanted).
+#
+# To restore: make the repo public again, or enable GitHub Advanced Security, then
+# restore the push/pull_request/schedule triggers.
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-  schedule:
-    - cron: "30 0 * * 3"
+  workflow_dispatch:
 
 concurrency:
   group: codeql-${{ github.ref }}
