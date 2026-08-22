@@ -48,6 +48,9 @@ function LoginPageContent() {
 
   const urlStep = searchParams.get("otp") === "1" ? "otp" : "email";
   const urlEmail = searchParams.get("email") ?? "";
+  // Set by app/(auth)/auth/callback/route.ts — see GARDEN-27.
+  const urlError = searchParams.get("error");
+  const urlNotice = searchParams.get("notice");
 
   const step = state.step !== "email" || state.email ? state.step : urlStep;
   const activeEmail = state.email || urlEmail;
@@ -89,6 +92,27 @@ function LoginPageContent() {
             </>
           )}
         </div>
+
+        {urlNotice === "link_already_used" && (
+          <div
+            className="mb-4 flex items-center gap-2 rounded-lg bg-muted border border-border px-4 py-3 text-sm text-foreground"
+            role="status"
+          >
+            This link was already used or has expired. If you already
+            finished signing up, just sign in below — otherwise request a new
+            code.
+          </div>
+        )}
+
+        {urlError === "auth_failed" && (
+          <div
+            className="mb-4 bg-destructive/10 border border-destructive/50 text-destructive px-4 py-3 rounded-lg text-sm"
+            role="alert"
+          >
+            We couldn&apos;t sign you in from that link. Please sign in again
+            below.
+          </div>
+        )}
 
         <Card className="p-7 sm:p-8 shadow-xl shadow-black/5 border-border/60 rounded-2xl backdrop-blur-sm bg-card/80">
           <form action={formAction} className="space-y-5">
