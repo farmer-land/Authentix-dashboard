@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useBillingOverview } from '@/lib/hooks/queries/billing';
 import { useOrganization } from '@/lib/hooks/queries/organizations';
@@ -17,6 +17,14 @@ import {
 import { api } from '@/lib/api/client';
 import { useUserProfile } from '@/lib/hooks/queries/users';
 import type { CurrentUsage, BillingProfile, OrgBilling, BillingCaps, InvoiceEntity } from '@/lib/billing-ui/types';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // ── Product-owner detection (client-side, mirrors DashboardShell) ─────────────
 const PRODUCT_OWNER_DOMAINS = ['xencus.com', 'yhills.com'] as const;
@@ -148,45 +156,50 @@ function CellValue({ val, planKey, activePlan }: { val: string | boolean; planKe
   );
 }
 
-function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClose: () => void; activePlan: string }) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
+// Exported (not just used internally) so __tests__/components/BillingModals.test.tsx
+// can mount it directly without dragging in the whole BillingPage's data-fetching
+// hooks — same rationale as autoMapForTemplate staying exported for its tests.
+export function PlanFeaturesModal({ open, onClose, activePlan, triggerRef }: {
+  open: boolean;
+  onClose: () => void;
+  activePlan: string;
+  /**
+   * The "What's included" trigger button — restores focus there on close.
+   * This dialog is opened via external state (`open`/`onClose`) rather than
+   * a `<DialogTrigger>`, so Radix's own automatic restore-to-trigger has
+   * nothing to target unless we do it explicitly via onCloseAutoFocus below.
+   */
+  triggerRef?: React.RefObject<HTMLElement | null>;
+}) {
   const categories = [...new Set(PLAN_FEATURES.map(f => f.category))];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative z-10 w-full max-w-4xl max-h-[88vh] flex flex-col rounded-3xl border bg-card shadow-2xl overflow-hidden">
-
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-4xl max-h-[88vh] p-0 gap-0 flex flex-col rounded-3xl bg-card overflow-hidden"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef?.current?.focus();
+        }}
+      >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-5 border-b border-border/60 shrink-0">
           <div>
-            <h2 className="text-xl font-bold tracking-tight">Plan comparison</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <DialogTitle className="text-xl font-bold tracking-tight">Plan comparison</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground mt-0.5">
               Your current plan is highlighted —{' '}
               <span className={`font-semibold ${PLAN_COLORS[activePlan as PlanKey]?.header ?? ''}`}>{activePlan}</span>
-            </p>
+            </DialogDescription>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-xl p-2 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground mt-0.5 shrink-0"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <DialogClose asChild>
+            <button
+              className="rounded-xl p-2 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground mt-0.5 shrink-0"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </DialogClose>
         </div>
 
         {/* Scrollable table area */}
@@ -263,15 +276,14 @@ function PlanFeaturesModal({ open, onClose, activePlan }: { open: boolean; onClo
           <p className="text-xs text-muted-foreground">
             All prices excl. GST (18% GST added as per Govt. of India mandate) · Overage billed monthly · Prices auto-update from DB
           </p>
-          <button
-            onClick={onClose}
-            className="shrink-0 text-xs font-medium px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Got it
-          </button>
+          <DialogClose asChild>
+            <button className="shrink-0 text-xs font-medium px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+              Got it
+            </button>
+          </DialogClose>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -283,6 +295,8 @@ export default function BillingPage() {
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const planTriggerRef = useRef<HTMLButtonElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => { if (RAZORPAY_ENABLED) preloadRazorpay(); }, []);
 
@@ -407,7 +421,7 @@ export default function BillingPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-16">
-      <PlanFeaturesModal open={planModalOpen} onClose={() => setPlanModalOpen(false)} activePlan={planName} />
+      <PlanFeaturesModal open={planModalOpen} onClose={() => setPlanModalOpen(false)} activePlan={planName} triggerRef={planTriggerRef} />
 
       {/* ── Plan hero card ────────────────────────────────────────────────── */}
       <div className={`relative overflow-hidden rounded-3xl border bg-card bg-linear-to-br ${planConfig.gradient} p-7`}>
@@ -437,6 +451,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <p className="text-xs text-muted-foreground">{planConfig.tagline}</p>
                 <button
+                  ref={planTriggerRef}
                   onClick={() => setPlanModalOpen(true)}
                   className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground/70 hover:text-foreground transition-colors group"
                 >
@@ -617,6 +632,7 @@ export default function BillingPage() {
             </p>
           </div>
           <button
+            ref={deleteTriggerRef}
             onClick={() => setDeleteOpen(true)}
             className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors"
           >
@@ -635,6 +651,7 @@ export default function BillingPage() {
             await api.billing.requestAccountDeletion();
             setDeleteOpen(false);
           }}
+          triggerRef={deleteTriggerRef}
         />
       )}
 
@@ -1061,13 +1078,20 @@ function BillingCapsPanel({
 }
 
 // ── DeleteAccountDialog ──────────────────────────────────────────────────────
-function DeleteAccountDialog({
-  orgName, totalOutstanding, onCancel, onConfirm,
+// Exported for the same testability reason as PlanFeaturesModal above.
+export function DeleteAccountDialog({
+  orgName, totalOutstanding, onCancel, onConfirm, triggerRef,
 }: {
   orgName: string;
   totalOutstanding: number;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
+  /**
+   * The "Request deletion" trigger button — restores focus there on close.
+   * Same rationale as PlanFeaturesModal's triggerRef: this AlertDialog is
+   * opened via external state, not a `<AlertDialogTrigger>`.
+   */
+  triggerRef?: React.RefObject<HTMLElement | null>;
 }) {
   const [typed, setTyped] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -1082,15 +1106,15 @@ function DeleteAccountDialog({
     finally { setConfirming(false); }
   };
 
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [onCancel]);
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="w-full max-w-md bg-background rounded-3xl border border-border shadow-2xl overflow-hidden">
+    <AlertDialog open onOpenChange={(next) => { if (!next) onCancel(); }}>
+      <AlertDialogContent
+        className="max-w-md p-0 gap-0 rounded-3xl shadow-2xl overflow-hidden"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef?.current?.focus();
+        }}
+      >
 
         {/* Header */}
         <div className="px-6 pt-6 pb-4 flex items-start gap-3 border-b border-border/40">
@@ -1098,12 +1122,17 @@ function DeleteAccountDialog({
             <ShieldAlert className="w-5 h-5 text-destructive" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="font-semibold">Delete account</h2>
-            <p className="text-xs text-muted-foreground mt-0.5 truncate">{orgName}</p>
+            <AlertDialogTitle className="text-base font-semibold">Delete account</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground mt-0.5 truncate">{orgName}</AlertDialogDescription>
           </div>
-          <button onClick={onCancel} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0">
-            <X className="w-4 h-4" />
-          </button>
+          <AlertDialogCancel asChild>
+            <button
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0"
+              aria-label="Close delete account dialog"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </AlertDialogCancel>
         </div>
 
         {/* Blocked — pending balance */}
@@ -1127,9 +1156,11 @@ function DeleteAccountDialog({
                 <li>• Personal data purged after 1 year (DPDPA)</li>
               </ul>
             </div>
-            <button onClick={onCancel} className="w-full py-2.5 rounded-2xl text-sm font-medium border border-border/60 hover:bg-muted/40 transition-colors">
-              Close
-            </button>
+            <AlertDialogCancel asChild>
+              <button className="w-full py-2.5 rounded-2xl text-sm font-medium border border-border/60 hover:bg-muted/40 transition-colors">
+                Close
+              </button>
+            </AlertDialogCancel>
           </div>
 
         ) : step === 'warning' ? (
@@ -1160,9 +1191,11 @@ function DeleteAccountDialog({
               </div>
             </div>
             <div className="flex gap-2.5">
-              <button onClick={onCancel} className="flex-1 py-2.5 rounded-2xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
-                Cancel
-              </button>
+              <AlertDialogCancel asChild>
+                <button className="flex-1 py-2.5 rounded-2xl text-sm border border-border/60 hover:bg-muted/40 transition-colors">
+                  Cancel
+                </button>
+              </AlertDialogCancel>
               <button
                 onClick={() => setStep('confirm')}
                 className="flex-1 py-2.5 rounded-2xl text-sm font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/15 transition-colors"
@@ -1199,7 +1232,7 @@ function DeleteAccountDialog({
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

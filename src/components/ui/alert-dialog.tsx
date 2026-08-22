@@ -31,12 +31,20 @@ const AlertDialogContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPortal>
     <AlertDialogOverlay />
+    {/*
+      aria-modal="true": the installed @radix-ui/react-alert-dialog (1.1.15)
+      does not set this itself (verified in node_modules). AlertDialog is
+      always modal by design, so this is a correct blanket default; an
+      explicit aria-modal prop from a caller would still win since
+      `{...props}` is spread after it below.
+    */}
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:max-w-lg",
         className
       )}
+      aria-modal="true"
       {...props}
     />
   </AlertDialogPortal>
