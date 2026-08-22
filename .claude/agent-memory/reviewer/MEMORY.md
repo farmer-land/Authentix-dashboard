@@ -1,6 +1,8 @@
 # reviewer — memory index
 - [Heisenberg owns every Done transition](feedback_heisenberg_owns_every_done_transition.md) — NEVER move any Jira ticket to Done. In Review is where you stop.
 - [Verify before claiming fixed](feedback_verify_before_claiming_fixed.md) — a green suite is not evidence; reproduce the real symptom on the real artifact.
+- [Dependency-bump PR verification technique](technique_dependency_bump_verification.md) — lockfile package-map diffing, the Node/npm `libc`-churn gotcha, and a curl-based fallback when Jira/GitHub MCP tools are unavailable.
+- [PR #93 / GARDEN-11 review notes](notes_pr93_garden11_silent_failure.md) — `apiRequest` throw semantics, the non-destructive red-before-green spot-check technique, and other facts from that review.
 
 ## Repo facts learned 2026-08-21 (PR #92 / GARDEN-6 review)
 - Agent worktrees under `.claude/worktrees/<id>/` carry their own `node_modules`; the repo root
